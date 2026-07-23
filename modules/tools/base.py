@@ -180,6 +180,9 @@ class ToolDefinition:
     # handler(context=context, **arguments)
     inject_context: bool = False
 
+    # Rollback metadata for recovery
+    rollback_info: dict[str, Any] | None = None
+
     metadata: dict[str, Any] = field(
         default_factory=dict
     )
