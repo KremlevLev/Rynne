@@ -860,9 +860,9 @@ async def async_main() -> None:
     # This is non-blocking - if MCP fails, the agent continues without it.
     
     try:
-        from modules.agent.mcp_integration import bootstrap_mcp_from_defaults
+        from modules.agent.mcp_integration import bootstrap_mcp_with_auto_discovery
         
-        mcp_gateway = await bootstrap_mcp_from_defaults(registry)
+        mcp_gateway = await bootstrap_mcp_with_auto_discovery(registry)
         
         # Update recovery system with MCP tools
         from modules.agent.recovery import set_mcp_recovery_tools
