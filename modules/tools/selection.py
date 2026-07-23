@@ -79,6 +79,36 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
 }
 
 
+def extract_mcp_server_name(tool_name: str) -> str | None:
+    """
+    Извлекает имя сервера из имени MCP инструмента.
+    
+    Формат: mcp_{server_name}_{tool_name}
+    Пример: mcp_github_list_repos -> github
+    
+    Args:
+        tool_name: Полное имя инструмента
+        
+    Returns:
+        Имя сервера или None если не MCP инструмент
+    """
+    if not tool_name.startswith("mcp_"):
+        return None
+    
+    # Убираем префикс mcp_
+    rest = tool_name[4:]  # "mcp_" = 4 chars
+    
+    if not rest:
+        return None
+    
+    # Ищем второй подчерк: mcp_{server}_{tool}
+    parts = rest.split("_", 1)
+    if len(parts) >= 1 and parts[0]:
+        return parts[0]
+    
+    return None
+
+
 def select_tools_for_request(
     request_text: str,
     available_tool_names: set[str],
@@ -107,12 +137,13 @@ def select_tools_for_request(
         if any(kw in lowered for kw in keywords):
             selected.add(tool_name)
     
-    # MCP инструменты - проверяем по префиксу
+    # MCP инструменты - проверяем по имени сервера
+    mcp_servers_mentioned: set[str] = set()
     for tool_name in filtered:
-        if tool_name.startswith("mcp_"):
-            server_name = tool_name.split("_")[1]
-            if server_name in lowered or f" {server_name}" in f" {lowered} ":
-                selected.add(tool_name)
+        server_name = extract_mcp_server_name(tool_name)
+        if server_name and (server_name in lowered or f" {server_name}" in f" {lowered} "):
+            selected.add(tool_name)
+            mcp_servers_mentioned.add(server_name)
     
     # Если ничего не найдено, возвращаем базовый набор
     if not selected:
@@ -168,3 +199,7 @@ def get_selected_tool_names(
     Упрощённый интерфейс для получения имён инструментов.
     """
     return select_tools_for_request(request_text, all_tool_names)
+
+
+# Alias for backward compatibility
+select_tool_names = get_selected_tool_names

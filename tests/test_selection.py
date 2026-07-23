@@ -164,6 +164,58 @@ def test_select_tools_applies_visibility_filter() -> None:
         assert tool_name in filter_tools_for_model(available)
 
 
+def test_extract_mcp_server_name() -> None:
+    """Test MCP server name extraction."""
+    from modules.tools.selection import extract_mcp_server_name
+    
+    # MCP инструменты
+    assert extract_mcp_server_name("mcp_github_list_issues") == "github"
+    assert extract_mcp_server_name("mcp_github_create_issue") == "github"
+    assert extract_mcp_server_name("mcp_sqlite_query") == "sqlite"
+    assert extract_mcp_server_name("mcp_docker_list_containers") == "docker"
+    
+    # Не MCP инструменты
+    assert extract_mcp_server_name("get_current_time") is None
+    assert extract_mcp_server_name("search_web_tavily") is None
+    
+    # Edge cases
+    assert extract_mcp_server_name("mcp_") is None
+    assert extract_mcp_server_name("mcp_single") == "single"
+
+
+def test_mcp_tool_selection_multiple_servers() -> None:
+    """Test MCP tool selection with multiple servers mentioned."""
+    available = {
+        "mcp_github_list_issues",
+        "mcp_github_create_issue",
+        "mcp_sqlite_query",
+        "mcp_docker_ps",
+    }
+    
+    result = select_tools_for_request("Найди issues на GitHub и выполни sqlite запрос", available)
+    
+    # GitHub и SQLite инструменты должны быть включены
+    assert "mcp_github_list_issues" in result
+    assert "mcp_sqlite_query" in result
+
+
+def test_mcp_tool_selection_no_server_mentioned() -> None:
+    """Test MCP tool selection when no server is mentioned."""
+    available = {
+        "mcp_github_list_issues",
+        "mcp_sqlite_query",
+        "get_current_time",
+    }
+    
+    result = select_tools_for_request("Какое время?", available)
+    
+    # MCP инструменты не должны быть включены (нет упоминания сервера)
+    assert "mcp_github_list_issues" not in result
+    assert "mcp_sqlite_query" not in result
+    # Но базовые должны быть
+    assert "get_current_time" in result
+
+
 def test_keywords_by_tool_exists() -> None:
     """Test that keyword mapping exists."""
     assert "get_current_time" in KEYWORDS_BY_TOOL
