@@ -150,7 +150,7 @@
 
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 91 mcp_gateway tests passed + все остальные
+python -m pytest tests/ -q  # 473 tests passed
 
 # КОНТЕКСТ ПРОЕКТА
 - Ты помогаешь мне развивать моего кастомного ИИ-агента.
@@ -179,7 +179,7 @@ python -m pytest tests/ -q  # 91 mcp_gateway tests passed + все осталь�
 # Nova — полный backlog возможностей
 
 ## Главный принцип
-
+именно список нужно реализовать, все идеи что идут дальше.
 - Не переписывать существующее ядро.
 - Новые внешние интеграции подключать через MCP.
 - Системные Windows-функции оставлять обычными Tool Calling tools.
@@ -1411,10 +1411,10 @@ python -m pytest tests/ -q  # 91 mcp_gateway tests passed + все осталь�
 
 ## Ближайший разумный порядок
 
-1. Проверить, что уже заявленные completed-функции реально интегрированы в runtime.
+1. ✅ Проверить, что уже заявленные completed-функции реально интегрированы в runtime (MCP auto-discovery интегрирован в main.py).
 2. Закончить MCP timeout/retry/logging/security middleware.
-3. Сделать dynamic tool selection и не отправлять модели весь каталог.
-4. Завершить однотуровый AgentService.
+3. ✅ Dynamic tool selection - не отправлять модели весь каталог (select_tools_for_request, get_tool_schemas_for_request).
+4. Закончить однотуровый AgentService.
 5. Добавить полноценный Execution Ledger на все side effects.
 6. Стабилизировать voice ownership, wake word и push-to-talk.
 7. Реализовать UIA + OCR + vision grounding.

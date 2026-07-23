@@ -19,6 +19,14 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from modules.domain.results import ToolResult
+from modules.agent.mcp_security import (
+    MCPSecurityMiddleware,
+    MCPServerSecurityConfig,
+    MCPToolSecurityInfo,
+    infer_mcp_tool_risk,
+    infer_mcp_tool_category,
+)
+from modules.tools.base import RiskLevel
 
 logger = logging.getLogger("MCPGateway")
 
@@ -440,6 +448,17 @@ class MCPGateway:
         self._pool = MCPConnectionPool(max_connections=pool_size)
         self._cache = MCPToolCache(ttl_seconds=cache_ttl)
         self._middleware = MCPErrorMiddleware(max_retries=max_retries)
+        self._security = MCPSecurityMiddleware()
+        
+        # Register security configs for known servers
+        for server_name in ["filesystem", "sqlite", "git", "github", "slack", "gdrive", "postgres", "jira", "docker", "websearch"]:
+            self._security.register_server(
+                MCPServerSecurityConfig(
+                    name=server_name,
+                    allow_network=True,
+                    allow_filesystem=True,
+                ),
+            )
     
     def register_server(
         self,
@@ -779,6 +798,29 @@ class MCPGateway:
         count = 0
         for tool_name, schema in self._tool_schemas.items():
             try:
+                # Infer risk and category for the tool
+                risk = infer_mcp_tool_risk(
+                    tool_name.split("_", 2)[-1] if "_" in tool_name else tool_name,
+                    schema.get("description", ""),
+                )
+                category = infer_mcp_tool_category(
+                    tool_name.split("_", 2)[-1] if "_" in tool_name else tool_name,
+                    schema.get("description", ""),
+                )
+                
+                # Register security info for the tool
+                server_name = tool_name.split("_", 2)[1] if "_" in tool_name else ""
+                self._security.register_tool(
+                    MCPToolSecurityInfo(
+                        tool_name=tool_name,
+                        server_name=server_name,
+                        risk=risk,
+                        category=category,
+                        requires_confirmation=risk in {RiskLevel.EXECUTE, RiskLevel.DESTRUCTIVE},
+                        audit_redact=["password", "token", "api_key", "secret"],
+                    ),
+                )
+                
                 # Create sync handler wrapper that calls async method via asyncio
                 def make_handler(name: str) -> Callable[..., Any]:
                     def handler(**kwargs) -> ToolResult:
