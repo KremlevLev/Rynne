@@ -1270,12 +1270,13 @@ python -m pytest tests/ -q  # 502 tests passed
 3. ✅ Dynamic tool selection - не отправлять модели весь каталог (select_tools_for_request, get_tool_schemas_for_request).
 4. ✅ Закончить однотуровый AgentService (реализован run() метод с intent routing, tool execution, deterministic reporting).
 5. ✅ Добавить полноценный Execution Ledger на все side effects (record всех tool calls с verification и artifacts).
-6. Стабилизировать voice ownership, wake word и push-to-talk.
+6. ✅ Workflow Recorder - запись и воспроизведение последовательностей действий (WorkflowRecorder с сохранением в JSON).
+7. Стабилизировать voice ownership, wake word и push-to-talk.
 7. Реализовать UIA + OCR + vision grounding.
 8. Сделать browser security против prompt injection.
 9. Подключить coding workspace с patch/test/rollback.
 10. Добавить background tasks и восстановление после перезапуска.
-11. Сделать workflow recorder.
+11. обавить background tasks и восстановление после перезапуска.
 12. Добавить проактивные сценарии.
 13. После этого развивать multi-agent orchestration.
 
