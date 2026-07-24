@@ -1,156 +1,6 @@
-# Nova 2.0 Roadmap
-
-## Выполненные задачи ✅
-
-- [x] Add GEMINI_API_KEYS and GEMINI_BASE_URL to config.py
-- [x] Add gemini model lists to config.py (using gemini-2.5-flash)
-- [x] Fix model_router.py imports and add Gemini candidates
-- [x] Add Gemini provider to ModelGateway
-- [x] Write tests for the new functionality
-- [x] Implement quota groups (ProviderKey with quota_group)
-- [x] Add Execution Checkpoint
-- [x] Add Execution Ledger
-- [x] Implement ToolObservation for context reduction
-- [x] Obsidian Adapter
-- [x] **7. Разделение счётчиков** - обновлен budgets.py с новыми счётчиками
-- [x] **8. Целевой бюджет запроса** - обновлены лимиты в AgentBudget
-- [x] **10. Model Catalog** - создан modules/brain/model_catalog.py
-- [x] **Приоритет 5 - Tool Visibility** - создан modules/tools/tool_visibility.py
-- [x] **Clean up main.py bootstrap duplicates** - удалено дублирование resolved_request
-- [x] **Приоритет 7 - Reasoning Loop** - создан modules/agent/reasoning.py
-- [x] **Приоритет 11 - Tool Composition** - создан modules/tools/composition.py
-- [x] **Приоритет 8, часть 1 - Research Synthesis** - создан modules/tools/synthesis.py
-- [x] **GitHub MCP Server**: автоматическое подключение при наличии GITHUB_TOKEN в .env
-- [x] **Filesystem MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **SQLite MCP Server**: поддержка MCP_SQLITE_PATH для указания пути к базе
-- [x] **Slack MCP Server**: автоматическое подключение при наличии SLACK_TOKEN в .env
-- [x] **Web Search MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **Google Drive MCP Server**: автоматическое подключение при наличии GOOGLE_DRIVE_TOKEN в .env
-- [x] **PostgreSQL MCP Server**: автоматическое подключение при наличии MCP_POSTGRES_CONNECTION в .env
-- [x] **Git MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **Jira MCP Server**: автоматическое подключение при наличии JIRA_TOKEN в .env
-- [x] **Docker MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **SSE транспорт в MCPGateway**: поддержка удаленных MCP серверов через HTTP
-- [x] **MCP-пул соединений**: переиспользование процессов для stdio транспорта
-- [x] **MCP tools caching**: кеширование схем инструментов с TTL
-- [x] **MCP error handling middleware**: retry с exponential backoff
-
-## Текущие задачи
-
-### 9. ModelGateway статус
-- ✅ KeySlot с cooldown
-- ✅ Route cooldown
-- ✅ Model cooldown
-- ✅ Provider cooldown
-- ✅ Quota group cooldown (Gemini, Groq)
-- ✅ Гроq → Gemini → OpenRouter fallback
-
-### Приоритет 5 - Tool Visibility
-- ✅ PUBLIC_SKILLS - публичные навыки (видимы модели)
-- ✅ INTERNAL_PRIMITIVES - внутренние примитивы (скрыты)
-- ✅ RECOVERY_TOOLS - инструменты восстановления (только для recovery)
-
-### Приоритет 7 - Reasoning Loop (ВЫПОЛНЕН)
-
-- ✅ **Iterative reasoning loop**: реализованы фазы THOUGHT, ACTION, REFLECTION
-- ✅ **Self-reflection**: оценка успешности выполнения инструментов
-- ✅ **Confidence scoring**: вычисление уверенности на основе результатов
-- ✅ **Parallel execution**: параллельный запуск инструментов через run_parallel()
-- ✅ Создан modules/agent/reasoning.py
-- ✅ Написаны тесты tests/test_reasoning.py (11 passed)
-
-### Приоритет 11 - Tool Composition (ВЫПОЛНЕН)
-
-- ✅ **Tool chains**: ToolChain и ToolChainStep для последовательного выполнения
-- ✅ **Conditional execution**: if-then логика через condition параметр
-- ✅ **Parallel execution**: параллельный запуск независимых инструментов
-- ✅ Создан modules/tools/composition.py
-- ✅ Написаны тесты tests/test_composition.py (13 passed)
-- ✅ Интегрировано в ReasoningLoop
-
-### Приоритет 8 - Advanced Research Tools, часть 1 (ВЫПОЛНЕН)
-
-- ✅ **Research Synthesis**: объединение информации из разных источников
-- ✅ **Source credibility scoring**: оценка достоверности источников
-- ✅ **Key point extraction**: извлечение ключевых моментов
-- ✅ Создан modules/tools/synthesis.py
-- ✅ Написаны тесты tests/test_synthesis.py (11 passed)
-
-## Будущие улучшения (планируются)
-
-### Приоритет 8 - Advanced Research Tools (продолжение)
-
-- Deep web research: многошаговое исследование с анализом источников
-- Source verification: проверка достоверности источников
-- Citation management: автоматическое формирование списка источников
-- Research synthesis: объединение информации из разных источников (ЧАСТИЧНО ВЫПОЛНЕНО)
-
-### Приоритет 9 - Memory Enhancement (ВЫПОЛНЕН)
-
-- ✅ **Hierarchical memory**: 4 уровня (short_term, middle_term, long_term, permanent) с приоритетами
-- ✅ **Memory decay**: автоматическое забывание устаревшей информации на основе возраста
-- ✅ **Memory consolidation**: метод для объединения похожих воспоминаний (заглушка готова)
-- ✅ Создан modules/brain/memory.py с HierarchicalMemory и расширенным LocalMemory
-
-### Приоритет 10 - Multi-modal Reasoning (ВЫПОЛНЕН ЧАСТИЧНО)
-
-- ✅ **Screenshot capture**: захват экрана через PIL.ImageGrab
-- ✅ **Vision reasoning**: подготовка изображений для анализа через vision-модели
-- ✅ **OCR integration**: распознавание текста на изображениях через vision-модели
-- ✅ Создан modules/tools/vision.py с VisionToolkit
-- ✅ Написаны тесты tests/test_vision_tools.py (6 passed)
-
-### Приоритет 12 - Recovery & Self-healing (ВЫПОЛНЕН)
-
-- ✅ **MCP Gateway**: модуль `modules/agent/mcp_gateway.py` для подключения к внешним MCP-серверам
-- ✅ **Automatic rollback**: поддержка rollback через RecoveryEngine с MCP инструментами
-- ✅ **Alternative paths**: интеграция MCP инструментов как альтернативные пути восстановления
-- ✅ **Graceful degradation**: `GracefulDegradation` класс для работы в упрощенном режиме
-- ✅ **Self-diagnostics**: `SelfDiagnostics` класс для диагностики агента (database, storage, memory, filesystem, process_manager, model_gateway, mcp_servers)
-- ✅ Создан modules/agent/mcp_gateway.py
-- ✅ Созданы SelfDiagnostics и GracefulDegradation в modules/agent/recovery.py
-- ✅ Написаны тесты tests/test_mcp_gateway.py (75 passed)
-
-## MCP Integration Roadmap
-
-### MCP Servers to Integrate
-
-- [x] GitHub MCP Server - управление репозиториями, issues, PR через `@modelcontextprotocol/server-github`
-- [x] Filesystem MCP Server - работа с файлами через `@modelcontextprotocol/server-filesystem`
-- [x] SQLite MCP Server - запросы к базе данных через `@modelcontextprotocol/server-sqlite`
-- [x] Slack MCP Server - интеграция с Slack через `@modelcontextprotocol/server-slack`
-- [x] Web Search MCP Server - поиск в интернете через `@modelcontextprotocol/server-web-search`
-- [x] Google Drive MCP Server - работа с документами через `@modelcontextprotocol/server-gdrive`
-- [x] PostgreSQL MCP Server - подключение к PostgreSQL через `@modelcontextprotocol/server-postgres`
-- [x] Git MCP Server - расширенные git операции через `@modelcontextprotocol/server-git`
-- [x] Jira MCP Server - интеграция с Jira через `@modelcontextprotocol/server-jira`
-- [x] Docker MCP Server - управление контейнерами через `@modelcontextprotocol/server-docker`
-
-### MCP Implementation Tasks
-
-- [x] MCP Gateway с stdio транспортом - `modules/agent/mcp_gateway.py`
-- [x] MCP tools registration с ToolRegistry support
-- [x] MCP tool call error handling
-- [x] **GitHub MCP Server**: автоматическое подключение при наличии GITHUB_TOKEN в .env
-- [x] **Filesystem MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **SQLite MCP Server**: поддержка MCP_SQLITE_PATH для указания пути к базе
-- [x] **Slack MCP Server**: автоматическое подключение при наличии SLACK_TOKEN в .env
-- [x] **Web Search MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **Google Drive MCP Server**: автоматическое подключение при наличии GOOGLE_DRIVE_TOKEN в .env
-- [x] **PostgreSQL MCP Server**: автоматическое подключение при наличии MCP_POSTGRES_CONNECTION в .env
-- [x] **Git MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] **Jira MCP Server**: автоматическое подключение при наличии JIRA_TOKEN в .env
-- [x] **Docker MCP Server**: встроен в DEFAULT_MCP_SERVERS, всегда включён
-- [x] SSE транспорт в MCPGateway (для удаленных серверов)
-- [x] MCP-пул соединений для переиспользования процессов
-- [x] MCP tools caching (кеширование схем инструментов)
-- [x] MCP error handling middleware
-- [x] **Автоматическое обнаружение MCP серверов** - MCPAutoDiscovery для сканирования localhost портов (3000, 8000, 8080 и др.)
-- [x] MCP timeout и retry политики (timeout, retry_count, retry_delay в MCPServerConfig)
-
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 473 tests passed
+python -m pytest tests/ -q  # 502 tests passed
 
 # КОНТЕКСТ ПРОЕКТА
 - Ты помогаешь мне развивать моего кастомного ИИ-агента.
@@ -175,6 +25,10 @@ python -m pytest tests/ -q  # 473 tests passed
 **сырой backlog идей**, который можно целиком отдать агенту. Это не статус готовности: перед реализацией он обязан проверить, чего уже нет в коде, и не создавать дубли.
 
 ---
+- Deep web research: многошаговое исследование с анализом источников
+- Source verification: проверка достоверности источников
+- Citation management: автоматическое формирование списка источников
+- Research synthesis: объединение информации из разных источников (ЧАСТИЧНО ВЫПОЛНЕНО)
 
 # Nova — полный backlog возможностей
 
@@ -1412,10 +1266,10 @@ python -m pytest tests/ -q  # 473 tests passed
 ## Ближайший разумный порядок
 
 1. ✅ Проверить, что уже заявленные completed-функции реально интегрированы в runtime (MCP auto-discovery интегрирован в main.py).
-2. Закончить MCP timeout/retry/logging/security middleware.
+2. ✅ MCP timeout/retry/logging/security middleware (MCPSecurityMiddleware с allowlist, rate limiting, health score).
 3. ✅ Dynamic tool selection - не отправлять модели весь каталог (select_tools_for_request, get_tool_schemas_for_request).
-4. Закончить однотуровый AgentService.
-5. Добавить полноценный Execution Ledger на все side effects.
+4. ✅ Закончить однотуровый AgentService (реализован run() метод с intent routing, tool execution, deterministic reporting).
+5. ✅ Добавить полноценный Execution Ledger на все side effects (record всех tool calls с verification и artifacts).
 6. Стабилизировать voice ownership, wake word и push-to-talk.
 7. Реализовать UIA + OCR + vision grounding.
 8. Сделать browser security против prompt injection.

@@ -218,3 +218,93 @@ def test_ledger_session_filter() -> None:
     
     assert len(records_a) == 0
     assert len(records_b) == 0
+
+
+def test_ledger_record_with_verification() -> None:
+    """Test recording side effects with verification data."""
+    ledger = ExecutionLedger()
+    
+    record = ledger.record(
+        tool_name="write_file",
+        arguments={"path": "test.txt"},
+        result={"success": True, "message": "Written"},
+        session_id="s1",
+        turn_id="t1",
+        verification={
+            "verified": True,
+            "method": "file_check",
+            "confidence": 0.95,
+            "details": "File exists and matches content",
+        },
+    )
+    
+    assert record.verification is not None
+    assert record.verification["verified"] is True
+    assert record.verification["method"] == "file_check"
+    assert record.verification["confidence"] == 0.95
+
+
+def test_ledger_record_with_artifacts() -> None:
+    """Test recording side effects with artifacts."""
+    ledger = ExecutionLedger()
+    
+    record = ledger.record(
+        tool_name="browser_screenshot",
+        arguments={"url": "https://example.com"},
+        result={"success": True},
+        session_id="s1",
+        turn_id="t1",
+        artifacts=["artifact_abc123", "artifact_def456"],
+    )
+    
+    assert record.artifacts == ["artifact_abc123", "artifact_def456"]
+
+
+def test_ledger_record_all_parameters() -> None:
+    """Test recording with all optional parameters."""
+    ledger = ExecutionLedger()
+    
+    record = ledger.record(
+        tool_name="execute_python_code",
+        arguments={"code": "print('hello')"},
+        result={"success": True, "message": "Done"},
+        session_id="session_test",
+        turn_id="turn_test",
+        rollback_info={"type": "execution", "snapshot": "backup"},
+        verification={
+            "verified": True,
+            "method": "output_check",
+            "confidence": 1.0,
+        },
+        artifacts=["artifact_xyz"],
+    )
+    
+    assert record.tool_name == "execute_python_code"
+    assert record.rollback_info["type"] == "execution"
+    assert record.verification is not None
+    assert record.artifacts == ["artifact_xyz"]
+    # Check full serialization includes all fields
+    d = record.to_dict()
+    assert "verification" in d
+    assert "artifacts" in d
+
+
+def test_side_effect_record_to_dict_includes_verification_and_artifacts() -> None:
+    """Test that to_dict includes verification and artifacts."""
+    record = SideEffectRecord(
+        id="test_1",
+        tool_name="test_tool",
+        arguments={"arg1": "value1"},
+        result={"success": True},
+        timestamp="2024-01-01T00:00:00",
+        session_id="session_1",
+        turn_id="turn_1",
+        rollback_info={"type": "test"},
+        verification={"verified": True, "method": "check"},
+        artifacts=["art1", "art2"],
+    )
+    
+    d = record.to_dict()
+    
+    assert d["verification"] == {"verified": True, "method": "check"}
+    assert d["artifacts"] == ["art1", "art2"]

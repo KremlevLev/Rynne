@@ -1004,17 +1004,31 @@ class ToolRunner:
             result.duration_ms,
         )
 
-        # Record to ledger
+        # Record to ledger (all side effects, not just successful ones)
         from modules.domain.ledger import get_ledger
         
-        if result.success:
-            get_ledger().record(
-                tool_name=definition.name,
-                arguments=arguments,
-                result=result.to_dict(),
-                session_id=actual_context.session_id,
-                turn_id=actual_context.turn_id,
-                rollback_info=definition.rollback_info,
-            )
+        # Include verification info if available
+        verification_data = None
+        if result.verification is not None:
+            verification_data = {
+                "verified": result.verification.verified,
+                "method": result.verification.method,
+                "confidence": result.verification.confidence,
+                "details": result.verification.details,
+            }
+        
+        # Include artifacts if available
+        artifacts = [str(a) for a in result.artifacts] if result.artifacts else []
+        
+        get_ledger().record(
+            tool_name=definition.name,
+            arguments=arguments,
+            result=result.to_dict(),
+            session_id=actual_context.session_id,
+            turn_id=actual_context.turn_id,
+            rollback_info=definition.rollback_info,
+            verification=verification_data,
+            artifacts=artifacts,
+        )
         
         return result

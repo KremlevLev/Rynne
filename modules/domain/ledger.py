@@ -64,6 +64,8 @@ class ExecutionLedger:
         session_id: str,
         turn_id: str,
         rollback_info: dict[str, Any] | None = None,
+        verification: dict[str, Any] | None = None,
+        artifacts: list[str] | None = None,
     ) -> SideEffectRecord:
         """
         Добавляет запись о выполненном действии.
@@ -75,6 +77,8 @@ class ExecutionLedger:
             session_id: ID сессии
             turn_id: ID хода
             rollback_info: Информация для отката (опционально)
+            verification: Информация о верификации (опционально)
+            artifacts: Список артефактов (опционально)
             
         Returns:
             Созданная запись
@@ -88,6 +92,8 @@ class ExecutionLedger:
             session_id=session_id,
             turn_id=turn_id,
             rollback_info=rollback_info,
+            verification=verification,
+            artifacts=artifacts or [],
         )
         self.records.append(record)
         return record
