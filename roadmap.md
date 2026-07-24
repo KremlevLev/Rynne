@@ -1272,7 +1272,7 @@ python -m pytest tests/ -q  # 502 tests passed
 5. ✅ Добавить полноценный Execution Ledger на все side effects (record всех tool calls с verification и artifacts).
 6. ✅ Workflow Recorder - запись и воспроизведение последовательностей действий (WorkflowRecorder с сохранением в JSON).
 7. ✅ Стабилизировать voice ownership, wake word и push-to-talk.
-8. Реализовать UIA + OCR + vision grounding.
+8. ✅ Реализовать UIA + OCR + vision grounding.
 9. Сделать browser security против prompt injection.
 10. Подключить coding workspace с patch/test/rollback.
 11. Добавить background tasks и восстановление после перезапуска.
