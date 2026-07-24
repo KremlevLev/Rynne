@@ -1274,7 +1274,7 @@ python -m pytest tests/ -q  # 502 tests passed
 7. ✅ Стабилизировать voice ownership, wake word и push-to-talk.
 8. ✅ Реализовать UIA + OCR + vision grounding.
 9. ✅ Сделать browser security против prompt injection.
-10. Подключить coding workspace с patch/test/rollback.
+10. ✅ Подключить coding workspace с patch/test/rollback.
 11. Добавить background tasks и восстановление после перезапуска.
 12. Добавить проактивные сценарии.
 13. После этого развивать multi-agent orchestration.
