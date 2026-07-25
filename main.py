@@ -39,7 +39,7 @@ from modules.input_hub.models import (
     RequestSource,
 )
 
-from core.config import NOVA_DESKTOP_UI
+from core.config import NOVA_DESKTOP_UI, NOVA_PREMIUM_UI
 
 from modules.ui.desktop_service import (
     DesktopService,
@@ -690,7 +690,7 @@ async def async_main() -> None:
 
     if NOVA_DESKTOP_UI:
         try:
-            desktop_service.start()
+            desktop_service.start(premium=NOVA_PREMIUM_UI)
         except Exception:
             logger.exception(
                 "Не удалось запустить Desktop UI."
@@ -929,6 +929,17 @@ async def async_main() -> None:
             f"{response.display_text}\n"
         )
 
+        # Передаём сообщение пользователя в Desktop UI.
+        desktop_service.publish(
+            "user_message",
+            {
+                "request_id": (
+                    request.request_id
+                ),
+                "text": request.text,
+            },
+        )
+
         # Передаём точный ответ в Desktop UI.
         desktop_service.publish(
             "assistant_message",
@@ -1027,6 +1038,10 @@ async def async_main() -> None:
             request_service.cancel_current
         ),
         mode_manager=mode_manager,
+        plan_service=plan_service,
+        background_plan_manager=(
+            background_plan_manager
+        ),
 
     )
 

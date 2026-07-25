@@ -1265,16 +1265,6 @@ python -m pytest tests/ -q  # 502 tests passed
 
 ## Ближайший разумный порядок
 
-1. ✅ Проверить, что уже заявленные completed-функции реально интегрированы в runtime (MCP auto-discovery интегрирован в main.py).
-2. ✅ MCP timeout/retry/logging/security middleware (MCPSecurityMiddleware с allowlist, rate limiting, health score).
-3. ✅ Dynamic tool selection - не отправлять модели весь каталог (select_tools_for_request, get_tool_schemas_for_request).
-4. ✅ Закончить однотуровый AgentService (реализован run() метод с intent routing, tool execution, deterministic reporting).
-5. ✅ Добавить полноценный Execution Ledger на все side effects (record всех tool calls с verification и artifacts).
-6. ✅ Workflow Recorder - запись и воспроизведение последовательностей действий (WorkflowRecorder с сохранением в JSON).
-7. ✅ Стабилизировать voice ownership, wake word и push-to-talk.
-8. ✅ Реализовать UIA + OCR + vision grounding.
-9. ✅ Сделать browser security против prompt injection.
-10. ✅ Подключить coding workspace с patch/test/rollback.
 11. Добавить background tasks и восстановление после перезапуска.
 12. Добавить проактивные сценарии.
 13. После этого развивать multi-agent orchestration.

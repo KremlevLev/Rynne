@@ -376,3 +376,13 @@ NOVA_DESKTOP_UI = os.getenv(
     "yes",
     "on",
 }
+
+NOVA_PREMIUM_UI = os.getenv(
+    "NOVA_PREMIUM_UI",
+    "true",
+).lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}

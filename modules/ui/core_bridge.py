@@ -52,6 +52,8 @@ class CoreDesktopBridge:
             PreferencesManager | None
         ) = None,
         cancel_current_request=None,
+        plan_service=None,
+        background_plan_manager=None,
     ) -> None:
         self.desktop = desktop
         self.process_manager = (
@@ -72,6 +74,12 @@ class CoreDesktopBridge:
         self.cancel_current_request = (
             cancel_current_request
         )
+        self.plan_service = plan_service
+        self.background_plan_manager = (
+            background_plan_manager
+        )
+        self._reported_plan_ids: set[str] = set()
+        self._reported_bg_ids: set[str] = set()
 
 
     async def run(
@@ -174,6 +182,39 @@ class CoreDesktopBridge:
             "models",
             model_data,
         )
+
+        # Публикуем события жизненного цикла задач
+        if self.plan_service is not None:
+            for plan_id, plan in self.plan_service._plans.items():
+                if plan_id not in self._reported_plan_ids:
+                    self._reported_plan_ids.add(plan_id)
+                    self.desktop.publish(
+                        "task_started",
+                        {
+                            "task_id": plan_id,
+                            "title": plan.goal,
+                            "plan": [
+                                {"text": s.description, "status": "pending"}
+                                for s in plan.steps
+                            ],
+                        },
+                    )
+
+        if self.background_plan_manager is not None:
+            for bg_id, bg_plan in self.background_plan_manager._plans.items():
+                if bg_id not in self._reported_bg_ids:
+                    self._reported_bg_ids.add(bg_id)
+                    self.desktop.publish(
+                        "task_started",
+                        {
+                            "task_id": bg_id,
+                            "title": bg_plan.goal,
+                            "plan": [
+                                {"text": s.get("description", ""), "status": "pending"}
+                                for s in bg_plan.steps
+                            ],
+                        },
+                    )
 
     async def handle_command(
         self,
@@ -501,6 +542,92 @@ class CoreDesktopBridge:
                         else
                         "Активного запроса нет."
                     ),
+                )
+                return
+
+            if action == "new_task":
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message="Новая задача создана.",
+                )
+                return
+
+            if action == "toggle_voice_mode":
+                if self.mode_manager is not None:
+                    await self.mode_manager.toggle_manual_voice()
+                    self._publish_command_result(
+                        command_id,
+                        success=True,
+                        message="Голосовой режим переключён.",
+                    )
+                else:
+                    self._publish_command_result(
+                        command_id,
+                        success=False,
+                        message="Менеджер режимов не подключён.",
+                    )
+                return
+
+            if action == "pause_task":
+                if self.cancel_current_request is not None:
+                    await self.cancel_current_request()
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message="Задача приостановлена.",
+                )
+                return
+
+            if action == "cancel_task":
+                if self.cancel_current_request is not None:
+                    cancelled = await self.cancel_current_request()
+                    self._publish_command_result(
+                        command_id,
+                        success=cancelled,
+                        message=(
+                            "Задача отменена."
+                            if cancelled
+                            else "Активной задачи нет."
+                        ),
+                    )
+                else:
+                    self._publish_command_result(
+                        command_id,
+                        success=False,
+                        message="Отмена не подключена.",
+                    )
+                return
+
+            if action == "approve_task":
+                pending = self.permission_manager.pending_requests()
+                if pending:
+                    self.permission_manager.confirm(
+                        pending[0].get("operation_id", "")
+                    )
+                    self._publish_command_result(
+                        command_id,
+                        success=True,
+                        message="Разрешение подтверждено.",
+                    )
+                else:
+                    self._publish_command_result(
+                        command_id,
+                        success=False,
+                        message="Нет ожидающих разрешений.",
+                    )
+                return
+
+            if action in (
+                "open_settings",
+                "switch_model",
+                "open_mcp_manager",
+                "open_diagnostics",
+            ):
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message=f"Команда {action} принята.",
                 )
                 return
 

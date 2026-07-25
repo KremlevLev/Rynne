@@ -17,13 +17,31 @@ logger = logging.getLogger("DesktopService")
 def _desktop_process_entry(
     event_queue,
     command_queue,
+    *,
+    premium: bool = False,
 ) -> None:
-    from modules.ui.desktop import run_desktop
+    """
+    Точка входа для UI-процесса.
 
-    run_desktop(
-        event_queue=event_queue,
-        command_queue=command_queue,
-    )
+    Если premium=True, использует новый премиальный UI.
+    Иначе — fallback на старый desktop.py.
+    """
+    if premium:
+        from modules.ui.premium_desktop import (
+            run_premium_desktop,
+        )
+
+        run_premium_desktop(
+            event_queue=event_queue,
+            command_queue=command_queue,
+        )
+    else:
+        from modules.ui.desktop import run_desktop
+
+        run_desktop(
+            event_queue=event_queue,
+            command_queue=command_queue,
+        )
 
 
 class DesktopService:
@@ -57,7 +75,7 @@ class DesktopService:
             and self._process.is_alive()
         )
 
-    def start(self) -> bool:
+    def start(self, *, premium: bool = False) -> bool:
         if self.is_running:
             return True
 
@@ -67,6 +85,7 @@ class DesktopService:
                 self._event_queue,
                 self._command_queue,
             ),
+            kwargs={"premium": premium},
             name="nova-desktop-ui",
             daemon=True,
         )
@@ -74,8 +93,9 @@ class DesktopService:
         self._process.start()
 
         logger.info(
-            "Desktop UI запущен. PID=%s",
+            "Desktop UI запущен. PID=%s premium=%s",
             self._process.pid,
+            premium,
         )
 
         return True
