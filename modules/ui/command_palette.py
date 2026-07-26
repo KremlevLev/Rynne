@@ -119,6 +119,9 @@ class CommandPalette(QFrame):
 
         self._layout.addWidget(container)
 
+        # Скрытый palette не должен перехватывать клики —
+        # иначе нижележащие виджеты становятся недоступными.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
 
     def _on_search_changed(self, text: str) -> None:
@@ -253,6 +256,8 @@ class CommandPalette(QFrame):
 
     def show_palette(self) -> None:
         self._visible = True
+        # Убираем прозрачность для мыши, чтобы palette получал клики.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.show()
         self._search.setFocus()
         self._search.setText("")
@@ -260,6 +265,9 @@ class CommandPalette(QFrame):
 
     def hide_palette(self) -> None:
         self._visible = False
+        # Делаем palette прозрачным для мыши, чтобы клики
+        # проходили сквозь него к основному UI.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
 
     def is_visible(self) -> bool:

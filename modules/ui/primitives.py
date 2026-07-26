@@ -134,9 +134,6 @@ class Button(QPushButton):
             "lg": "10px 20px",
         }.get(self._size, "8px 16px")
 
-        duration = theme.duration("hover")
-        easing = theme.easing("easeOut")
-
         self.setStyleSheet(f"""
             Button {{
                 background: {bg};
@@ -147,8 +144,6 @@ class Button(QPushButton):
                 font-family: {theme.font_family()};
                 font-size: {theme.font_size('body')}px;
                 font-weight: {theme.font_weight('medium')};
-                transition: background {duration}ms {easing},
-                           border-color {duration}ms {easing};
             }}
             Button:hover {{
                 background: {bg_hover};
@@ -298,7 +293,6 @@ class Card(QFrame):
         bg = theme.color("bg.surface")
         border = theme.color("border.subtle")
         radius = theme.radius(self._radius_key)
-        shadow = theme.shadow("md")
 
         hover_css = ""
         if self._hover:
@@ -313,7 +307,6 @@ class Card(QFrame):
                 background: {bg};
                 border: 1px solid {border};
                 border-radius: {radius};
-                {f"box-shadow: {shadow};" if shadow else ""}
             }}
             {hover_css}
         """)
@@ -734,6 +727,7 @@ class EmptyState(QWidget):
         self._setup_ui(title, subtitle, icon)
 
     def _setup_ui(self, title: str, subtitle: str, icon: str) -> None:
+        self.setAttribute(Qt.WA_StyledBackground, True)
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(12)

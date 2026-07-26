@@ -1,12 +1,27 @@
 # modules/audio/tts.py
 import os
 import logging
+import threading
 import sounddevice as sd
 import re
 import asyncio
 import torch
 from modules.ui.overlay import update_status
 logger = logging.getLogger("TTS")
+
+# ---------------------------------------------------------------------------
+# Флаг воспроизведения TTS — используется VoiceListener (STT) для
+# приостановки записи, пока Nova говорит, чтобы избежать обратной связи
+# (микрофон не должен записывать собственный голос).
+# ---------------------------------------------------------------------------
+_tts_playing = False
+_tts_playing_lock = threading.Lock()
+
+
+def is_tts_playing() -> bool:
+    """Thread-safe: воспроизводится ли сейчас аудио TTS."""
+    with _tts_playing_lock:
+        return _tts_playing
 
 # Путь для хранения JIT-модели Silero v5
 MODEL_PATH = "data/v5_ru.pt"
@@ -90,8 +105,17 @@ def speak(text: str, speaker: str = "baya"):
             return
             
         audio_data = audio.numpy()
-        sd.play(audio_data, sample_rate)
-        sd.wait()  # При вызове sd.stop() в другом потоке этот метод мгновенно разблокируется
+        global _tts_playing
+        # Флаг сообщает VoiceListener (STT), что сейчас играет TTS,
+        # чтобы микрофон не захватывал собственный голос Nova.
+        with _tts_playing_lock:
+            _tts_playing = True
+        try:
+            sd.play(audio_data, sample_rate)
+            sd.wait()  # При вызове sd.stop() в другом потоке этот метод мгновенно разблокируется
+        finally:
+            with _tts_playing_lock:
+                _tts_playing = False
         
     except Exception as e:
         logger.error(f"Ошибка во время синтеза или воспроизведения Silero: {e}")

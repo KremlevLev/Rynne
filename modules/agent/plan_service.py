@@ -67,6 +67,8 @@ class PlanService:
             ExecutionPlan,
         ] = {}
 
+        self._completed_plan_ids: set[str] = set()
+
     @staticmethod
     def _parse_steps(
         raw_steps: list[dict[str, Any]],
@@ -191,6 +193,7 @@ class PlanService:
                 ),
             )
 
+            self._completed_plan_ids.add(plan.plan_id)
             return result.to_tool_result()
 
         finally:
@@ -249,3 +252,7 @@ class PlanService:
                 ),
             },
         )
+
+    def _get_completed_plan_ids(self) -> set[str]:
+        """Возвращает множество ID завершённых планов."""
+        return set(self._completed_plan_ids)

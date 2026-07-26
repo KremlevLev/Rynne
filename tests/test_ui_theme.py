@@ -41,7 +41,7 @@ class TestTheme:
         t = Theme()
         assert t.radius("sm") == RADIUS["sm"]
         assert t.radius("lg") == RADIUS["lg"]
-        assert t.radius("unknown") == "12px"
+        assert t.radius("unknown") == "0px"
 
     def test_spacing(self) -> None:
         t = Theme()
@@ -62,8 +62,8 @@ class TestTheme:
 
     def test_font_family(self) -> None:
         t = Theme()
-        assert "Inter" in t.font_family()
         assert "JetBrains" in t.font_family(mono=True)
+        assert "JetBrains" in t.font_family()
 
     def test_duration(self) -> None:
         t = Theme()

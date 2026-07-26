@@ -280,6 +280,11 @@ class ChatView(QScrollArea):
         self._layout.insertWidget(self._layout.count() - 1, message)
         self._scroll_to_bottom()
 
+    def add_widget(self, widget: QWidget) -> None:
+        """Добавляет произвольный виджет (например, ToolActivityCard) в чат."""
+        self._layout.insertWidget(self._layout.count() - 1, widget)
+        self._scroll_to_bottom()
+
     def append_to_last(self, chunk: str) -> None:
         """Добавляет чанк к последнему сообщению."""
         if self._messages:

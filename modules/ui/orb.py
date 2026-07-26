@@ -25,6 +25,7 @@ from PySide6.QtCore import (
     QEasingCurve,
     QPointF,
     QRectF,
+    Property,
 )
 from PySide6.QtGui import (
     QPainter,
@@ -74,12 +75,22 @@ class NovaOrb(QWidget):
         self._timer.start(30)  # ~33 FPS
 
         # Анимация состояния
-        self._state_anim = QPropertyAnimation(self, b"_pulse_phase")
+        self._state_anim = QPropertyAnimation(self, b"pulse_phase")
         self._state_anim.setDuration(theme.duration("orbLoop"))
         self._state_anim.setStartValue(0.0)
         self._state_anim.setEndValue(1.0)
         self._state_anim.setLoopCount(-1)
         self._state_anim.setEasingCurve(QEasingCurve.Linear)
+        self._state_anim.start()
+
+    @Property(float)
+    def pulse_phase(self) -> float:
+        return self._pulse_phase
+
+    @pulse_phase.setter
+    def pulse_phase(self, value: float) -> None:
+        self._pulse_phase = value
+        self.update()
 
     def _on_tick(self) -> None:
         if self._state == "idle":
@@ -244,6 +255,9 @@ class VoiceOverlay(QFrame):
         self._on_stop = on_stop
         self._visible = False
         self._setup_ui()
+        # Скрытый overlay не должен перехватывать клики —
+        # иначе нижележащие виджеты становятся недоступными.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
 
     def _setup_ui(self) -> None:
@@ -281,16 +295,10 @@ class VoiceOverlay(QFrame):
         self._layout.addStretch()
 
         # Кнопка stop
-        self._stop_btn = QLabel("⏹")
-        self._stop_btn.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.color("text.secondary")};
-                font-family: {theme.font_family()};
-                font-size: {theme.font_size("body")}px;
-                cursor: pointer;
-            }}
-        """)
-        self._stop_btn.mousePressEvent = self._on_stop_clicked
+        from modules.ui.primitives import IconButton
+
+        self._stop_btn = IconButton("⏹", tooltip="Остановить", size="sm", variant="ghost")
+        self._stop_btn.clicked.connect(self._on_stop_clicked)
         self._layout.addWidget(self._stop_btn)
 
         # Стиль overlay
@@ -302,18 +310,23 @@ class VoiceOverlay(QFrame):
             }}
         """)
 
-    def _on_stop_clicked(self, event) -> None:
+    def _on_stop_clicked(self) -> None:
         if self._on_stop:
             self._on_stop()
 
     def show_overlay(self) -> None:
         """Показывает overlay с анимацией."""
         self._visible = True
+        # Убираем прозрачность для мыши, чтобы overlay получал клики.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
         self.show()
 
     def hide_overlay(self) -> None:
         """Скрывает overlay."""
         self._visible = False
+        # Делаем overlay прозрачным для мыши, чтобы клики
+        # проходили сквозь него к основному UI.
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
 
     def is_visible(self) -> bool:

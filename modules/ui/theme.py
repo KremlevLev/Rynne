@@ -5,6 +5,14 @@
 Централизует цвета, геометрию, типографику, переходы и тени.
 Поддерживает тёмную и (позже) светлую тему через TOKEN_GROUPS.
 
+Стиль: Mistral AI Brutalism
+  - Фон: #121212 (матовый чёрный)
+  - Сайдбар: #000000 (глубокий чёрный)
+  - Акцент: #ff4e00 (Mistral Orange) / #ffffff (чистый белый)
+  - Шрифты: только моноширинные (JetBrains Mono, Courier New)
+  - Все углы острые (border-radius: 0px)
+  - Разделители: border: 1px solid #2a2a2a
+
 Использование:
     from modules.ui.theme import Theme
 
@@ -20,63 +28,63 @@ from typing import Any
 
 
 # ---------------------------------------------------------------------------
-# Цветовые токены
+# Цветовые токены (Mistral AI Premium Dark)
 # ---------------------------------------------------------------------------
 
 DARK_COLORS: dict[str, str] = {
     # Фон
-    "bg.base": "#0B0D12",
-    "bg.elevated": "#11141C",
-    "bg.surface": "#171B25",
-    "bg.surfaceHover": "#1D2330",
+    "bg.base": "#0b0d12",
+    "bg.elevated": "#000000",
+    "bg.surface": "#11141c",
+    "bg.surfaceHover": "#1d2330",
     "bg.overlay": "rgba(8, 10, 15, 0.72)",
 
     # Текст
-    "text.primary": "#F5F7FB",
-    "text.secondary": "#A7B0C0",
-    "text.muted": "#6F7888",
-    "text.disabled": "#4C5360",
+    "text.primary": "#f5f7fb",
+    "text.secondary": "#a7b0c0",
+    "text.muted": "#6f7888",
+    "text.disabled": "#4c5360",
 
     # Акценты
-    "accent.primary": "#8B7CFF",
-    "accent.secondary": "#4CC9F0",
+    "accent.primary": "#8b7cff",
+    "accent.secondary": "#4cc9f0",
     "accent.soft": "rgba(139, 124, 255, 0.14)",
 
     # Статусы
-    "success": "#4ADE80",
-    "warning": "#FBBF24",
-    "danger": "#FB7185",
-    "info": "#60A5FA",
+    "success": "#4ade80",
+    "warning": "#fbbf24",
+    "danger": "#fb7185",
+    "info": "#60a5fa",
 
     # Границы
-    "border.subtle": "rgba(255, 255, 255, 0.07)",
-    "border.active": "rgba(139, 124, 255, 0.55)",
+    "border.subtle": "#2a2a2a",
+    "border.active": "#8b7cff",
 }
 
 # Светлая тема (заготовка — используется позже)
 LIGHT_COLORS: dict[str, str] = {
-    "bg.base": "#F8F9FC",
-    "bg.elevated": "#FFFFFF",
-    "bg.surface": "#F0F2F7",
-    "bg.surfaceHover": "#E4E8F0",
+    "bg.base": "#f8f9fa",
+    "bg.elevated": "#ffffff",
+    "bg.surface": "#f1f3f5",
+    "bg.surfaceHover": "#e9ecef",
     "bg.overlay": "rgba(255, 255, 255, 0.72)",
 
-    "text.primary": "#1A1D24",
-    "text.secondary": "#5A6474",
-    "text.muted": "#8A94A6",
-    "text.disabled": "#B8C1D4",
+    "text.primary": "#121212",
+    "text.secondary": "#5a5a5a",
+    "text.muted": "#8a8a8a",
+    "text.disabled": "#b0b0b0",
 
-    "accent.primary": "#635BFF",
-    "accent.secondary": "#2AA1D6",
-    "accent.soft": "rgba(99, 91, 255, 0.12)",
+    "accent.primary": "#8b7cff",
+    "accent.secondary": "#4cc9f0",
+    "accent.soft": "rgba(139, 124, 255, 0.14)",
 
-    "success": "#22C55E",
-    "warning": "#F59E0B",
-    "danger": "#EF4444",
-    "info": "#3B82F6",
+    "success": "#22c55e",
+    "warning": "#f59e0b",
+    "danger": "#ef4444",
+    "info": "#3b82f6",
 
-    "border.subtle": "rgba(0, 0, 0, 0.08)",
-    "border.active": "rgba(99, 91, 255, 0.55)",
+    "border.subtle": "rgba(0, 0, 0, 0.07)",
+    "border.active": "rgba(139, 124, 255, 0.55)",
 }
 
 TOKEN_GROUPS: dict[str, dict[str, str]] = {
@@ -90,11 +98,11 @@ TOKEN_GROUPS: dict[str, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 RADIUS: dict[str, str] = {
-    "sm": "8px",
-    "md": "12px",
-    "lg": "16px",
-    "xl": "22px",
-    "pill": "999px",
+    "sm": "0px",
+    "md": "0px",
+    "lg": "0px",
+    "xl": "0px",
+    "pill": "0px",
 }
 
 SPACING: dict[str, int] = {
@@ -114,8 +122,8 @@ SPACING: dict[str, int] = {
 # Типографика
 # ---------------------------------------------------------------------------
 
-FONT_FAMILY_INTERFACE = "Inter, Geist, Manrope, 'Segoe UI', sans-serif"
-FONT_FAMILY_MONO = "'JetBrains Mono', 'Geist Mono', 'Consolas', monospace"
+FONT_FAMILY_INTERFACE = "'JetBrains Mono', 'Courier New', monospace"
+FONT_FAMILY_MONO = "'JetBrains Mono', 'Courier New', monospace"
 
 FONT_SIZES: dict[str, int] = {
     "caption": 12,
@@ -159,15 +167,15 @@ EASING = {
 
 
 # ---------------------------------------------------------------------------
-# Тени
+# Тени — отключены (brutalism: тени запрещены в QSS)
 # ---------------------------------------------------------------------------
 
 SHADOWS: dict[str, str] = {
-    "sm": "0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05)",
-    "md": "0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06)",
-    "lg": "0 8px 24px rgba(0, 0, 0, 0.14), 0 4px 8px rgba(0, 0, 0, 0.08)",
-    "accent": "0 0 16px rgba(139, 124, 255, 0.20)",
-    "success": "0 0 16px rgba(74, 222, 128, 0.20)",
+    "sm": "",
+    "md": "",
+    "lg": "",
+    "accent": "",
+    "success": "",
 }
 
 
@@ -227,7 +235,7 @@ class Theme:
     # --- геометрия ------------------------------------------------------
 
     def radius(self, key: str = "md") -> str:
-        return self._radius.get(key, "12px")
+        return self._radius.get(key, "0px")
 
     def spacing(self, key: str = "md") -> int:
         return self._spacing.get(key, 12)

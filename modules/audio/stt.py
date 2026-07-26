@@ -212,8 +212,16 @@ class VoiceListener:
         stream: sd.InputStream,
         should_abort: Callable[[], bool] | None,
     ) -> bool:
-        # Даем колонкам и звуковому драйверу затихнуть после TTS.
-        time.sleep(0.8)
+        # Ждём завершения воспроизведения TTS, чтобы микрофон
+        # не захватил собственный голос Nova.
+        from modules.audio.tts import is_tts_playing
+        while is_tts_playing():
+            if should_abort and should_abort():
+                return False
+            time.sleep(0.05)
+
+        # Даем колонкам и звуковому драйверу затихнуть.
+        time.sleep(0.3)
 
         print(
             "\n[🎤] Калибровка фона. "
@@ -293,6 +301,9 @@ class VoiceListener:
         if self.input_device is not None:
             stream_kwargs["device"] = self.input_device
 
+        # Lazy import для избежания циклических зависимостей.
+        from modules.audio.tts import is_tts_playing
+
         with sd.InputStream(**stream_kwargs) as stream:
             if self.energy_threshold is None:
                 calibrated = self._calibrate(
@@ -369,6 +380,11 @@ class VoiceListener:
                     logger.warning(
                         "Переполнение входного аудиобуфера."
                     )
+
+                # Пропускаем блоки, пока TTS воспроизводит аудио,
+                # чтобы избежать обратной связи микрофона.
+                if is_tts_playing():
+                    continue
 
                 rms = self._get_rms(data)
                 peak_rms = max(peak_rms, rms)

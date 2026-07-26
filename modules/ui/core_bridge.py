@@ -80,6 +80,7 @@ class CoreDesktopBridge:
         )
         self._reported_plan_ids: set[str] = set()
         self._reported_bg_ids: set[str] = set()
+        self._reported_completed_ids: set[str] = set()
 
 
     async def run(
@@ -199,6 +200,24 @@ class CoreDesktopBridge:
                             ],
                         },
                     )
+                else:
+                    # Публикуем прогресс активных задач
+                    self.desktop.publish(
+                        "task_progress",
+                        {
+                            "task_id": plan_id,
+                            "plan": [
+                                {
+                                    "text": s.description,
+                                    "status": s.status.value
+                                    if hasattr(s.status, "value")
+                                    else str(s.status),
+                                }
+                                for s in plan.steps
+                            ],
+                            "description": plan.goal,
+                        },
+                    )
 
         if self.background_plan_manager is not None:
             for bg_id, bg_plan in self.background_plan_manager._plans.items():
@@ -215,6 +234,20 @@ class CoreDesktopBridge:
                             ],
                         },
                     )
+
+        # Публикуем события завершения/отмены задач
+        completed_ids = set()
+        if self.plan_service is not None:
+            completed_ids = self.plan_service._get_completed_plan_ids()
+        for completed_id in completed_ids:
+            if completed_id not in self._reported_completed_ids:
+                self._reported_completed_ids.add(completed_id)
+                self.desktop.publish(
+                    "task_completed",
+                    {
+                        "task_id": completed_id,
+                    },
+                )
 
     async def handle_command(
         self,

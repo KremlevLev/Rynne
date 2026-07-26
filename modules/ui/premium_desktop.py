@@ -17,10 +17,12 @@ import queue
 import sys
 from typing import Any
 
+from PySide6.QtCore import Qt
+
 from modules.ui.desktop_protocol import make_command
 from modules.ui.theme import theme
 from modules.ui.shell import AppShell
-from modules.ui.chat import ChatView, ChatMessage, Composer
+from modules.ui.chat import ChatView, ChatMessage, Composer, ToolActivityCard
 from modules.ui.orb import NovaOrb, VoiceOverlay
 from modules.ui.command_palette import CommandPalette, Command
 from modules.ui.task_view import TaskView
@@ -51,6 +53,8 @@ def run_premium_desktop(
     # Создаём AppShell
     shell = AppShell()
     shell.show()
+    shell.raise_()
+    shell.activateWindow()
 
     # --- Центральный экран: чат ---
     chat_view = ChatView()
@@ -71,16 +75,27 @@ def run_premium_desktop(
         on_approve=lambda: _send_command(command_queue, "approve_task"),
     )
     chat_container.addWidget(task_view)
-    task_view.hide()
+    # QStackedWidget управляет видимостью сам; setCurrentWidget
+    # переключает между chat_view и task_view.
+    chat_container.setCurrentWidget(chat_view)
+
+    # Добавляем composer в центральный layout (внизу, под чатом)
+    shell._center_layout.setStretchFactor(shell.workspace, 1)
+    shell._center_layout.addWidget(composer)
 
     # --- Command Palette ---
     palette = CommandPalette()
+    shell.overlay_layout.addWidget(palette)
+    palette.hide()
     _register_palette_commands(palette, shell, command_queue)
 
     # --- Voice Overlay ---
     voice_overlay = VoiceOverlay(
         on_stop=lambda: _send_command(command_queue, "cancel_current_request")
     )
+    shell.overlay_layout.addWidget(voice_overlay)
+    shell.overlay_layout.setAlignment(voice_overlay, Qt.AlignBottom | Qt.AlignHCenter)
+    voice_overlay.hide()
 
     # --- Event loop ---
     _run_event_loop(
@@ -205,7 +220,7 @@ def _run_event_loop(
     command_queue: queue.Queue,
 ) -> None:
     """Главный event loop — обрабатывает события из event_queue."""
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import QTimer, QTimer as _QTimer
 
     def process_events() -> None:
         for _ in range(100):
@@ -230,7 +245,7 @@ def _run_event_loop(
                 command_queue=command_queue,
             )
 
-    timer = QTimer()
+    timer = QTimer(app)
     timer.timeout.connect(process_events)
     timer.start(50)
 
@@ -345,14 +360,35 @@ def _handle_event(
             msg.add_action("Повторить", _retry)
 
     elif event_type == "tool_started":
-        # TODO: добавить ToolActivityCard в чат
-        pass
+        # Добавляем ToolActivityCard в чат
+        tool_name = str(payload.get("tool_name", ""))
+        description = str(payload.get("description", ""))
+        card = ToolActivityCard(
+            tool_name=tool_name,
+            description=description or tool_name,
+            status="active",
+        )
+        chat_view.add_widget(card)
 
     elif event_type == "tool_completed":
-        # TODO: обновить ToolActivityCard
-        pass
+        # Обновляем последнюю ToolActivityCard
+        if chat_view._messages:
+            last_msg = chat_view._messages[-1]
+            if last_msg._artifacts:
+                last_artifact = last_msg._artifacts[-1]
+                if isinstance(last_artifact, ToolActivityCard):
+                    last_artifact.set_status("success")
+                    last_artifact.set_duration(
+                        str(payload.get("duration", ""))
+                    )
+                    last_artifact.set_details(
+                        str(payload.get("result", ""))
+                    )
 
     elif event_type == "task_started":
+        # Переключаемся на task_view (если shell имеет workspace)
+        if hasattr(shell, "workspace"):
+            shell.workspace.setCurrentWidget(task_view)
         task_view.show()
         task_view.set_title(str(payload.get("title", "Новая задача")))
         task_view.set_status("active", "Выполняется")
@@ -402,6 +438,46 @@ def _handle_event(
             details=str(payload.get("details", "")),
         )
 
+    elif event_type == "processes":
+        # Обновляем список процессов в task_view или context_panel
+        items = payload.get("items", [])
+        if hasattr(task_view, "_processes"):
+            task_view._processes = items
+
+    elif event_type == "memories":
+        # Обновляем список воспоминаний
+        items = payload.get("items", [])
+        if hasattr(task_view, "_memories"):
+            task_view._memories = items
+
+    elif event_type == "permissions":
+        # Показываем pending permissions
+        items = payload.get("items", [])
+        if items:
+            task_view.show()
+            shell.workspace.setCurrentWidget(task_view)
+            first = items[0]
+            task_view.show_approval(
+                title="Nova просит разрешение",
+                description=str(first.get("message", "")),
+                details=(
+                    f"Инструмент: {first.get('tool_name', '')}\n"
+                    f"Риск: {first.get('risk', '')}\n"
+                    f"Категория: {first.get('category', '')}"
+                ),
+            )
+
+    elif event_type == "command_result":
+        # Логируем результат команды
+        msg = ChatMessage(
+            author="Система",
+            text=f"Команда: {payload.get('message', '')}",
+            is_user=False,
+            timestamp=_format_time(payload),
+            status="sent",
+        )
+        chat_view.add_message(msg)
+
     elif event_type == "preferences":
         # Обновляем UI из preferences
         pass
@@ -410,6 +486,15 @@ def _handle_event(
         # Обновляем статус модели
         active_provider = payload.get("active_provider", "")
         active_model = payload.get("active_model", "")
+        if not active_provider and not active_model:
+            # Fallback: попробуем извлечь из вложенных структур
+            providers = payload.get("providers", {})
+            if isinstance(providers, dict):
+                for prov_name, prov_data in providers.items():
+                    if isinstance(prov_data, dict) and prov_data.get("active"):
+                        active_provider = prov_name
+                        active_model = prov_data.get("model", "")
+                        break
         shell.set_model(f"{active_provider}: {active_model}")
 
 

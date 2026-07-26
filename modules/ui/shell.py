@@ -83,6 +83,7 @@ class SidebarItem(QWidget):
         super().mousePressEvent(event)
 
     def _setup_ui(self) -> None:
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(12, 8, 12, 8)
         self._layout.setSpacing(12)
@@ -117,6 +118,7 @@ class SidebarItem(QWidget):
             SidebarItem {{
                 background: {bg};
                 border-radius: {radius};
+                border-bottom: 1px solid {theme.color("border.subtle")};
                 padding: 0;
             }}
             SidebarItem:hover {{
@@ -176,6 +178,7 @@ class Sidebar(QWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(8, 12, 8, 12)
         self._layout.setSpacing(4)
@@ -249,6 +252,13 @@ class Sidebar(QWidget):
 
         self._layout.addLayout(self._status_bar)
 
+        self.setStyleSheet(f"""
+            Sidebar {{
+                background: {theme.color("bg.elevated")};
+                border-right: 1px solid {theme.color("border.subtle")};
+            }}
+        """)
+
     def _add_nav_item(
         self, label: str, icon: str, *, active: bool = False
     ) -> SidebarItem:
@@ -276,16 +286,28 @@ class Sidebar(QWidget):
         if self._collapsed:
             self._logo.setText("N")
             self._collapse_btn.setText("⟩")
+            target_width = 60
         else:
             self._logo.setText("Nova")
             self._collapse_btn.setText("⟨")
+            target_width = 280
 
         # Плавное изменение ширины
         duration = theme.duration("panel")
         anim = QPropertyAnimation(self, b"minimumWidth")
         anim.setDuration(duration)
+        anim.setStartValue(self.minimumWidth())
+        anim.setEndValue(target_width)
         anim.setEasingCurve(QEasingCurve.OutCubic)
         anim.start()
+
+        # Также анимируем maximumWidth для корректного ресайза
+        anim_max = QPropertyAnimation(self, b"maximumWidth")
+        anim_max.setDuration(duration)
+        anim_max.setStartValue(self.maximumWidth())
+        anim_max.setEndValue(target_width)
+        anim_max.setEasingCurve(QEasingCurve.OutCubic)
+        anim_max.start()
 
     def is_collapsed(self) -> bool:
         return self._collapsed
@@ -308,6 +330,7 @@ class ContextPanel(QWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
@@ -349,6 +372,13 @@ class ContextPanel(QWidget):
             icon="◉",
         )
         self._content_layout.addWidget(self._empty)
+
+        self.setStyleSheet(f"""
+            ContextPanel {{
+                background: {theme.color("bg.elevated")};
+                border-left: 1px solid {theme.color("border.subtle")};
+            }}
+        """)
 
         self.hide()
 
@@ -393,7 +423,15 @@ class AppShell(QMainWindow):
         self._central = QWidget()
         self.setCentralWidget(self._central)
 
-        self._main_layout = QHBoxLayout(self._central)
+        # Создаём слой для наложения виджетов друг на друга
+        from PySide6.QtWidgets import QStackedLayout
+        self.overlay_layout = QStackedLayout(self._central)
+        self.overlay_layout.setStackingMode(QStackedLayout.StackAll)
+
+        # Основной UI оборачиваем в контейнер
+        self._bg_widget = QWidget()
+        self._bg_widget.setAttribute(Qt.WA_StyledBackground, True)
+        self._main_layout = QHBoxLayout(self._bg_widget)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.setSpacing(0)
 
@@ -416,6 +454,9 @@ class AppShell(QMainWindow):
         # Context panel
         self.context_panel = ContextPanel()
         self._main_layout.addWidget(self.context_panel)
+
+        # Добавляем _bg_widget в overlay_layout ПЕРВЫМ (задний фон)
+        self.overlay_layout.addWidget(self._bg_widget)
 
         # Состояние окна
         self.resize(1200, 780)
@@ -440,8 +481,31 @@ class AppShell(QMainWindow):
 
     def _on_sidebar_navigate(self, item: SidebarItem) -> None:
         """Обработчик навигации по боковой панели."""
-        # TODO: переключить workspace экран
-        pass
+        index = self.sidebar._items.index(item)
+        # Workspace имеет только 2 экрана (chat=0, task=1)
+        # Остальные пункты показывают context panel или выводят сообщение
+        if index == 0:
+            # Новая задача / Чат
+            self.workspace.setCurrentWidget(
+                self.workspace.widget(0)
+            )
+            self.context_panel.hide_panel()
+        elif index == 1:
+            # Чаты - тот же экран чата
+            self.workspace.setCurrentWidget(
+                self.workspace.widget(0)
+            )
+            self.context_panel.hide_panel()
+        else:
+            # Остальные пункты: показываем context panel
+            self.context_panel.show_panel()
+            self.context_panel.set_title(
+                f"Раздел: {item._label}"
+            )
+            # Переключаемся на чат, но показываем панель
+            self.workspace.setCurrentWidget(
+                self.workspace.widget(0)
+            )
 
     def set_status(self, status: str, label: str = "") -> None:
         self.sidebar.set_status(status, label)
