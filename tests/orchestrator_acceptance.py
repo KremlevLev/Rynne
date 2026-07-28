@@ -275,6 +275,18 @@ GOLDEN_SCENARIOS = (
             ),
         ),
     ),
+    AcceptanceScenario(
+        name="package-update-watch",
+        request="Следи за обновлением Python-пакета requests",
+        expected_tools=frozenset({"watch_package_update"}),
+        calls=(
+            ReplayCall(
+                "watch_package_update",
+                {"package_name": "requests"},
+                PolicyDecision.ALLOW_WITH_WARNING,
+            ),
+        ),
+    ),
 )
 
 

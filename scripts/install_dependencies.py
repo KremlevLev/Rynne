@@ -14,6 +14,7 @@ import zipfile
 
 REQUIREMENTS = [
     "openai",
+    "packaging",
     "python-dotenv",
     "requests",
     "beautifulsoup4",

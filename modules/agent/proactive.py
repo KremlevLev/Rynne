@@ -969,6 +969,62 @@ class ProactiveSuggestionEngine:
 
         return suggestions
 
+    def observe_package_updates(
+        self,
+        statuses: Iterable[Mapping[str, Any]],
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        kind = "package_update_available"
+        if not self._kind_enabled(kind):
+            return []
+
+        now = self.clock()
+        suggestions: list[ProactiveSuggestion] = []
+        for item in statuses:
+            if (
+                not bool(item.get("update_available"))
+                or item.get("error")
+            ):
+                continue
+            package_name = str(item.get("package_name") or "")
+            installed = str(item.get("installed_version") or "")
+            latest = str(item.get("latest_version") or "")
+            if not all((package_name, installed, latest)):
+                continue
+
+            source_key = f"package:{package_name}:version:{latest}"
+            if self._was_emitted(source_key):
+                continue
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                < self.cooldown_seconds
+            ):
+                continue
+
+            suggestion = ProactiveSuggestion(
+                event_id=f"proactive_{uuid.uuid4().hex}",
+                kind=kind,
+                title="Доступно обновление Python-пакета",
+                message=(
+                    f"{package_name}: {installed} → {latest}. "
+                    "Показать release notes или обновить?"
+                ),
+                reason=(
+                    "Установленная версия получена из локального "
+                    "package metadata, последняя — из фиксированного "
+                    "PyPI JSON endpoint. Nova ничего не обновляла."
+                ),
+                source_key=source_key,
+                importance="normal",
+            )
+            self._store(suggestion)
+            self._last_emitted[kind] = now
+            suggestions.append(suggestion)
+
+        return suggestions
+
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(
             """

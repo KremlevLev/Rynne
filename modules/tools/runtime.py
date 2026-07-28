@@ -102,6 +102,9 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
     "watch_backup": RiskLevel.WRITE,
     "list_backup_watches": RiskLevel.READ_ONLY,
     "remove_backup_watch": RiskLevel.LOW,
+    "watch_package_update": RiskLevel.WRITE,
+    "list_package_update_watches": RiskLevel.READ_ONLY,
+    "remove_package_update_watch": RiskLevel.LOW,
 
 }
 
@@ -171,6 +174,9 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
     "watch_backup": ToolCategory.SYSTEM_READ,
     "list_backup_watches": ToolCategory.SYSTEM_READ,
     "remove_backup_watch": ToolCategory.SYSTEM_READ,
+    "watch_package_update": ToolCategory.WEB_READ,
+    "list_package_update_watches": ToolCategory.WEB_READ,
+    "remove_package_update_watch": ToolCategory.WEB_READ,
 
 }
 
@@ -192,6 +198,7 @@ IDEMPOTENT_TOOLS = {
     "list_background_plans",
     "list_website_watches",
     "list_backup_watches",
+    "list_package_update_watches",
 
 }
 

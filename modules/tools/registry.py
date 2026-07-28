@@ -1596,3 +1596,59 @@ backup_watch_tools = [
 ]
 
 ALL_TOOLS.extend(backup_watch_tools)
+
+package_update_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "watch_package_update",
+            "description": (
+                "Включает проверку обновлений явно указанного "
+                "установленного Python-пакета через PyPI."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "package_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                },
+                "required": ["package_name"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_package_update_watches",
+            "description": "Показывает контроль обновлений пакетов.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_package_update_watch",
+            "description": "Удаляет контроль обновлений пакета.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {
+                        "type": "string",
+                    },
+                },
+                "required": ["watch_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+ALL_TOOLS.extend(package_update_tools)

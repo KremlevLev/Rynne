@@ -45,6 +45,7 @@ from core.config import (
     NOVA_PREMIUM_UI,
     NOVA_PROACTIVE_COOLDOWN_SECONDS,
     NOVA_PROACTIVE_BACKUP_CHECK_SECONDS,
+    NOVA_PROACTIVE_PACKAGE_CHECK_SECONDS,
     NOVA_PROACTIVE_DISABLED_KINDS,
     NOVA_PROACTIVE_DISK_CHECK_SECONDS,
     NOVA_PROACTIVE_DISK_FREE_GB,
@@ -75,6 +76,7 @@ from modules.tools.registry import (
     background_plan_tools,
     website_watch_tools,
     backup_watch_tools,
+    package_update_tools,
 )
 
 from modules.agent.background_plans import (
@@ -85,6 +87,7 @@ from modules.agent.proactive import (
 )
 from modules.agent.website_watches import WebsiteWatchManager
 from modules.agent.backup_watches import BackupWatchManager
+from modules.agent.package_updates import PackageUpdateManager
 from modules.storage.artifacts import (
     ArtifactStore,
 )
@@ -742,6 +745,7 @@ async def async_main() -> None:
         + background_plan_tools
         + website_watch_tools
         + backup_watch_tools
+        + package_update_tools
     )
 
     deferred_tool_names = {
@@ -806,6 +810,7 @@ async def async_main() -> None:
     )
     website_watch_manager = WebsiteWatchManager(database)
     backup_watch_manager = BackupWatchManager(database)
+    package_update_manager = PackageUpdateManager(database)
 
     def handle_tool_event(
         event_type: str,
@@ -829,6 +834,7 @@ async def async_main() -> None:
         next_workflow_check = 0.0
         next_website_check = 0.0
         next_backup_check = 0.0
+        next_package_check = 0.0
         while not runtime.shutdown_event.is_set():
             if NOVA_PROACTIVE_ENABLED:
                 suggestions = list(
@@ -986,6 +992,20 @@ async def async_main() -> None:
                             NOVA_PROACTIVE_BACKUP_CHECK_SECONDS,
                         )
                     )
+                if loop_now >= next_package_check:
+                    package_statuses = await package_update_manager.poll()
+                    suggestions.extend(
+                        proactive_engine.observe_package_updates(
+                            package_statuses
+                        )
+                    )
+                    next_package_check = (
+                        loop_now
+                        + max(
+                            300.0,
+                            NOVA_PROACTIVE_PACKAGE_CHECK_SECONDS,
+                        )
+                    )
                 for suggestion in suggestions:
                     desktop_service.publish(
                         "proactive_suggestion",
@@ -1051,6 +1071,15 @@ async def async_main() -> None:
             backup_watch_manager.remove_watch
         ),
     }
+    package_update_handlers = {
+        "watch_package_update": package_update_manager.add_watch,
+        "list_package_update_watches": (
+            package_update_manager.list_watches
+        ),
+        "remove_package_update_watch": (
+            package_update_manager.remove_watch
+        ),
+    }
 
     # Deferred tools нельзя регистрировать до создания
     # PlanService и BackgroundPlanManager.
@@ -1090,6 +1119,13 @@ async def async_main() -> None:
         registry.register(
             schema=tool_schema,
             handler=backup_watch_handlers[tool_name],
+        )
+
+    for tool_schema in package_update_tools:
+        tool_name = tool_schema["function"]["name"]
+        registry.register(
+            schema=tool_schema,
+            handler=package_update_handlers[tool_name],
         )
 
     missing_deferred_tools = (

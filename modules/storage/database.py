@@ -157,6 +157,17 @@ class Database:
                     last_error TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS package_update_watches (
+                    watch_id TEXT PRIMARY KEY,
+                    package_name TEXT NOT NULL UNIQUE,
+                    installed_version TEXT NOT NULL,
+                    latest_version TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    checked_at REAL NOT NULL,
+                    created_at REAL NOT NULL,
+                    last_error TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
 
