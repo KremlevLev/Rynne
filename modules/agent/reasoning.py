@@ -15,7 +15,7 @@ from typing import Any
 from modules.application.reporting import (
     build_assistant_response_from_tools,
 )
-from modules.domain.results import AssistantResponse, ToolResult
+from modules.domain.results import AssistantResponse
 from modules.routing.intent import DeterministicIntentRouter
 from modules.tools.base import ToolContext
 from modules.tools.runtime import ToolRegistry, ToolRunner
@@ -217,7 +217,6 @@ class ReasoningLoop:
         from core.config import SYSTEM_PROMPT
         from modules.brain.model_router import (
             ModelCandidate,
-            TaskComplexity,
         )
         
         # Формируем контекст с историей reasoning
@@ -257,7 +256,7 @@ class ReasoningLoop:
             candidates = [
                 ModelCandidate(
                     provider="groq",
-                    model="openai/gpt-oss-20b",
+                    model="openai/gpt-oss-120b",
                     supports_tools=True,
                     supports_vision=False,
                 ),
@@ -434,8 +433,6 @@ class ReasoningLoop:
         """
         Фаза REFLECTION: оценка результатов и определение, нужно ли продолжать.
         """
-        from core.config import SYSTEM_PROMPT
-        
         successful = sum(
             1 for r in action_step.tool_results
             if r.get("result", {}).get("success", False)

@@ -115,25 +115,19 @@ else:
     BASE_URL = OPENROUTER_BASE_URL
     API_KEY = OPENROUTER_API_KEYS[0]
 
-GROQ_CHAT_MODELS = _model_list(
-    "NOVA_GROQ_CHAT_MODELS",
-    "llama-3.1-8b-instant",
-)
+# Groq is deliberately kept on one strong tool-calling model.  A single
+# override prevents chat/tool routes from silently drifting to weaker models.
+GROQ_MODEL = os.getenv(
+    "NOVA_GROQ_MODEL",
+    "openai/gpt-oss-120b",
+).strip() or "openai/gpt-oss-120b"
+GROQ_CHAT_MODELS = (GROQ_MODEL,)
+GROQ_TOOL_MODELS = (GROQ_MODEL,)
+GROQ_COMPLEX_MODELS = (GROQ_MODEL,)
 
-GROQ_TOOL_MODELS = _model_list(
-    "NOVA_GROQ_TOOL_MODELS",
-    "openai/gpt-oss-20b",
-)
-
-GROQ_COMPLEX_MODELS = _model_list(
-    "NOVA_GROQ_COMPLEX_MODELS",
-    "openai/gpt-oss-120b,openai/gpt-oss-20b",
-)
-
-GROQ_VISION_MODELS = _model_list(
-    "NOVA_GROQ_VISION_MODELS",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-)
+# GPT-OSS-120B is text-only. Vision requests must use a vision-capable
+# provider instead of being sent to a Groq model that cannot inspect images.
+GROQ_VISION_MODELS: tuple[str, ...] = ()
 
 OPENROUTER_CHAT_MODELS = _model_list(
     "NOVA_OPENROUTER_CHAT_MODELS",
@@ -225,7 +219,7 @@ DEFAULT_MODEL = (
 
 MODEL_CV_BASE = (
     GROQ_VISION_MODELS[0]
-    if GROQ_API_KEYS
+    if GROQ_API_KEYS and GROQ_VISION_MODELS
     else GEMINI_VISION_MODELS[0]
     if GEMINI_API_KEYS
     else OPENROUTER_VISION_MODELS[0]

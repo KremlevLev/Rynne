@@ -1,7 +1,6 @@
 # modules/storage/database.py
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 import threading
@@ -98,6 +97,14 @@ class Database:
                     ),
                     expires_at TEXT,
                     metadata TEXT DEFAULT '{}'
+                );
+
+                CREATE TABLE IF NOT EXISTS background_plans (
+                    background_id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (
+                        datetime('now')
+                    )
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_messages_session

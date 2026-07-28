@@ -169,5 +169,6 @@ def determine_model_by_complexity(user_text: str, has_image: bool, needs_tools: 
     if is_complex_request(user_text):
         return MODEL_COMPLEX_TOOLS
         
-    # Уровень 2: Базовый одиночный тул-коллинг -> GPT OSS 20B
+    # Groq использует GPT OSS 120B и для одиночного тул-коллинга:
+    # слабая модель не даёт выигрыша по доступной квоте.
     return MODEL_BASIC_TOOLS

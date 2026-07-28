@@ -164,22 +164,14 @@ def init_catalog() -> ModelCatalog:
     """
     catalog = ModelCatalog()
 
-    # Groq models
+    # Groq uses one strong model for chat and tool calling.
     catalog.register(
-        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-120b",
         "groq",
-        max_tokens=32768,
+        max_tokens=131072,
         supports_tools=True,
         supports_vision=False,
         default_priority=10,
-    )
-    catalog.register(
-        "llama-3.1-8b-instant",
-        "groq",
-        max_tokens=32768,
-        supports_tools=True,
-        supports_vision=False,
-        default_priority=20,
     )
 
     # Gemini models

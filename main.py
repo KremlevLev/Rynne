@@ -755,7 +755,8 @@ async def async_main() -> None:
 
     background_plan_manager = (
         BackgroundPlanManager(
-            plan_service
+            plan_service,
+            database,
         )
     )
 

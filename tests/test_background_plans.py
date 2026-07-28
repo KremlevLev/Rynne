@@ -2,12 +2,24 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import tempfile
+from pathlib import Path
 
 from modules.agent.background_plans import (
     BackgroundPlanManager,
     BackgroundPlanStatus,
 )
 from modules.domain.results import ToolResult
+from modules.domain.results import VerificationResult
+from modules.agent.plan_service import PlanService
+from modules.storage.database import Database
+from modules.tools.base import (
+    RiskLevel,
+    ToolCategory,
+    ToolDefinition,
+)
+from modules.tools.runtime import ToolRegistry, ToolRunner
 
 
 class FakePlanService:
@@ -166,5 +178,183 @@ def test_list_background_plans() -> None:
         assert result.data["count"] == 1
 
         await manager.close()
+
+    asyncio.run(scenario())
+
+
+def test_background_plan_resumes_from_durable_checkpoint() -> None:
+    async def scenario() -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Database(Path(directory) / "nova.db")
+            calls = {"first": 0, "second": 0}
+
+            async def first() -> ToolResult:
+                calls["first"] += 1
+                return ToolResult.ok(
+                    "first",
+                    verification=VerificationResult(
+                        verified=True,
+                        method="test",
+                        confidence=1.0,
+                    ),
+                )
+
+            async def slow_second() -> ToolResult:
+                calls["second"] += 1
+                await asyncio.sleep(10)
+                return ToolResult.ok("second")
+
+            def make_service(second_handler) -> PlanService:
+                registry = ToolRegistry()
+                for name, handler in (
+                    ("first", first),
+                    ("second", second_handler),
+                ):
+                    registry.register_definition(
+                        ToolDefinition(
+                            name=name,
+                            description=name,
+                            parameters={
+                                "type": "object",
+                                "properties": {},
+                            },
+                            handler=handler,
+                            category=ToolCategory.SYSTEM_READ,
+                            risk=RiskLevel.READ_ONLY,
+                        )
+                    )
+                return PlanService(
+                    registry=registry,
+                    runner=ToolRunner(registry),
+                )
+
+            manager = BackgroundPlanManager(
+                make_service(slow_second),
+                database,
+            )
+            started = await manager.start_plan(
+                goal="resume",
+                steps=[
+                    {
+                        "step_id": "first",
+                        "tool_name": "first",
+                        "arguments": {},
+                    },
+                    {
+                        "step_id": "second",
+                        "tool_name": "second",
+                        "arguments": {},
+                        "depends_on": ["first"],
+                    },
+                ],
+            )
+            background_id = started.data["background_id"]
+
+            for _ in range(100):
+                row = database.fetchone(
+                    """
+                    SELECT payload FROM background_plans
+                    WHERE background_id = ?
+                    """,
+                    (background_id,),
+                )
+                payload = json.loads(row["payload"])
+                if payload["steps"][0].get("status") == "completed":
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError("checkpoint was not persisted")
+
+            await manager.close()
+            assert calls["first"] == 1
+
+            async def fast_second() -> ToolResult:
+                calls["second"] += 1
+                return ToolResult.ok(
+                    "second",
+                    verification=VerificationResult(
+                        verified=True,
+                        method="test",
+                        confidence=1.0,
+                    ),
+                )
+
+            restored = BackgroundPlanManager(
+                make_service(fast_second),
+                database,
+            )
+            for _ in range(100):
+                status = await restored.get_status(background_id)
+                if (
+                    status.data["status"]
+                    == BackgroundPlanStatus.COMPLETED.value
+                ):
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError("plan was not resumed")
+
+            assert calls["first"] == 1
+            # The interrupted second step may have begun before shutdown, but
+            # the completed first side effect is never repeated.
+            assert calls["second"] >= 1
+            assert status.data["recovered"] is True
+
+            await restored.close()
+            database.close()
+
+    asyncio.run(scenario())
+
+
+def test_persisted_user_cancellation_is_not_resumed() -> None:
+    async def scenario() -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Database(Path(directory) / "nova.db")
+            payload = {
+                "background_id": "background_cancelled",
+                "goal": "do not resume",
+                "steps": [
+                    {
+                        "step_id": "one",
+                        "tool_name": "echo",
+                        "arguments": {},
+                    }
+                ],
+                "session_id": "session",
+                "turn_id": "turn",
+                "plan_id": "plan_cancelled",
+                "status": "cancelling",
+                "created_at": 1.0,
+            }
+            database.execute(
+                """
+                INSERT INTO background_plans (
+                    background_id, payload
+                ) VALUES (?, ?)
+                """,
+                (
+                    payload["background_id"],
+                    json.dumps(payload),
+                ),
+            )
+            database.commit()
+
+            manager = BackgroundPlanManager(
+                FakePlanService(),
+                database,
+            )
+            await asyncio.sleep(0.02)
+            status = await manager.get_status(
+                payload["background_id"]
+            )
+
+            assert (
+                status.data["status"]
+                == BackgroundPlanStatus.CANCELLED.value
+            )
+            assert status.data["result"] is None
+
+            await manager.close()
+            database.close()
 
     asyncio.run(scenario())

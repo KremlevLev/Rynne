@@ -128,8 +128,8 @@ def test_model_catalog_capabilities() -> None:
 def test_init_catalog_creates_basic_models() -> None:
     catalog = init_catalog()
 
-    assert catalog.get_profile("groq:llama-3.3-70b-versatile") is not None
-    assert catalog.get_profile("groq:llama-3.1-8b-instant") is not None
+    assert catalog.get_profile("groq:openai/gpt-oss-120b") is not None
+    assert catalog.get_profile("groq:llama-3.1-8b-instant") is None
     assert catalog.get_profile("gemini:gemini-2.5-flash") is not None
     assert catalog.get_profile("gemini:gemini-2.0-flash") is not None
     assert catalog.get_profile("openrouter:anthropic/claude-3.5-sonnet") is not None

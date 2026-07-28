@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import json
 import logging
 import time
 import uuid
@@ -11,6 +13,7 @@ from typing import Any
 
 from modules.agent.plan_service import PlanService
 from modules.domain.results import ToolResult
+from modules.storage.database import Database
 
 
 logger = logging.getLogger("BackgroundPlans")
@@ -33,6 +36,7 @@ class BackgroundPlan:
 
     session_id: str
     turn_id: str
+    plan_id: str
 
     status: BackgroundPlanStatus = (
         BackgroundPlanStatus.QUEUED
@@ -46,6 +50,7 @@ class BackgroundPlan:
 
     result: ToolResult | None = None
     error: str | None = None
+    recovered: bool = False
 
     task: asyncio.Task[None] | None = field(
         default=None,
@@ -59,6 +64,7 @@ class BackgroundPlan:
             "steps_count": len(self.steps),
             "session_id": self.session_id,
             "turn_id": self.turn_id,
+            "plan_id": self.plan_id,
             "status": self.status.value,
             "created_at": self.created_at,
             "started_at": self.started_at,
@@ -69,7 +75,13 @@ class BackgroundPlan:
                 else None
             ),
             "error": self.error,
+            "recovered": self.recovered,
         }
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = self.to_dict()
+        payload["steps"] = self.steps
+        return payload
 
 
 class BackgroundPlanManager:
@@ -86,8 +98,10 @@ class BackgroundPlanManager:
     def __init__(
         self,
         plan_service: PlanService,
+        database: Database | None = None,
     ) -> None:
         self.plan_service = plan_service
+        self.database = database
 
         self._plans: dict[
             str,
@@ -96,6 +110,100 @@ class BackgroundPlanManager:
 
         self._lock = asyncio.Lock()
         self._closed = False
+        self._load_persisted_plans()
+        self._resume_loaded_plans()
+
+    @staticmethod
+    def _result_from_dict(raw: Any) -> ToolResult | None:
+        if not isinstance(raw, dict):
+            return None
+        return ToolResult(
+            success=bool(raw.get("success")),
+            code=str(raw.get("code") or "OK"),
+            message=str(raw.get("message") or ""),
+            data=(
+                raw.get("data")
+                if isinstance(raw.get("data"), dict)
+                else {}
+            ),
+        )
+
+    def _load_persisted_plans(self) -> None:
+        if self.database is None:
+            return
+        rows = self.database.fetchall(
+            "SELECT payload FROM background_plans"
+        )
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+                status = BackgroundPlanStatus(payload["status"])
+                if status in {
+                    BackgroundPlanStatus.QUEUED,
+                    BackgroundPlanStatus.RUNNING,
+                }:
+                    status = BackgroundPlanStatus.QUEUED
+                elif status == BackgroundPlanStatus.CANCELLING:
+                    # A persisted user cancellation must never turn back into
+                    # an executable side effect after a restart.
+                    status = BackgroundPlanStatus.CANCELLED
+                record = BackgroundPlan(
+                    background_id=payload["background_id"],
+                    goal=payload["goal"],
+                    steps=payload.get("steps", []),
+                    session_id=payload["session_id"],
+                    turn_id=payload["turn_id"],
+                    plan_id=(
+                        payload.get("plan_id")
+                        or f"plan_{payload['background_id']}"
+                    ),
+                    status=status,
+                    created_at=float(payload["created_at"]),
+                    started_at=payload.get("started_at"),
+                    finished_at=payload.get("finished_at"),
+                    result=self._result_from_dict(payload.get("result")),
+                    error=payload.get("error"),
+                    recovered=True,
+                )
+                self._plans[record.background_id] = record
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                logger.exception(
+                    "Повреждён checkpoint фонового плана."
+                )
+
+    def _resume_loaded_plans(self) -> None:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        for record in self._plans.values():
+            if record.status == BackgroundPlanStatus.QUEUED:
+                record.task = asyncio.create_task(
+                    self._run_plan(record),
+                    name=(
+                        "nova-background-plan-"
+                        f"{record.background_id}"
+                    ),
+                )
+
+    def _persist(self, record: BackgroundPlan) -> None:
+        if self.database is None:
+            return
+        self.database.execute(
+            """
+            INSERT INTO background_plans (
+                background_id, payload, updated_at
+            ) VALUES (?, ?, datetime('now'))
+            ON CONFLICT(background_id) DO UPDATE SET
+                payload=excluded.payload,
+                updated_at=datetime('now')
+            """,
+            (
+                record.background_id,
+                json.dumps(record.to_payload(), ensure_ascii=False),
+            ),
+        )
+        self.database.commit()
 
     async def start_plan(
         self,
@@ -141,10 +249,12 @@ class BackgroundPlanManager:
             steps=steps,
             session_id=session_id,
             turn_id=resolved_turn_id,
+            plan_id=f"plan_{background_id}",
         )
 
         async with self._lock:
             self._plans[background_id] = record
+            self._persist(record)
 
             record.task = asyncio.create_task(
                 self._run_plan(record),
@@ -173,6 +283,8 @@ class BackgroundPlanManager:
     ) -> None:
         record.status = BackgroundPlanStatus.RUNNING
         record.started_at = time.time()
+        record.finished_at = None
+        self._persist(record)
 
         logger.info(
             "Фоновый план запущен: %s goal=%s",
@@ -181,16 +293,36 @@ class BackgroundPlanManager:
         )
 
         try:
+            async def checkpoint(plan) -> None:
+                record.steps = plan.to_dict()["steps"]
+                self._persist(record)
+
+            parameters = inspect.signature(
+                self.plan_service.execute_plan
+            ).parameters
+            extra_arguments = {}
+            if "plan_id" in parameters:
+                extra_arguments["plan_id"] = record.plan_id
+            if "checkpoint_callback" in parameters:
+                extra_arguments["checkpoint_callback"] = checkpoint
+
             result = await self.plan_service.execute_plan(
                 goal=record.goal,
                 steps=record.steps,
                 session_id=record.session_id,
                 turn_id=record.turn_id,
+                **extra_arguments,
             )
 
             record.result = result
 
-            if record.status == (
+            if (
+                self._closed
+                and record.status
+                == BackgroundPlanStatus.QUEUED
+            ):
+                record.result = None
+            elif record.status == (
                 BackgroundPlanStatus.CANCELLING
             ):
                 record.status = (
@@ -206,6 +338,18 @@ class BackgroundPlanManager:
                 )
 
         except asyncio.CancelledError:
+            if (
+                self._closed
+                and record.status
+                != BackgroundPlanStatus.CANCELLING
+            ):
+                # Shutdown is not a user cancellation. Leave the durable
+                # checkpoint queued for the next Nova process.
+                record.status = BackgroundPlanStatus.QUEUED
+                record.finished_at = None
+                record.result = None
+                raise
+
             record.status = (
                 BackgroundPlanStatus.CANCELLED
             )
@@ -237,7 +381,9 @@ class BackgroundPlanManager:
             )
 
         finally:
-            record.finished_at = time.time()
+            if record.status != BackgroundPlanStatus.QUEUED:
+                record.finished_at = time.time()
+            self._persist(record)
 
             logger.info(
                 "Фоновый план завершён: %s status=%s",
@@ -338,6 +484,7 @@ class BackgroundPlanManager:
             record.status = (
                 BackgroundPlanStatus.CANCELLING
             )
+            self._persist(record)
             task = record.task
 
         # Task отменяется за пределами lock, чтобы _run_plan()
@@ -373,6 +520,7 @@ class BackgroundPlanManager:
                 )
 
             result_data = record.to_dict()
+            self._persist(record)
 
         logger.info(
             "Фоновый план отменён: %s",
@@ -389,6 +537,15 @@ class BackgroundPlanManager:
         self._closed = True
 
         async with self._lock:
+            for record in self._plans.values():
+                if record.status in {
+                    BackgroundPlanStatus.QUEUED,
+                    BackgroundPlanStatus.RUNNING,
+                }:
+                    record.status = BackgroundPlanStatus.QUEUED
+                    record.finished_at = None
+                    self._persist(record)
+
             tasks = [
                 record.task
                 for record in self._plans.values()

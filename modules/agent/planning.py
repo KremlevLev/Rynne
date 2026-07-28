@@ -1,7 +1,6 @@
 # modules/agent/planning.py
 from __future__ import annotations
 from modules.agent.recovery import (
-    RecoveryAction,
     RecoveryEngine,
 )
 import asyncio
@@ -10,6 +9,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from modules.domain.results import (
@@ -382,6 +382,11 @@ class PlanExecutor:
         turn_id: str,
         cancellation_event: asyncio.Event
         | None = None,
+        checkpoint_callback: Callable[
+            [ExecutionPlan],
+            Awaitable[None] | None,
+        ]
+        | None = None,
     ) -> PlanExecutionResult:
         validation = PlanValidator.validate(
             plan,
@@ -410,7 +415,34 @@ class PlanExecutor:
             for step in plan.steps
         }
 
-        unresolved = set(steps_by_id)
+        # Completed steps come from a durable checkpoint and must never be
+        # repeated after an application restart.
+        unresolved = {
+            step_id
+            for step_id, step in steps_by_id.items()
+            if step.status
+            != PlanStepStatus.COMPLETED
+        }
+
+        # A process can die while a step is marked running. There is no
+        # trustworthy completion result in that state, so it becomes pending.
+        for step_id in unresolved:
+            if (
+                steps_by_id[step_id].status
+                == PlanStepStatus.RUNNING
+            ):
+                steps_by_id[step_id].status = (
+                    PlanStepStatus.PENDING
+                )
+
+        async def save_checkpoint() -> None:
+            if checkpoint_callback is None:
+                return
+            result = checkpoint_callback(plan)
+            if result is not None:
+                await result
+
+        await save_checkpoint()
 
         while unresolved:
             if (
@@ -424,6 +456,7 @@ class PlanExecutor:
                         PlanStepStatus.CANCELLED
                     )
 
+                await save_checkpoint()
                 break
 
             elapsed = (
@@ -441,6 +474,7 @@ class PlanExecutor:
                         PlanStepStatus.CANCELLED
                     )
 
+                await save_checkpoint()
                 return self._summarize(
                     plan,
                     error_code=(
@@ -465,6 +499,7 @@ class PlanExecutor:
                     )
                     unresolved.remove(step_id)
                     progress_made = True
+                    await save_checkpoint()
                     continue
 
                 if not self._dependencies_completed(
@@ -474,6 +509,7 @@ class PlanExecutor:
                     continue
 
                 step.status = PlanStepStatus.RUNNING
+                await save_checkpoint()
 
                 context = ToolContext.create(
                     session_id=session_id,
@@ -570,6 +606,9 @@ class PlanExecutor:
 
                 unresolved.remove(step_id)
                 progress_made = True
+                # This is the critical durable boundary: the verified result is
+                # stored before another side-effecting step may start.
+                await save_checkpoint()
 
                 if (
                     step.status
@@ -584,6 +623,7 @@ class PlanExecutor:
                             PlanStepStatus.SKIPPED
                         )
 
+                    await save_checkpoint()
                     return self._summarize(
                         plan,
                         error_code=(

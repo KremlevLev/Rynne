@@ -5,12 +5,14 @@ import asyncio
 import logging
 import uuid
 from typing import Any
+from collections.abc import Awaitable, Callable
 
 from modules.agent.planning import (
     ExecutionPlan,
     PlanBudget,
     PlanExecutor,
     PlanStep,
+    PlanStepStatus,
 )
 from modules.domain.results import ToolResult
 from modules.tools.runtime import (
@@ -120,26 +122,27 @@ class PlanService:
                 else []
             )
 
-            parsed_steps.append(
-                PlanStep(
-                    step_id=step_id,
-                    tool_name=tool_name,
-                    arguments=arguments,
-                    depends_on=depends_on,
-                    description=str(
-                        raw_step.get(
-                            "description",
-                            "",
-                        )
-                    ),
-                    critical=bool(
-                        raw_step.get(
-                            "critical",
-                            True,
-                        )
-                    ),
-                )
+            parsed_step = PlanStep(
+                step_id=step_id,
+                tool_name=tool_name,
+                arguments=arguments,
+                depends_on=depends_on,
+                description=str(
+                    raw_step.get(
+                        "description",
+                        "",
+                    )
+                ),
+                critical=bool(
+                    raw_step.get(
+                        "critical",
+                        True,
+                    )
+                ),
             )
+            if raw_step.get("status") == "completed":
+                parsed_step.status = PlanStepStatus.COMPLETED
+            parsed_steps.append(parsed_step)
 
         return parsed_steps
 
@@ -149,6 +152,13 @@ class PlanService:
         steps: list[dict[str, Any]],
         session_id: str = "plan-session",
         turn_id: str | None = None,
+        *,
+        plan_id: str | None = None,
+        checkpoint_callback: Callable[
+            [ExecutionPlan],
+            Awaitable[None] | None,
+        ]
+        | None = None,
     ) -> ToolResult:
         if not goal.strip():
             return ToolResult.failure(
@@ -174,6 +184,11 @@ class PlanService:
         plan = ExecutionPlan(
             goal=goal.strip(),
             steps=parsed_steps,
+            **(
+                {"plan_id": plan_id}
+                if plan_id
+                else {}
+            ),
         )
 
         cancellation_event = asyncio.Event()
@@ -190,6 +205,9 @@ class PlanService:
                 turn_id=resolved_turn_id,
                 cancellation_event=(
                     cancellation_event
+                ),
+                checkpoint_callback=(
+                    checkpoint_callback
                 ),
             )
 
