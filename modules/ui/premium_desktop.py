@@ -588,6 +588,24 @@ def _handle_event(
             composer.set_mode("Safe autonomy")
         return
 
+    if event_type == "proactive_suggestion":
+        message_text = str(payload.get("message", "")).strip()
+        reason = str(payload.get("reason", "")).strip()
+        if reason:
+            message_text = f"{message_text}\n\nПочему: {reason}"
+        chat_view.add_message(
+            ChatMessage(
+                author="Nova",
+                text=message_text,
+                is_user=False,
+                timestamp=_format_time(payload),
+                status="предложение",
+            )
+        )
+        if hasattr(shell, "show_screen"):
+            shell.show_screen("chat")
+        return
+
     if event_type == "tool_started":
         operation_id = str(
             payload.get("operation_id")

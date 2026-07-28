@@ -274,6 +274,38 @@ def _requests_all_applications(
     )
 
 
+def _requested_application_count(
+    text: str,
+) -> int | None:
+    """Extract a bounded count from "open 5-10 applications" requests."""
+    if not re.search(
+        r"\b(?:приложени\w*|программ\w*)\b",
+        text,
+    ):
+        return None
+
+    range_match = re.search(
+        r"\b(\d{1,2})\s*(?:-|–|—|до)\s*(\d{1,2})"
+        r"\s+(?:приложени\w*|программ\w*)\b",
+        text,
+    )
+    if range_match:
+        # Use the conservative lower bound instead of opening the maximum.
+        return min(
+            int(range_match.group(1)),
+            int(range_match.group(2)),
+        )
+
+    count_match = re.search(
+        r"\b(\d{1,2})\s+(?:приложени\w*|программ\w*)\b",
+        text,
+    )
+    if count_match:
+        return int(count_match.group(1))
+
+    return None
+
+
 def _has_content_or_topic(
     text: str,
 ) -> bool:
@@ -422,6 +454,35 @@ class DeterministicIntentRouter:
                 reason=(
                     "Массовый запуск без ограниченного списка "
                     "небезопасен и неэффективен."
+                ),
+            )
+
+        requested_app_count = _requested_application_count(text)
+        if requested_app_count is not None:
+            if not 2 <= requested_app_count <= 10:
+                return ExecutionDecision.clarify(
+                    (
+                        "За один запрос можно открыть от 2 до 10 "
+                        "приложений. Сколько открыть?"
+                    ),
+                    intent=IntentKind.APPLICATION_BATCH,
+                    reason="Количество приложений вне безопасного лимита.",
+                )
+
+            return ExecutionDecision(
+                strategy=ExecutionStrategy.DIRECT,
+                intent=IntentKind.APPLICATION_BATCH,
+                required_tools={"open_application_batch"},
+                selected_skill="open_application_batch",
+                arguments={"count": requested_app_count},
+                needs_model=False,
+                needs_tools=True,
+                expected_model_calls=0,
+                expected_tool_calls=1,
+                confidence=0.98,
+                reason=(
+                    "Ограниченный массовый запуск выполняется "
+                    "специализированным batch-tool."
                 ),
             )
 

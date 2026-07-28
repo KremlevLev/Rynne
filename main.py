@@ -38,7 +38,14 @@ from modules.input_hub.models import (
     InputMode,
 )
 
-from core.config import NOVA_DESKTOP_UI, NOVA_PREMIUM_UI
+from core.config import (
+    NOVA_DESKTOP_UI,
+    NOVA_PREMIUM_UI,
+    NOVA_PROACTIVE_COOLDOWN_SECONDS,
+    NOVA_PROACTIVE_ENABLED,
+    NOVA_PROACTIVE_QUIET_END,
+    NOVA_PROACTIVE_QUIET_START,
+)
 
 from modules.ui.desktop_service import (
     DesktopService,
@@ -55,6 +62,9 @@ from modules.tools.registry import (
 
 from modules.agent.background_plans import (
     BackgroundPlanManager,
+)
+from modules.agent.proactive import (
+    ProactiveSuggestionEngine,
 )
 from modules.storage.artifacts import (
     ArtifactStore,
@@ -331,6 +341,9 @@ def build_handlers(
     def launch_application(app_name: str):
         return app_launcher.launch_by_name(app_name)
 
+    def launch_application_batch(count: int) -> ToolResult:
+        return app_launcher.launch_batch(count)
+
     def save_to_memory(text: str) -> str:
         return memory.add_document(text)
 
@@ -348,6 +361,7 @@ def build_handlers(
     return {
         "get_current_time": get_current_time,
         "open_application": launch_application,
+        "open_application_batch": launch_application_batch,
         "close_application": close_application,
         "type_text": type_text,
         "change_volume": change_volume,
@@ -760,6 +774,54 @@ async def async_main() -> None:
         )
     )
 
+    proactive_engine = ProactiveSuggestionEngine(
+        database,
+        cooldown_seconds=NOVA_PROACTIVE_COOLDOWN_SECONDS,
+        quiet_hours=(
+            NOVA_PROACTIVE_QUIET_START,
+            NOVA_PROACTIVE_QUIET_END,
+        ),
+    )
+
+    async def proactive_worker() -> None:
+        while not runtime.shutdown_event.is_set():
+            if NOVA_PROACTIVE_ENABLED:
+                suggestions = list(
+                    proactive_engine.observe_background_plans(
+                        background_plan_manager._plans.values()
+                    )
+                )
+                process_result = await asyncio.to_thread(
+                    process_manager.list_processes
+                )
+                process_items = (
+                    process_result.data.get("processes", [])
+                    if process_result.success
+                    else []
+                )
+                suggestions.extend(
+                    proactive_engine.observe_processes(
+                        process_items
+                    )
+                )
+                for suggestion in suggestions:
+                    desktop_service.publish(
+                        "proactive_suggestion",
+                        suggestion.to_dict(),
+                    )
+            try:
+                await asyncio.wait_for(
+                    runtime.shutdown_event.wait(),
+                    timeout=2.0,
+                )
+            except asyncio.TimeoutError:
+                pass
+
+    proactive_task = asyncio.create_task(
+        proactive_worker(),
+        name="nova-proactive-worker",
+    )
+
     planning_handlers = {
         "execute_plan": (
             plan_service.execute_plan
@@ -1169,12 +1231,14 @@ async def async_main() -> None:
         request_service_task.cancel()
         desktop_bridge_task.cancel()
         wake_runtime_task.cancel()
+        proactive_task.cancel()
         await asyncio.gather(
             reminder_task,
             voice_task,
             request_service_task,
             wake_runtime_task,
             desktop_bridge_task,
+            proactive_task,
             return_exceptions=True,
         )
 

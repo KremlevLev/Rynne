@@ -1,13 +1,10 @@
 # modules/windows/process_manager.py
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
-import signal
 import subprocess
-import tempfile
 import threading
 import time
 import uuid
@@ -53,10 +50,18 @@ class ManagedProcess:
 
     @property
     def is_running(self) -> bool:
-        if self._process is None:
+        if self._process is not None:
+            return self._process.poll() is None
+        if self.pid is None or self.status != "running":
             return False
-
-        return self._process.poll() is None
+        try:
+            os.kill(self.pid, 0)
+            return True
+        except PermissionError:
+            # The PID exists, but the current process cannot signal it.
+            return True
+        except (ProcessLookupError, OSError):
+            return False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -129,6 +134,27 @@ class ProcessManager:
                 "Не удалось сохранить метаданные процесса %s.",
                 process.process_id,
             )
+
+    def _refresh_process_state(
+        self,
+        process: ManagedProcess,
+    ) -> None:
+        if process.status != "running":
+            return
+
+        if process._process is not None:
+            exit_code = process._process.poll()
+            if exit_code is None:
+                return
+            process.exit_code = exit_code
+        elif process.is_running:
+            return
+
+        process.status = "exited"
+        process.finished_at = datetime.now(
+            timezone.utc
+        ).isoformat()
+        self._save_metadata(process)
     def test_read_process_output() -> None:
         manager = ProcessManager()
     
@@ -216,9 +242,10 @@ class ProcessManager:
                             0,
                         )
                         process.status = "running"
+                    except PermissionError:
+                        process.status = "running"
                     except (
                         ProcessLookupError,
-                        PermissionError,
                         OSError,
                     ):
                         process.status = "exited"
@@ -376,6 +403,8 @@ class ProcessManager:
             process = self._processes.get(
                 process_id
             )
+            if process is not None:
+                self._refresh_process_state(process)
 
         if process is None:
             return ToolResult.failure(
@@ -487,6 +516,8 @@ class ProcessManager:
             process = self._processes.get(
                 process_id
             )
+            if process is not None:
+                self._refresh_process_state(process)
 
         if process is None:
             return ToolResult.failure(
@@ -573,6 +604,8 @@ class ProcessManager:
             processes = list(
                 self._processes.values()
             )
+            for process in processes:
+                self._refresh_process_state(process)
 
         if not processes:
             return ToolResult.ok(

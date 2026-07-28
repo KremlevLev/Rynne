@@ -173,6 +173,14 @@ def init_catalog() -> ModelCatalog:
         supports_vision=False,
         default_priority=10,
     )
+    catalog.register(
+        "qwen/qwen3.6-27b",
+        "groq",
+        max_tokens=131072,
+        supports_tools=True,
+        supports_vision=True,
+        default_priority=10,
+    )
 
     # Gemini models
     catalog.register(

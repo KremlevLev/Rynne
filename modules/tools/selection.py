@@ -17,6 +17,10 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "система", "память", "оперативка", "cpu", "батарея", "загрузка",
     },
     "open_application": {"открыть", "открой", "запустить", "запусти", "включить"},
+    "open_application_batch": {
+        "несколько приложений", "несколько программ",
+        "приложений", "программ",
+    },
     "close_application": {"закрыть", "закрой", "выключить", "остановить"},
     "list_active_windows": {"список окон", "активные окна", "что запущено"},
     "manage_windows": {"свернуть", "развернуть", "закрыть окно", "окна"},
@@ -82,7 +86,8 @@ CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
             "obsidian", "telegram", "discord", "chrome", "vscode", "vs code",
         ),
         (
-            "open_application", "close_application", "list_active_windows",
+            "open_application", "open_application_batch",
+            "close_application", "list_active_windows",
             "manage_windows", "write_in_application",
         ),
     ),

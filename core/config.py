@@ -117,17 +117,15 @@ else:
 
 # Groq is deliberately kept on one strong tool-calling model.  A single
 # override prevents chat/tool routes from silently drifting to weaker models.
-GROQ_MODEL = os.getenv(
-    "NOVA_GROQ_MODEL",
-    "openai/gpt-oss-120b",
-).strip() or "openai/gpt-oss-120b"
+GROQ_MODEL: Final[str] = "openai/gpt-oss-120b"
+GROQ_VISION_MODEL: Final[str] = "qwen/qwen3.6-27b"
 GROQ_CHAT_MODELS = (GROQ_MODEL,)
 GROQ_TOOL_MODELS = (GROQ_MODEL,)
 GROQ_COMPLEX_MODELS = (GROQ_MODEL,)
 
-# GPT-OSS-120B is text-only. Vision requests must use a vision-capable
-# provider instead of being sent to a Groq model that cannot inspect images.
-GROQ_VISION_MODELS: tuple[str, ...] = ()
+# These are the only two Groq routes: GPT-OSS for text/tools and Qwen for
+# requests that actually contain an image.
+GROQ_VISION_MODELS = (GROQ_VISION_MODEL,)
 
 OPENROUTER_CHAT_MODELS = _model_list(
     "NOVA_OPENROUTER_CHAT_MODELS",
@@ -219,7 +217,7 @@ DEFAULT_MODEL = (
 
 MODEL_CV_BASE = (
     GROQ_VISION_MODELS[0]
-    if GROQ_API_KEYS and GROQ_VISION_MODELS
+    if GROQ_API_KEYS
     else GEMINI_VISION_MODELS[0]
     if GEMINI_API_KEYS
     else OPENROUTER_VISION_MODELS[0]
@@ -388,3 +386,20 @@ NOVA_PREMIUM_UI = os.getenv(
     "yes",
     "on",
 }
+
+NOVA_PROACTIVE_ENABLED: Final[bool] = os.getenv(
+    "NOVA_PROACTIVE_ENABLED",
+    "true",
+).lower() in {"1", "true", "yes", "on"}
+
+NOVA_PROACTIVE_COOLDOWN_SECONDS = float(
+    os.getenv("NOVA_PROACTIVE_COOLDOWN_SECONDS", "60")
+)
+
+NOVA_PROACTIVE_QUIET_START = int(
+    os.getenv("NOVA_PROACTIVE_QUIET_START", "22")
+)
+
+NOVA_PROACTIVE_QUIET_END = int(
+    os.getenv("NOVA_PROACTIVE_QUIET_END", "8")
+)

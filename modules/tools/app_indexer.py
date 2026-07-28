@@ -11,6 +11,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional, Tuple
 
+from modules.domain.results import ToolResult
 
 logger = logging.getLogger("AppIndexer")
 
@@ -76,6 +77,21 @@ RUSSIAN_ALIASES = {
     "диспетчер задач": "taskmgr",
     "редактор реестра": "regedit",
 }
+
+# Conservative pool for requests such as "open five applications". It avoids
+# uninstallers, administrative consoles and arbitrary Start Menu entries.
+SAFE_BATCH_APPLICATIONS = (
+    "notepad",
+    "calculator",
+    "explorer",
+    "paint",
+    "google chrome",
+    "visual studio code",
+    "telegram",
+    "discord",
+    "spotify",
+    "steam",
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -367,3 +383,55 @@ class WindowsAppIndexer:
             logger.info("После запуска появились окна с неожиданными заголовками: %s", sorted(last_new_titles))
 
         return (True, f"Запрос на запуск '{match.matched_name}' передан Windows, но появление окна не подтверждено.")
+
+    def launch_batch(self, count: int) -> ToolResult:
+        """Launch a bounded number of ordinary applications."""
+        resolved_count = max(2, min(10, int(count)))
+        selected: list[str] = []
+        seen_paths: set[str] = set()
+
+        for app_name in SAFE_BATCH_APPLICATIONS:
+            match = self.find_app(app_name)
+            if match is None or match.path in seen_paths:
+                continue
+            selected.append(app_name)
+            seen_paths.add(match.path)
+            if len(selected) >= resolved_count:
+                break
+
+        results: list[dict[str, object]] = []
+        for app_name in selected:
+            success, message = self.launch_by_name(app_name)
+            results.append(
+                {
+                    "app_name": app_name,
+                    "success": success,
+                    "message": message,
+                }
+            )
+
+        successful = sum(
+            bool(item["success"])
+            for item in results
+        )
+        data = {
+            "requested_count": resolved_count,
+            "attempted_count": len(results),
+            "successful_count": successful,
+            "results": results,
+        }
+
+        if successful == resolved_count:
+            return ToolResult.ok(
+                f"Запущено приложений: {successful}.",
+                data=data,
+            )
+
+        return ToolResult.failure(
+            "APPLICATION_BATCH_PARTIAL",
+            (
+                f"Запущено {successful} из запрошенных "
+                f"{resolved_count} приложений."
+            ),
+            data=data,
+        )

@@ -15,7 +15,6 @@ from modules.application.reporting import (
 )
 from modules.domain.results import (
     AssistantResponse,
-    ToolResult,
 )
 from modules.application.interaction_modes import (
     InteractionModeManager,
@@ -224,6 +223,9 @@ class DirectRequestExecutor:
             IntentKind.APPLICATION_OPEN: (
                 "open_application"
             ),
+            IntentKind.APPLICATION_BATCH: (
+                "open_application_batch"
+            ),
             IntentKind.APPLICATION_CLOSE: (
                 "close_application"
             ),
@@ -261,6 +263,17 @@ class DirectRequestExecutor:
             return {
                 "app_name": app_name,
             }
+
+        if (
+            decision.intent
+            == IntentKind.APPLICATION_BATCH
+        ):
+            count = decision.arguments.get("count")
+            if not isinstance(count, int) or not 2 <= count <= 10:
+                return self._clarification(
+                    "Сколько приложений открыть — от 2 до 10?"
+                )
+            return {"count": count}
 
         if (
             decision.intent

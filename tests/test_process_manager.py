@@ -28,6 +28,8 @@ def test_start_and_stop_process() -> None:
     )
 
     assert status_result.success
+    assert status_result.data["status"] == "exited"
+    assert status_result.data["exit_code"] == 0
 
     stop_result = manager.stop_process(
         process_id

@@ -110,6 +110,19 @@ def test_launch_all_applications_requires_clarification() -> None:
     assert decision.expected_model_calls == 0
 
 
+def test_launch_application_range_uses_bounded_batch_tool() -> None:
+    decision = create_router().route(
+        "Запусти 5-10 приложений на моём компьютере"
+    )
+
+    assert decision.strategy == ExecutionStrategy.DIRECT
+    assert decision.intent == IntentKind.APPLICATION_BATCH
+    assert decision.selected_skill == "open_application_batch"
+    assert decision.arguments == {"count": 5}
+    assert decision.required_tools == {"open_application_batch"}
+    assert decision.expected_model_calls == 0
+
+
 def test_time_is_direct() -> None:
     decision = create_router().route(
         "Который час?"

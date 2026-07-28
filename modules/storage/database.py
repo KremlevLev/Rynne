@@ -107,6 +107,16 @@ class Database:
                     )
                 );
 
+                CREATE TABLE IF NOT EXISTS proactive_events (
+                    event_id TEXT PRIMARY KEY,
+                    source_key TEXT NOT NULL UNIQUE,
+                    kind TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (
+                        datetime('now')
+                    )
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
 

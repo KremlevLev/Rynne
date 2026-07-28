@@ -57,6 +57,7 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
     "get_clipboard_content": RiskLevel.READ_ONLY,
 
     "open_application": RiskLevel.LOW,
+    "open_application_batch": RiskLevel.LOW,
     "change_volume": RiskLevel.LOW,
     "manage_media": RiskLevel.LOW,
     "focus_window": RiskLevel.LOW,
@@ -103,6 +104,7 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
     "get_system_status": ToolCategory.SYSTEM_READ,
 
     "open_application": ToolCategory.APPLICATION,
+    "open_application_batch": ToolCategory.APPLICATION,
     "close_application": ToolCategory.APPLICATION,
     "focus_window": ToolCategory.GUI_WRITE,
     "list_active_windows": ToolCategory.GUI_READ,

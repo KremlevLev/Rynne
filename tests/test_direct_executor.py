@@ -56,6 +56,19 @@ def create_executor():
             f"Открыто: {app_name}"
         )
 
+    def open_application_batch(
+        count: int,
+    ) -> ToolResult:
+        calls.append(
+            (
+                "open_application_batch",
+                {"count": count},
+            )
+        )
+        return ToolResult.ok(
+            f"Открыто приложений: {count}"
+        )
+
     def get_current_time():
         calls.append(
             (
@@ -101,6 +114,27 @@ def create_executor():
             category=(
                 ToolCategory.APPLICATION
             ),
+            risk=RiskLevel.LOW,
+        )
+    )
+
+    registry.register_definition(
+        ToolDefinition(
+            name="open_application_batch",
+            description="Открывает несколько приложений.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 10,
+                    },
+                },
+                "required": ["count"],
+            },
+            handler=open_application_batch,
+            category=ToolCategory.APPLICATION,
             risk=RiskLevel.LOW,
         )
     )
@@ -188,6 +222,28 @@ def test_open_application_without_model() -> None:
                 {
                     "app_name": "блокнот",
                 },
+            )
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_open_application_batch_without_model() -> None:
+    async def scenario() -> None:
+        executor, _, calls = create_executor()
+        request = UserRequest.from_text(
+            "Запусти 5-10 приложений на моём компьютере"
+        )
+        decision = DeterministicIntentRouter().route(request)
+
+        response = await executor.execute(request, decision)
+
+        assert response.success
+        assert response.data["model_calls"] == 0
+        assert calls == [
+            (
+                "open_application_batch",
+                {"count": 5},
             )
         ]
 

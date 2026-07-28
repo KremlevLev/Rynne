@@ -1,6 +1,27 @@
 # modules/tools/registry.py
 
 open_app_tool = {"type": "function", "function": {"name": "open_application", "description": "Открывает программу (блокнот, калькулятор, проводник).", "parameters": {"type": "object", "properties": {"app_name": {"type": "string"}}, "required": ["app_name"]}}}
+open_app_batch_tool = {
+    "type": "function",
+    "function": {
+        "name": "open_application_batch",
+        "description": (
+            "Открывает ограниченное количество разных обычных приложений. "
+            "Используется для запросов вроде «запусти 5 приложений»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 10,
+                },
+            },
+            "required": ["count"],
+        },
+    },
+}
 close_app_tool = {"type": "function", "function": {"name": "close_application", "description": "Закрывает запущенную программу (блокнот, калькулятор, проводник, хром) по названию.", "parameters": {"type": "object", "properties": {"app_name": {"type": "string", "description": "Название закрываемого приложения (блокнот, калькулятор, проводник, хром)."}}, "required": ["app_name"]}}}
 type_text_tool = {"type": "function", "function": {"name": "type_text", "description": "Печатает текст в активное окно.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}}
 get_time_tool = {"type": "function", "function": {"name": "get_current_time", "description": "Возвращает текущую дату и время.", "parameters": {"type": "object", "properties": {}}}}
@@ -367,7 +388,8 @@ focus_window_tool = {
 
 # Единый плоский список всех инструментов для Nova
 ALL_TOOLS = [
-    open_app_tool, 
+    open_app_tool,
+    open_app_batch_tool,
     close_app_tool, 
     type_text_tool, 
     scrape_webpage_tool,

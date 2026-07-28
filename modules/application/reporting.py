@@ -50,6 +50,7 @@ def _verification_state(
 def _human_tool_name(tool_name: str) -> str:
     names = {
         "open_application": "Запуск приложения",
+        "open_application_batch": "Запуск нескольких приложений",
         "close_application": "Закрытие приложения",
         "focus_window": "Фокусировка окна",
         "press_keyboard_combination": "Нажатие клавиш",
@@ -137,6 +138,9 @@ def _specialized_speech_summary(
 
     if "open_application" in tool_names:
         return "Сэр, приложение запущено."
+
+    if "open_application_batch" in tool_names:
+        return "Несколько приложений запущены."
 
     if "close_application" in tool_names:
         return "Сэр, приложение закрыто."
