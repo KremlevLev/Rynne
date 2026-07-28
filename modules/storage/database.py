@@ -133,6 +133,19 @@ class Database:
                     observed_at REAL NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS website_watches (
+                    watch_id TEXT PRIMARY KEY,
+                    url TEXT NOT NULL UNIQUE,
+                    label TEXT NOT NULL DEFAULT '',
+                    content_hash TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0,
+                    notified_revision INTEGER NOT NULL DEFAULT 0,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    checked_at REAL NOT NULL,
+                    created_at REAL NOT NULL,
+                    last_error TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
 

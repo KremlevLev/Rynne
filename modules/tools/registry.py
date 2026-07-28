@@ -1471,3 +1471,63 @@ background_plan_tools = [
 ]
 
 ALL_TOOLS.extend(background_plan_tools)
+
+website_watch_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "watch_website",
+            "description": (
+                "Создаёт явную подписку на изменения публичной "
+                "HTTP/HTTPS-страницы и сохраняет начальный baseline."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000,
+                    },
+                    "label": {
+                        "type": "string",
+                        "maxLength": 200,
+                    },
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_website_watches",
+            "description": "Показывает активные подписки на сайты.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_website_watch",
+            "description": "Удаляет подписку на изменение сайта.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {
+                        "type": "string",
+                    },
+                },
+                "required": ["watch_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+ALL_TOOLS.extend(website_watch_tools)

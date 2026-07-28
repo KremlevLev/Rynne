@@ -62,6 +62,20 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "возобнови план",
         "retry background",
     },
+    "watch_website": {
+        "следи за сайтом",
+        "изменение сайта",
+        "изменится цена",
+        "мониторинг сайта",
+    },
+    "list_website_watches": {
+        "какие сайты отслеживаются",
+        "подписки на сайты",
+    },
+    "remove_website_watch": {
+        "не следи за сайтом",
+        "удали подписку на сайт",
+    },
 }
 
 
@@ -104,6 +118,8 @@ CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
             "browser_start", "browser_open_url", "browser_get_page_text",
             "browser_click", "browser_fill", "browser_screenshot",
             "browser_status", "browser_close", "browser_research",
+            "watch_website", "list_website_watches",
+            "remove_website_watch",
         ),
     ),
     (

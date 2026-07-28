@@ -58,6 +58,7 @@ from core.config import (
     NOVA_PROACTIVE_WORKFLOW_CHECK_SECONDS,
     NOVA_PROACTIVE_WORKFLOW_LOOKBACK_DAYS,
     NOVA_PROACTIVE_WORKFLOW_MIN_REPETITIONS,
+    NOVA_PROACTIVE_WEBSITE_CHECK_SECONDS,
 )
 
 from modules.ui.desktop_service import (
@@ -71,6 +72,7 @@ from modules.tools.registry import (
     ALL_TOOLS,
     planning_tools,
     background_plan_tools,
+    website_watch_tools,
 )
 
 from modules.agent.background_plans import (
@@ -79,6 +81,7 @@ from modules.agent.background_plans import (
 from modules.agent.proactive import (
     ProactiveSuggestionEngine,
 )
+from modules.agent.website_watches import WebsiteWatchManager
 from modules.storage.artifacts import (
     ArtifactStore,
 )
@@ -734,6 +737,7 @@ async def async_main() -> None:
     deferred_tool_schemas = (
         planning_tools
         + background_plan_tools
+        + website_watch_tools
     )
 
     deferred_tool_names = {
@@ -796,6 +800,7 @@ async def async_main() -> None:
         ),
         disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
+    website_watch_manager = WebsiteWatchManager(database)
 
     def handle_tool_event(
         event_type: str,
@@ -817,6 +822,7 @@ async def async_main() -> None:
         next_disk_check = 0.0
         next_repository_check = 0.0
         next_workflow_check = 0.0
+        next_website_check = 0.0
         while not runtime.shutdown_event.is_set():
             if NOVA_PROACTIVE_ENABLED:
                 suggestions = list(
@@ -926,6 +932,40 @@ async def async_main() -> None:
                             NOVA_PROACTIVE_WORKFLOW_CHECK_SECONDS,
                         )
                     )
+                if loop_now >= next_website_check:
+                    changes = await website_watch_manager.poll()
+                    website_suggestions = (
+                        proactive_engine.observe_website_changes(
+                            changes
+                        )
+                    )
+                    for suggestion in website_suggestions:
+                        matching_change = next(
+                            (
+                                change
+                                for change in changes
+                                if suggestion.source_key
+                                == (
+                                    "website:"
+                                    f"{change['watch_id']}:revision:"
+                                    f"{change['revision']}"
+                                )
+                            ),
+                            None,
+                        )
+                        if matching_change is not None:
+                            website_watch_manager.mark_notified(
+                                str(matching_change["watch_id"]),
+                                int(matching_change["revision"]),
+                            )
+                    suggestions.extend(website_suggestions)
+                    next_website_check = (
+                        loop_now
+                        + max(
+                            30.0,
+                            NOVA_PROACTIVE_WEBSITE_CHECK_SECONDS,
+                        )
+                    )
                 for suggestion in suggestions:
                     desktop_service.publish(
                         "proactive_suggestion",
@@ -973,6 +1013,15 @@ async def async_main() -> None:
             background_plan_manager.cancel_plan
         ),
     }
+    website_watch_handlers = {
+        "watch_website": website_watch_manager.add_watch,
+        "list_website_watches": (
+            website_watch_manager.list_watches
+        ),
+        "remove_website_watch": (
+            website_watch_manager.remove_watch
+        ),
+    }
 
     # Deferred tools нельзя регистрировать до создания
     # PlanService и BackgroundPlanManager.
@@ -998,6 +1047,13 @@ async def async_main() -> None:
             handler=background_plan_handlers[
                 tool_name
             ],
+        )
+
+    for tool_schema in website_watch_tools:
+        tool_name = tool_schema["function"]["name"]
+        registry.register(
+            schema=tool_schema,
+            handler=website_watch_handlers[tool_name],
         )
 
     missing_deferred_tools = (

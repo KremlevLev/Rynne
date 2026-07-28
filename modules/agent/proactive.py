@@ -824,6 +824,57 @@ class ProactiveSuggestionEngine:
 
         return []
 
+    def observe_website_changes(
+        self,
+        changes: Iterable[Mapping[str, Any]],
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        kind = "website_changed"
+        if not self._kind_enabled(kind):
+            return []
+
+        now = self.clock()
+        suggestions: list[ProactiveSuggestion] = []
+        for change in changes:
+            watch_id = str(change.get("watch_id") or "")
+            revision = int(change.get("revision") or 0)
+            url = str(change.get("url") or "")
+            label = str(change.get("label") or "").strip() or url
+            if not watch_id or revision <= 0 or not url:
+                continue
+
+            source_key = (
+                f"website:{watch_id}:revision:{revision}"
+            )
+            if self._was_emitted(source_key):
+                continue
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                < self.cooldown_seconds
+            ):
+                continue
+
+            suggestion = ProactiveSuggestion(
+                event_id=f"proactive_{uuid.uuid4().hex}",
+                kind=kind,
+                title="Страница изменилась",
+                message=f"{label}: обнаружено новое содержимое.",
+                reason=(
+                    "SHA-256 нормализованного текста отличается от "
+                    "предыдущего baseline. Текст страницы не "
+                    "передавался модели."
+                ),
+                source_key=source_key,
+                importance="normal",
+            )
+            self._store(suggestion)
+            self._last_emitted[kind] = now
+            suggestions.append(suggestion)
+
+        return suggestions
+
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(
             """
