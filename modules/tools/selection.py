@@ -56,6 +56,12 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
     },
     "execute_plan": {"по шагам", "выполни план", "многошаг", "сначала"},
     "start_background_plan": {"в фоне", "фонов", "background", "асинхронно"},
+    "retry_background_plan": {
+        "продолжи задачу",
+        "повтори план",
+        "возобнови план",
+        "retry background",
+    },
 }
 
 
@@ -157,7 +163,8 @@ CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         (
             "execute_plan", "get_plan_status", "cancel_plan",
             "start_background_plan", "get_background_plan_status",
-            "list_background_plans", "cancel_background_plan",
+            "list_background_plans", "retry_background_plan",
+            "cancel_background_plan",
         ),
     ),
 )
@@ -205,6 +212,7 @@ FALLBACK_ACTION_TOOLS = (
     "get_process_status",
     "execute_plan",
     "start_background_plan",
+    "retry_background_plan",
     "get_clipboard_content",
     "set_clipboard_content",
     "get_system_status",

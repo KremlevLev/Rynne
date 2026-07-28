@@ -51,6 +51,44 @@ def test_completed_background_plan_is_suggested_only_once() -> None:
         database.close()
 
 
+def test_failed_plan_suggests_resume_after_delay() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = [100.0]
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now[0],
+            local_hour=lambda: 12,
+        )
+        plan = make_plan(
+            "resume",
+            BackgroundPlanStatus.FAILED,
+        )
+        plan.finished_at = now[0]
+        plan.attempts = 1
+
+        assert engine.observe_incomplete_plans(
+            [plan],
+            suggest_after_seconds=60,
+        ) == []
+        now[0] += 61
+        first = engine.observe_incomplete_plans(
+            [plan],
+            suggest_after_seconds=60,
+        )
+        repeated = engine.observe_incomplete_plans(
+            [plan],
+            suggest_after_seconds=60,
+        )
+
+        assert len(first) == 1
+        assert first[0].kind == "background_plan_resume_suggested"
+        assert "checkpoint" in first[0].message
+        assert repeated == []
+        database.close()
+
+
 def test_proactive_cooldown_delays_similar_suggestion() -> None:
     with tempfile.TemporaryDirectory() as directory:
         database = Database(Path(directory) / "nova.db")

@@ -53,6 +53,31 @@ class SlowPlanService:
         return ToolResult.ok("Готово.")
 
 
+class FlakyPlanService:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.received_steps: list[list[dict]] = []
+
+    async def execute_plan(
+        self,
+        goal,
+        steps,
+        session_id,
+        turn_id,
+    ):
+        self.calls += 1
+        self.received_steps.append(
+            [dict(step) for step in steps]
+        )
+        if self.calls == 1:
+            steps[0]["status"] = "completed"
+            return ToolResult.failure(
+                "TEMPORARY_FAILURE",
+                "Временная ошибка.",
+            )
+        return ToolResult.ok("План продолжен.")
+
+
 def test_background_plan_completes() -> None:
     async def scenario() -> None:
         manager = BackgroundPlanManager(
@@ -88,6 +113,48 @@ def test_background_plan_completes() -> None:
             == BackgroundPlanStatus.COMPLETED.value
         )
 
+        await manager.close()
+
+    asyncio.run(scenario())
+
+
+def test_failed_background_plan_can_resume_from_checkpoint() -> None:
+    async def scenario() -> None:
+        service = FlakyPlanService()
+        manager = BackgroundPlanManager(service)
+        started = await manager.start_plan(
+            goal="Продолжить отчёт",
+            steps=[
+                {
+                    "step_id": "one",
+                    "tool_name": "prepare",
+                    "arguments": {},
+                },
+                {
+                    "step_id": "two",
+                    "tool_name": "publish",
+                    "arguments": {},
+                },
+            ],
+        )
+        background_id = started.data["background_id"]
+        await asyncio.sleep(0.05)
+
+        failed = await manager.get_status(background_id)
+        assert failed.data["status"] == "failed"
+        assert failed.data["attempts"] == 1
+
+        retried = await manager.retry_plan(background_id)
+        assert retried.success
+        await asyncio.sleep(0.05)
+
+        completed = await manager.get_status(background_id)
+        assert completed.data["status"] == "completed"
+        assert completed.data["attempts"] == 2
+        assert (
+            service.received_steps[1][0]["status"]
+            == "completed"
+        )
         await manager.close()
 
     asyncio.run(scenario())

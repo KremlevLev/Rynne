@@ -51,6 +51,7 @@ class BackgroundPlan:
     result: ToolResult | None = None
     error: str | None = None
     recovered: bool = False
+    attempts: int = 0
 
     task: asyncio.Task[None] | None = field(
         default=None,
@@ -76,6 +77,7 @@ class BackgroundPlan:
             ),
             "error": self.error,
             "recovered": self.recovered,
+            "attempts": self.attempts,
         }
 
     def to_payload(self) -> dict[str, Any]:
@@ -164,6 +166,14 @@ class BackgroundPlanManager:
                     result=self._result_from_dict(payload.get("result")),
                     error=payload.get("error"),
                     recovered=True,
+                    attempts=int(
+                        payload.get("attempts")
+                        or (
+                            1
+                            if payload.get("started_at") is not None
+                            else 0
+                        )
+                    ),
                 )
                 self._plans[record.background_id] = record
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
@@ -281,6 +291,7 @@ class BackgroundPlanManager:
         self,
         record: BackgroundPlan,
     ) -> None:
+        record.attempts += 1
         record.status = BackgroundPlanStatus.RUNNING
         record.started_at = time.time()
         record.finished_at = None
@@ -529,6 +540,60 @@ class BackgroundPlanManager:
 
         return ToolResult.ok(
             f"Фоновый план '{background_id}' отменён.",
+            data=result_data,
+        )
+
+    async def retry_plan(
+        self,
+        background_id: str,
+    ) -> ToolResult:
+        """Повторяет failed-план, сохраняя completed checkpoints."""
+        async with self._lock:
+            record = self._plans.get(background_id)
+            if record is None:
+                return ToolResult.failure(
+                    "BACKGROUND_PLAN_NOT_FOUND",
+                    (
+                        f"Фоновый план '{background_id}' "
+                        "не найден."
+                    ),
+                )
+
+            if record.status != BackgroundPlanStatus.FAILED:
+                return ToolResult.failure(
+                    "BACKGROUND_PLAN_NOT_RETRYABLE",
+                    (
+                        "Повторить можно только failed-план. "
+                        f"Текущий статус: {record.status.value}."
+                    ),
+                )
+
+            if record.task is not None and not record.task.done():
+                return ToolResult.failure(
+                    "BACKGROUND_PLAN_STILL_ACTIVE",
+                    "Фоновый план ещё выполняется.",
+                )
+
+            record.status = BackgroundPlanStatus.QUEUED
+            record.error = None
+            record.result = None
+            record.finished_at = None
+            self._persist(record)
+            record.task = asyncio.create_task(
+                self._run_plan(record),
+                name=(
+                    "nova-background-plan-"
+                    f"{record.background_id}-retry"
+                ),
+            )
+
+            result_data = record.to_dict()
+
+        return ToolResult.ok(
+            (
+                f"Фоновый план '{background_id}' "
+                "поставлен на повторное выполнение."
+            ),
             data=result_data,
         )
 

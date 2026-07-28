@@ -52,6 +52,7 @@ from core.config import (
     NOVA_PROACTIVE_QUIET_END,
     NOVA_PROACTIVE_QUIET_START,
     NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS,
+    NOVA_PROACTIVE_RESUME_PLAN_MINUTES,
     NOVA_PROACTIVE_STALE_PROCESS_HOURS,
     NOVA_PROACTIVE_UNCOMMITTED_MINUTES,
 )
@@ -803,6 +804,15 @@ async def async_main() -> None:
                         background_plan_manager._plans.values()
                     )
                 )
+                suggestions.extend(
+                    proactive_engine.observe_incomplete_plans(
+                        background_plan_manager._plans.values(),
+                        suggest_after_seconds=(
+                            NOVA_PROACTIVE_RESUME_PLAN_MINUTES
+                            * 60
+                        ),
+                    )
+                )
                 process_result = await asyncio.to_thread(
                     process_manager.list_processes
                 )
@@ -914,6 +924,9 @@ async def async_main() -> None:
         ),
         "list_background_plans": (
             background_plan_manager.list_plans
+        ),
+        "retry_background_plan": (
+            background_plan_manager.retry_plan
         ),
         "cancel_background_plan": (
             background_plan_manager.cancel_plan
@@ -1342,7 +1355,8 @@ async def test_reasoning_loop(request: str) -> None:
         [ts for ts in ALL_TOOLS if ts["function"]["name"] not in {
             "execute_plan", "get_plan_status", "cancel_plan",
             "start_background_plan", "get_background_plan_status",
-            "list_background_plans", "cancel_background_plan",
+            "list_background_plans", "retry_background_plan",
+            "cancel_background_plan",
         }],
         build_handlers(
             LocalMemory(),

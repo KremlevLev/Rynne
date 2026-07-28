@@ -1432,6 +1432,26 @@ background_plan_tools = [
     {
         "type": "function",
         "function": {
+            "name": "retry_background_plan",
+            "description": (
+                "Повторно запускает failed-фоновый план с последнего "
+                "сохранённого checkpoint, не повторяя completed-шаги."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "background_id": {
+                        "type": "string",
+                    },
+                },
+                "required": ["background_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "cancel_background_plan",
             "description": (
                 "Отменяет активный фоновый план."

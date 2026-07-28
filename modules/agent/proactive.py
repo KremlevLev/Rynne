@@ -165,6 +165,11 @@ class ProactiveSuggestionEngine:
             source_key = (
                 f"background:{plan.background_id}:{plan.status.value}"
             )
+            if (
+                plan.status == BackgroundPlanStatus.FAILED
+                and plan.attempts > 1
+            ):
+                source_key += f":attempt:{plan.attempts}"
             if self._was_emitted(source_key):
                 continue
 
@@ -196,6 +201,67 @@ class ProactiveSuggestionEngine:
                 reason=reason,
                 source_key=source_key,
                 importance=importance,
+            )
+            self._store(suggestion)
+            self._last_emitted[kind] = now
+            suggestions.append(suggestion)
+
+        return suggestions
+
+    def observe_incomplete_plans(
+        self,
+        plans: Iterable[BackgroundPlan],
+        *,
+        suggest_after_seconds: float = 15 * 60,
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        kind = "background_plan_resume_suggested"
+        if not self._kind_enabled(kind):
+            return []
+
+        now = self.clock()
+        suggestions: list[ProactiveSuggestion] = []
+        for plan in plans:
+            if (
+                plan.status != BackgroundPlanStatus.FAILED
+                or plan.finished_at is None
+            ):
+                continue
+            if (
+                now - plan.finished_at
+                < max(0.0, suggest_after_seconds)
+            ):
+                continue
+
+            attempt = max(1, plan.attempts)
+            source_key = (
+                f"background:{plan.background_id}:"
+                f"resume-suggested:{attempt}"
+            )
+            if self._was_emitted(source_key):
+                continue
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                < self.cooldown_seconds
+            ):
+                continue
+
+            suggestion = ProactiveSuggestion(
+                event_id=f"proactive_{uuid.uuid4().hex}",
+                kind=kind,
+                title="Продолжить незавершённую задачу?",
+                message=(
+                    f"{plan.goal} — можно повторить failed-шаг "
+                    "с последнего checkpoint."
+                ),
+                reason=(
+                    "План остался в статусе failed после паузы; "
+                    "completed-шаги сохранены и не будут повторены."
+                ),
+                source_key=source_key,
+                importance="normal",
             )
             self._store(suggestion)
             self._last_emitted[kind] = now
