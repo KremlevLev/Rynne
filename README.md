@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-673%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-675%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -111,7 +111,8 @@ Nova сообщает, когда:
 - завершился фоновый план или тесты;
 - упал управляемый сервер;
 - на диске заканчивается место;
-- одноразовый процесс подозрительно долго остаётся запущенным.
+- одноразовый процесс подозрительно долго остаётся запущенным;
+- в Git появился конфликт или изменения давно не закоммичены.
 
 Уведомления имеют cooldown, quiet hours, уровень важности и объяснимую
 причину. Nova предлагает действие, но не выполняет новый side effect без
@@ -265,6 +266,8 @@ NOVA_PROACTIVE_QUIET_END=8
 NOVA_PROACTIVE_DISK_FREE_PERCENT=10
 NOVA_PROACTIVE_DISK_FREE_GB=5
 NOVA_PROACTIVE_STALE_PROCESS_HOURS=4
+NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS=60
+NOVA_PROACTIVE_UNCOMMITTED_MINUTES=30
 NOVA_PROACTIVE_DISABLED_KINDS=disk_space_low,tests_completed
 ```
 
@@ -308,7 +311,7 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **673 теста**.
+Текущий regression suite: **675 тестов**.
 
 ## Статус проекта
 

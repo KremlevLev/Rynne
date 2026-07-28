@@ -51,7 +51,9 @@ from core.config import (
     NOVA_PROACTIVE_ENABLED,
     NOVA_PROACTIVE_QUIET_END,
     NOVA_PROACTIVE_QUIET_START,
+    NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS,
     NOVA_PROACTIVE_STALE_PROCESS_HOURS,
+    NOVA_PROACTIVE_UNCOMMITTED_MINUTES,
 )
 
 from modules.ui.desktop_service import (
@@ -793,6 +795,7 @@ async def async_main() -> None:
 
     async def proactive_worker() -> None:
         next_disk_check = 0.0
+        next_repository_check = 0.0
         while not runtime.shutdown_event.is_set():
             if NOVA_PROACTIVE_ENABLED:
                 suggestions = list(
@@ -842,6 +845,34 @@ async def async_main() -> None:
                         + max(
                             5.0,
                             NOVA_PROACTIVE_DISK_CHECK_SECONDS,
+                        )
+                    )
+                if loop_now >= next_repository_check:
+                    repository_result = await asyncio.to_thread(
+                        git_status,
+                        str(Path.cwd()),
+                    )
+                    if repository_result.success:
+                        suggestions.extend(
+                            proactive_engine.observe_repository(
+                                Path.cwd(),
+                                str(
+                                    repository_result.data.get(
+                                        "raw",
+                                        "",
+                                    )
+                                ),
+                                uncommitted_after_seconds=(
+                                    NOVA_PROACTIVE_UNCOMMITTED_MINUTES
+                                    * 60
+                                ),
+                            )
+                        )
+                    next_repository_check = (
+                        loop_now
+                        + max(
+                            5.0,
+                            NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS,
                         )
                     )
                 for suggestion in suggestions:

@@ -487,6 +487,135 @@ class ProactiveSuggestionEngine:
 
         return suggestions
 
+    def observe_repository(
+        self,
+        repo_path: str | Path,
+        status_text: str,
+        *,
+        uncommitted_after_seconds: float = 30 * 60,
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        resolved = Path(repo_path).resolve()
+        repo_key = str(resolved).casefold()
+        state_key = f"repository:{repo_key}"
+        previous = self._get_state(state_key)
+        cycle = int(previous.get("cycle", 0))
+        lines = [
+            line
+            for line in status_text.splitlines()
+            if line.strip()
+        ]
+
+        if not lines:
+            if previous.get("status") != "clean":
+                self._set_state(
+                    state_key,
+                    {"status": "clean", "cycle": cycle},
+                )
+            return []
+
+        now = self.clock()
+        if previous.get("status") != "dirty":
+            cycle += 1
+            state: dict[str, Any] = {
+                "status": "dirty",
+                "cycle": cycle,
+                "first_seen": now,
+                "conflict_notified": False,
+                "commit_notified": False,
+            }
+        else:
+            state = dict(previous)
+
+        conflict_codes = {
+            "DD",
+            "AU",
+            "UD",
+            "UA",
+            "DU",
+            "AA",
+            "UU",
+        }
+        has_conflicts = any(
+            line[:2] in conflict_codes
+            for line in lines
+        )
+        suggestions: list[ProactiveSuggestion] = []
+
+        if (
+            has_conflicts
+            and not bool(state.get("conflict_notified"))
+            and self._kind_enabled("repository_conflict")
+        ):
+            kind = "repository_conflict"
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                >= self.cooldown_seconds
+            ):
+                suggestion = ProactiveSuggestion(
+                    event_id=f"proactive_{uuid.uuid4().hex}",
+                    kind=kind,
+                    title="В репозитории есть конфликт",
+                    message=(
+                        f"{resolved.name}: Git сообщает о "
+                        "неразрешённых конфликтах."
+                    ),
+                    reason=(
+                        "В `git status --short` обнаружен conflict "
+                        "status. Nova ничего не изменяла автоматически."
+                    ),
+                    source_key=(
+                        f"repo:{repo_key}:conflict:{cycle}"
+                    ),
+                    importance="high",
+                )
+                self._store(suggestion)
+                self._last_emitted[kind] = now
+                state["conflict_notified"] = True
+                suggestions.append(suggestion)
+
+        first_seen = float(state.get("first_seen", now))
+        dirty_age = max(0.0, now - first_seen)
+        should_suggest_commit = (
+            not has_conflicts
+            and dirty_age
+            >= max(0.0, uncommitted_after_seconds)
+            and not bool(state.get("commit_notified"))
+            and self._kind_enabled("repository_uncommitted")
+        )
+        if should_suggest_commit:
+            kind = "repository_uncommitted"
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                >= self.cooldown_seconds
+            ):
+                suggestion = ProactiveSuggestion(
+                    event_id=f"proactive_{uuid.uuid4().hex}",
+                    kind=kind,
+                    title="Изменения давно не сохранены в Git",
+                    message=(
+                        f"{resolved.name}: {len(lines)} изменённых "
+                        "файлов. Посмотреть diff и сделать commit?"
+                    ),
+                    reason=(
+                        "Репозиторий остаётся dirty дольше "
+                        f"{uncommitted_after_seconds / 60:.0f} мин."
+                    ),
+                    source_key=(
+                        f"repo:{repo_key}:uncommitted:{cycle}"
+                    ),
+                    importance="normal",
+                )
+                self._store(suggestion)
+                self._last_emitted[kind] = now
+                state["commit_notified"] = True
+                suggestions.append(suggestion)
+
+        self._set_state(state_key, state)
+        return suggestions
+
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(
             """

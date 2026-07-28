@@ -319,3 +319,75 @@ def test_stale_process_monitor_ignores_servers() -> None:
 
         assert suggestions == []
         database.close()
+
+
+def test_repository_suggests_commit_once_per_dirty_cycle() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = [100.0]
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now[0],
+            local_hour=lambda: 12,
+        )
+        status = " M modules/agent.py\n?? notes.txt"
+
+        assert engine.observe_repository(
+            directory,
+            status,
+            uncommitted_after_seconds=60,
+        ) == []
+        now[0] += 61
+        first = engine.observe_repository(
+            directory,
+            status,
+            uncommitted_after_seconds=60,
+        )
+        repeated = engine.observe_repository(
+            directory,
+            status,
+            uncommitted_after_seconds=60,
+        )
+
+        assert len(first) == 1
+        assert first[0].kind == "repository_uncommitted"
+        assert "2 изменённых" in first[0].message
+        assert repeated == []
+
+        assert engine.observe_repository(directory, "") == []
+        second = engine.observe_repository(
+            directory,
+            " M README.md",
+            uncommitted_after_seconds=0,
+        )
+
+        assert len(second) == 1
+        assert second[0].source_key != first[0].source_key
+        database.close()
+
+
+def test_repository_conflict_is_reported_immediately() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: 100.0,
+            local_hour=lambda: 12,
+        )
+
+        first = engine.observe_repository(
+            directory,
+            "UU modules/agent.py\n M README.md",
+        )
+        repeated = engine.observe_repository(
+            directory,
+            "UU modules/agent.py\n M README.md",
+        )
+
+        assert len(first) == 1
+        assert first[0].kind == "repository_conflict"
+        assert first[0].importance == "high"
+        assert repeated == []
+        database.close()
