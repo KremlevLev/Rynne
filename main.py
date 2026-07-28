@@ -44,6 +44,7 @@ from core.config import (
     NOVA_DESKTOP_UI,
     NOVA_PREMIUM_UI,
     NOVA_PROACTIVE_COOLDOWN_SECONDS,
+    NOVA_PROACTIVE_BACKUP_CHECK_SECONDS,
     NOVA_PROACTIVE_DISABLED_KINDS,
     NOVA_PROACTIVE_DISK_CHECK_SECONDS,
     NOVA_PROACTIVE_DISK_FREE_GB,
@@ -73,6 +74,7 @@ from modules.tools.registry import (
     planning_tools,
     background_plan_tools,
     website_watch_tools,
+    backup_watch_tools,
 )
 
 from modules.agent.background_plans import (
@@ -82,6 +84,7 @@ from modules.agent.proactive import (
     ProactiveSuggestionEngine,
 )
 from modules.agent.website_watches import WebsiteWatchManager
+from modules.agent.backup_watches import BackupWatchManager
 from modules.storage.artifacts import (
     ArtifactStore,
 )
@@ -738,6 +741,7 @@ async def async_main() -> None:
         planning_tools
         + background_plan_tools
         + website_watch_tools
+        + backup_watch_tools
     )
 
     deferred_tool_names = {
@@ -801,6 +805,7 @@ async def async_main() -> None:
         disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
     website_watch_manager = WebsiteWatchManager(database)
+    backup_watch_manager = BackupWatchManager(database)
 
     def handle_tool_event(
         event_type: str,
@@ -823,6 +828,7 @@ async def async_main() -> None:
         next_repository_check = 0.0
         next_workflow_check = 0.0
         next_website_check = 0.0
+        next_backup_check = 0.0
         while not runtime.shutdown_event.is_set():
             if NOVA_PROACTIVE_ENABLED:
                 suggestions = list(
@@ -966,6 +972,20 @@ async def async_main() -> None:
                             NOVA_PROACTIVE_WEBSITE_CHECK_SECONDS,
                         )
                     )
+                if loop_now >= next_backup_check:
+                    backup_statuses = await backup_watch_manager.poll()
+                    suggestions.extend(
+                        proactive_engine.observe_backup_statuses(
+                            backup_statuses
+                        )
+                    )
+                    next_backup_check = (
+                        loop_now
+                        + max(
+                            30.0,
+                            NOVA_PROACTIVE_BACKUP_CHECK_SECONDS,
+                        )
+                    )
                 for suggestion in suggestions:
                     desktop_service.publish(
                         "proactive_suggestion",
@@ -1022,6 +1042,15 @@ async def async_main() -> None:
             website_watch_manager.remove_watch
         ),
     }
+    backup_watch_handlers = {
+        "watch_backup": backup_watch_manager.add_watch,
+        "list_backup_watches": (
+            backup_watch_manager.list_watches
+        ),
+        "remove_backup_watch": (
+            backup_watch_manager.remove_watch
+        ),
+    }
 
     # Deferred tools нельзя регистрировать до создания
     # PlanService и BackgroundPlanManager.
@@ -1054,6 +1083,13 @@ async def async_main() -> None:
         registry.register(
             schema=tool_schema,
             handler=website_watch_handlers[tool_name],
+        )
+
+    for tool_schema in backup_watch_tools:
+        tool_name = tool_schema["function"]["name"]
+        registry.register(
+            schema=tool_schema,
+            handler=backup_watch_handlers[tool_name],
         )
 
     missing_deferred_tools = (

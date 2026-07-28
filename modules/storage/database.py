@@ -146,6 +146,17 @@ class Database:
                     last_error TEXT
                 );
 
+                CREATE TABLE IF NOT EXISTS backup_watches (
+                    watch_id TEXT PRIMARY KEY,
+                    path TEXT NOT NULL UNIQUE,
+                    label TEXT NOT NULL DEFAULT '',
+                    max_age_seconds REAL NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    checked_at REAL,
+                    created_at REAL NOT NULL,
+                    last_error TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
 

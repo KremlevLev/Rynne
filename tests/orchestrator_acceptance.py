@@ -256,6 +256,25 @@ GOLDEN_SCENARIOS = (
             ),
         ),
     ),
+    AcceptanceScenario(
+        name="backup-watch",
+        request=(
+            "Следи за резервной копией проекта и предупреди, "
+            "если она старше 24 часов"
+        ),
+        expected_tools=frozenset({"watch_backup"}),
+        calls=(
+            ReplayCall(
+                "watch_backup",
+                {
+                    "path": "D:\\Backups\\project",
+                    "max_age_hours": 24,
+                    "label": "Project backup",
+                },
+                PolicyDecision.ALLOW_WITH_WARNING,
+            ),
+        ),
+    ),
 )
 
 

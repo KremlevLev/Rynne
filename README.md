@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-685%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-688%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -115,7 +115,8 @@ Nova сообщает, когда:
 - в Git появился конфликт или изменения давно не закоммичены;
 - failed-план можно безопасно продолжить с последнего checkpoint;
 - повторяющуюся последовательность действий стоит сохранить как workflow;
-- явно отслеживаемая публичная страница изменилась.
+- явно отслеживаемая публичная страница изменилась;
+- резервная копия пропала или устарела.
 
 Уведомления имеют cooldown, quiet hours, уровень важности и объяснимую
 причину. Nova предлагает действие, но не выполняет новый side effect без
@@ -125,6 +126,8 @@ Nova сообщает, когда:
 «Следи за https://example.com/releases и сообщи, когда страница изменится»
 «Покажи сайты, за которыми ты следишь»
 «Удали подписку watch_...»
+«Следи за D:\Backups и предупреди, если backup старше 24 часов»
+«Покажи контроль резервных копий»
 ```
 
 Для поиска повторов сохраняются только названия инструментов, случайные
@@ -285,6 +288,7 @@ NOVA_PROACTIVE_RESUME_PLAN_MINUTES=15
 NOVA_PROACTIVE_WORKFLOW_LOOKBACK_DAYS=14
 NOVA_PROACTIVE_WORKFLOW_MIN_REPETITIONS=3
 NOVA_PROACTIVE_WEBSITE_CHECK_SECONDS=300
+NOVA_PROACTIVE_BACKUP_CHECK_SECONDS=300
 NOVA_PROACTIVE_DISABLED_KINDS=disk_space_low,tests_completed
 ```
 
@@ -328,7 +332,7 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **685 тестов**.
+Текущий regression suite: **688 тестов**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

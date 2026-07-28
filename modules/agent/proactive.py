@@ -875,6 +875,100 @@ class ProactiveSuggestionEngine:
 
         return suggestions
 
+    def observe_backup_statuses(
+        self,
+        statuses: Iterable[Mapping[str, Any]],
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        now = self.clock()
+        suggestions: list[ProactiveSuggestion] = []
+        for item in statuses:
+            watch_id = str(item.get("watch_id") or "")
+            status = str(item.get("status") or "")
+            if not watch_id or status not in {
+                "healthy",
+                "stale",
+                "missing",
+            }:
+                continue
+
+            state_key = f"backup_watch:{watch_id}"
+            previous = self._get_state(state_key)
+            cycle = int(previous.get("cycle", 0))
+            if status == "healthy":
+                if previous.get("status") != "healthy":
+                    self._set_state(
+                        state_key,
+                        {"status": "healthy", "cycle": cycle},
+                    )
+                continue
+            if previous.get("status") == status:
+                continue
+
+            kind = (
+                "backup_stale"
+                if status == "stale"
+                else "backup_missing"
+            )
+            if not self._kind_enabled(kind):
+                continue
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                < self.cooldown_seconds
+            ):
+                continue
+
+            cycle += 1
+            label = (
+                str(item.get("label") or "").strip()
+                or Path(str(item.get("path") or "")).name
+                or watch_id
+            )
+            if status == "stale":
+                age_hours = float(item.get("age_seconds") or 0.0) / 3600
+                title = "Резервная копия устарела"
+                message = (
+                    f"{label}: последняя копия создана "
+                    f"{age_hours:.1f} ч назад."
+                )
+                reason = (
+                    "Возраст последнего файла превысил настроенный "
+                    "max_age_hours."
+                )
+            else:
+                title = "Резервная копия не найдена"
+                message = (
+                    f"{label}: в отслеживаемом пути нет доступных "
+                    "файлов резервной копии."
+                )
+                reason = (
+                    "Путь исчез, пуст или не может быть проверен; "
+                    "содержимое файлов Nova не читала."
+                )
+
+            suggestion = ProactiveSuggestion(
+                event_id=f"proactive_{uuid.uuid4().hex}",
+                kind=kind,
+                title=title,
+                message=message,
+                reason=reason,
+                source_key=(
+                    f"backup:{watch_id}:{status}:{cycle}"
+                ),
+                importance="high",
+            )
+            self._store(suggestion)
+            self._set_state(
+                state_key,
+                {"status": status, "cycle": cycle},
+            )
+            self._last_emitted[kind] = now
+            suggestions.append(suggestion)
+
+        return suggestions
+
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(
             """

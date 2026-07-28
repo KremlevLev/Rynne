@@ -1531,3 +1531,68 @@ website_watch_tools = [
 ]
 
 ALL_TOOLS.extend(website_watch_tools)
+
+backup_watch_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "watch_backup",
+            "description": (
+                "Включает контроль свежести резервных копий в явно "
+                "указанном локальном файле или каталоге."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000,
+                    },
+                    "max_age_hours": {
+                        "type": "number",
+                        "minimum": 0.1,
+                        "maximum": 8760,
+                    },
+                    "label": {
+                        "type": "string",
+                        "maxLength": 200,
+                    },
+                },
+                "required": ["path"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_backup_watches",
+            "description": "Показывает настройки контроля backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_backup_watch",
+            "description": "Удаляет настройку контроля backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "watch_id": {
+                        "type": "string",
+                    },
+                },
+                "required": ["watch_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+ALL_TOOLS.extend(backup_watch_tools)
