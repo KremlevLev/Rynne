@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 684 tests passed
+python -m pytest tests/ -q  # 685 tests passed
 
 # КОНТЕКСТ ПРОЕКТА
 - Ты помогаешь мне развивать моего кастомного ИИ-агента.
@@ -1101,10 +1101,10 @@ python -m pytest tests/ -q  # 684 tests passed
 - Локальный dashboard.
 - Экспорт Prometheus.
 - Sentry.
-- Replay трассы без side effects.
+- ✅ Replay трассы без side effects.
 - Сравнение производительности релизов.
 - Автоматическое обнаружение регрессий.
-- Golden task suite.
+- ✅ Golden task suite.
 - Ежедневный smoke test.
 - Synthetic monitoring.
 

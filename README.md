@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-684%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-685%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -328,7 +328,19 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **684 теста**.
+Текущий regression suite: **685 тестов**.
+
+Для проверки именно оркестратора без Groq, сети и реальных действий:
+
+```powershell
+python -m tests.orchestrator_acceptance
+```
+
+Golden-сценарии прогоняют production selector, tool schemas, registry, policy,
+runtime validation и события выполнения. Все handlers заменены безопасными
+recorders: приложения, файлы, терминал и сайты фактически не затрагиваются.
+Новая capability добавляется одной записью в `GOLDEN_SCENARIOS` внутри
+[`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 
 ## Статус проекта
 
