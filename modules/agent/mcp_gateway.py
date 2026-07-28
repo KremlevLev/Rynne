@@ -15,6 +15,7 @@ import logging
 import os
 import socket
 import time
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -139,48 +140,45 @@ class MCPAutoDiscovery:
         path: str,
     ) -> MCPDiscoveryResult:
         """Probe an MCP endpoint for compatibility."""
+        url = f"http://localhost:{port}{path}"
+        transport = (
+            "sse"
+            if path.rstrip("/").endswith("/sse")
+            else "streamable_http"
+        )
+        gateway = MCPGateway(max_retries=1)
+        config = MCPServerConfig(
+            name=f"mcp_port_{port}",
+            command="",
+            transport=transport,
+            url=url,
+            enabled=True,
+            timeout=self._timeout,
+        )
+        gateway.register_server(config)
+
         try:
-            import aiohttp
-            
-            url = f"http://localhost:{port}{path}"
-            
-            async with aiohttp.ClientSession() as session:
-                # Send tools/list request to check MCP compatibility
-                request = {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/list",
-                }
-                
-                try:
-                    async with session.post(
-                        url,
-                        json=request,
-                        timeout=aiohttp.ClientTimeout(total=self._timeout),
-                    ) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            
-                            # Check if response looks like MCP tools/list response
-                            if "tools" in data or "result" in data:
-                                tools = data.get("tools", data.get("result", {}).get("tools", []))
-                                return MCPDiscoveryResult(
-                                    name=f"mcp_port_{port}",
-                                    url=url,
-                                    available=True,
-                                    tools=tools,
-                                )
-                except (asyncio.TimeoutError, aiohttp.ClientError):
-                    pass
-                    
-        except ImportError:
-            logger.warning("aiohttp required for auto-discovery: pip install aiohttp")
-        except Exception as exc:
-            pass
-        
+            tools = await asyncio.wait_for(
+                gateway._discover_tools(config),
+                timeout=self._timeout,
+            )
+            return MCPDiscoveryResult(
+                name=f"mcp_port_{port}",
+                url=url,
+                available=True,
+                tools=tools,
+            )
+        except Exception:
+            logger.debug(
+                "No MCP server at %s.",
+                url,
+            )
+        finally:
+            await gateway.close()
+
         return MCPDiscoveryResult(
             name=f"port_{port}",
-            url=f"http://localhost:{port}",
+            url=url,
             available=False,
             error="Not MCP-compatible",
         )
@@ -200,10 +198,15 @@ class MCPAutoDiscovery:
         """
         configs = []
         for result in discovery_results:
+            transport = (
+                "sse"
+                if result.url.rstrip("/").endswith("/sse")
+                else "streamable_http"
+            )
             config = MCPServerConfig(
                 name=result.name,
-                command="npx",  # Placeholder, actual SSE URL used
-                transport="sse",
+                command="",
+                transport=transport,
                 url=result.url,
                 enabled=True,
             )
@@ -220,8 +223,8 @@ class MCPServerConfig:
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
-    transport: str = "stdio"  # stdio or sse
-    url: str = ""  # For SSE transport
+    transport: str = "stdio"  # stdio, streamable_http or legacy sse
+    url: str = ""  # For HTTP transports
     timeout: float = 30.0  # Request timeout in seconds
     retry_count: int = 3  # Number of retry attempts
     retry_delay: float = 1.0  # Base retry delay in seconds
@@ -354,7 +357,10 @@ class MCPConnectionPool:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={**asyncio.get_event_loop().run_in_executor(None, lambda: __import__('os').environ), **config.env},
+                env={
+                    **os.environ,
+                    **config.env,
+                },
             )
             self._processes[name] = process
             self._locks[name] = asyncio.Lock()
@@ -449,6 +455,8 @@ class MCPGateway:
         self._cache = MCPToolCache(ttl_seconds=cache_ttl)
         self._middleware = MCPErrorMiddleware(max_retries=max_retries)
         self._security = MCPSecurityMiddleware()
+        self._sdk_clients: dict[str, Any] = {}
+        self._sdk_stacks: dict[str, AsyncExitStack] = {}
         
         # Register security configs for known servers
         for server_name in ["filesystem", "sqlite", "git", "github", "slack", "gdrive", "postgres", "jira", "docker", "websearch"]:
@@ -510,95 +518,151 @@ class MCPGateway:
         Supports both stdio and SSE transports.
         Sends 'tools/list' request and returns tool schemas.
         """
-        request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/list",
-        }
-        
-        if config.transport == "sse":
-            return await self._discover_tools_sse(config, request)
+        client = await self._get_sdk_client(config)
+        response = await asyncio.wait_for(
+            client.list_tools(),
+            timeout=config.timeout,
+        )
+        tools = getattr(response, "tools", [])
+
+        return [
+            self._normalise_sdk_tool(tool)
+            for tool in tools
+        ]
+
+    @staticmethod
+    def _normalise_sdk_tool(tool: Any) -> dict[str, Any]:
+        """Приводит Tool из MCP SDK v1/v2 к внутренней JSON-схеме."""
+        if isinstance(tool, dict):
+            raw = dict(tool)
+        elif hasattr(tool, "model_dump"):
+            raw = tool.model_dump(
+                by_alias=True,
+                exclude_none=True,
+            )
         else:
-            return await self._discover_tools_stdio(config, request)
+            raw = {
+                "name": getattr(tool, "name", "unknown"),
+                "description": getattr(tool, "description", ""),
+            }
+
+        parameters = (
+            raw.get("inputSchema")
+            or raw.get("input_schema")
+            or {
+                "type": "object",
+                "properties": {},
+            }
+        )
+        return {
+            "name": str(raw.get("name") or "unknown"),
+            "description": str(raw.get("description") or ""),
+            "parameters": parameters,
+            "annotations": raw.get("annotations"),
+        }
+
+    async def _get_sdk_client(
+        self,
+        config: MCPServerConfig,
+    ) -> Any:
+        """Открывает стандартную MCP SDK-сессию и переиспользует её."""
+        existing = self._sdk_clients.get(config.name)
+        if existing is not None:
+            return existing
+
+        stack = AsyncExitStack()
+        try:
+            try:
+                # MCP Python SDK v2.
+                from mcp import Client, StdioServerParameters
+            except ImportError:
+                Client = None
+                from mcp import ClientSession, StdioServerParameters
+
+            if config.transport == "stdio":
+                if not config.command:
+                    raise ValueError(
+                        f"MCP server '{config.name}' has no command."
+                    )
+                from mcp.client.stdio import stdio_client
+
+                parameters = StdioServerParameters(
+                    command=config.command,
+                    args=config.args,
+                    # SDK intentionally inherits only a safe allow-list and
+                    # adds the explicitly configured variables.
+                    env=config.env or None,
+                )
+                transport = stdio_client(parameters)
+            elif config.transport == "sse":
+                if not config.url:
+                    raise ValueError(
+                        "SSE transport requires 'url' in config"
+                    )
+                from mcp.client.sse import sse_client
+
+                transport = sse_client(config.url)
+            elif config.transport == "streamable_http":
+                if not config.url:
+                    raise ValueError(
+                        "Streamable HTTP transport requires 'url' in config"
+                    )
+                transport = config.url
+            else:
+                raise ValueError(
+                    f"Unsupported MCP transport: {config.transport}"
+                )
+
+            if Client is not None:
+                # v2 Client принимает URL напрямую, а stdio/SSE — как
+                # transport context manager.
+                client = await stack.enter_async_context(
+                    Client(transport)
+                )
+            else:
+                # Совместимость с установленной веткой SDK v1.x.
+                if config.transport == "streamable_http":
+                    from mcp.client.streamable_http import (
+                        streamable_http_client,
+                    )
+
+                    transport = streamable_http_client(config.url)
+
+                streams = await stack.enter_async_context(
+                    transport
+                )
+                read_stream, write_stream = streams[:2]
+                client = await stack.enter_async_context(
+                    ClientSession(read_stream, write_stream)
+                )
+                await client.initialize()
+
+            self._sdk_clients[config.name] = client
+            self._sdk_stacks[config.name] = stack
+            return client
+        except Exception:
+            await stack.aclose()
+            raise
 
     async def _discover_tools_stdio(
         self,
         config: MCPServerConfig,
         request: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Discover tools using stdio transport."""
-        try:
-            process = await asyncio.create_subprocess_exec(
-                config.command,
-                *config.args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env={**asyncio.get_event_loop().run_in_executor(None, lambda: __import__('os').environ), **config.env},
-            )
-            
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(
-                    input=json.dumps(request).encode(),
-                ),
-                timeout=10.0,
-            )
-            
-            if process.returncode != 0:
-                raise RuntimeError(
-                    f"MCP server exited with code {process.returncode}: "
-                    f"{stderr.decode()}",
-                )
-            
-            response = json.loads(stdout.decode())
-            
-            if "error" in response:
-                raise RuntimeError(f"MCP error: {response['error']}")
-            
-            return response.get("tools", [])
-            
-        except asyncio.TimeoutError:
-            raise RuntimeError(f"MCP server {config.name} timed out")
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"Invalid MCP response: {exc}")
+        """Backward-compatible entrypoint backed by the official MCP SDK."""
+        del request
+        return await self._discover_tools(config)
 
     async def _discover_tools_sse(
         self,
         config: MCPServerConfig,
         request: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        """Discover tools using SSE transport."""
-        import aiohttp
-        
+        """Backward-compatible entrypoint backed by the official MCP SDK."""
+        del request
         if not config.url:
             raise ValueError(f"SSE transport requires 'url' for server {config.name}")
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Send initialization request
-                async with session.post(
-                    config.url,
-                    json=request,
-                    timeout=aiohttp.ClientTimeout(total=10.0),
-                ) as response:
-                    if response.status != 200:
-                        raise RuntimeError(
-                            f"SSE server returned status {response.status}"
-                        )
-                    
-                    data = await response.json()
-                    
-                    if "error" in data:
-                        raise RuntimeError(f"MCP SSE error: {data['error']}")
-                    
-                    return data.get("tools", [])
-                    
-        except asyncio.TimeoutError:
-            raise RuntimeError(f"MCP SSE server {config.name} timed out")
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"Invalid MCP SSE response: {exc}")
-        except ImportError:
-            raise RuntimeError("aiohttp required for SSE transport: pip install aiohttp")
+        return await self._discover_tools(config)
 
     async def call_tool(
         self,
@@ -615,16 +679,30 @@ class MCPGateway:
         Returns:
             ToolResult with the tool execution result
         """
-        # Parse server and tool name
-        parts = tool_name.split("_", 2)
-        if len(parts) < 3:
+        if not tool_name.startswith("mcp_"):
             return ToolResult.failure(
                 "INVALID_TOOL_NAME",
                 f"Invalid MCP tool name format: {tool_name}",
             )
-        
-        server_name = parts[1]
-        actual_tool_name = parts[2]
+
+        server_name = ""
+        actual_tool_name = ""
+        for candidate in sorted(
+            self._servers,
+            key=len,
+            reverse=True,
+        ):
+            prefix = f"mcp_{candidate}_"
+            if tool_name.startswith(prefix):
+                server_name = candidate
+                actual_tool_name = tool_name[len(prefix):]
+                break
+
+        if not server_name or not actual_tool_name:
+            return ToolResult.failure(
+                "UNKNOWN_MCP_SERVER",
+                f"MCP server not found for tool: {tool_name}",
+            )
         
         config = self._servers.get(server_name)
         if config is None:
@@ -646,7 +724,10 @@ class MCPGateway:
         # Apply error middleware with retry logic
         for attempt in range(self._middleware._max_retries):
             try:
-                if config.transport == "sse":
+                if config.transport in {
+                    "sse",
+                    "streamable_http",
+                }:
                     result = await self._call_tool_sse(config, request, actual_tool_name)
                 else:
                     result = await self._call_tool_stdio(config, request, actual_tool_name)
@@ -678,7 +759,7 @@ class MCPGateway:
                     delay = self._middleware.calculate_delay(attempt + 1)
                     await asyncio.sleep(delay)
                 continue
-            except Exception as exc:
+            except Exception:
                 self._middleware.increment_error(tool_name)
                 if attempt < self._middleware._max_retries - 1:
                     delay = self._middleware.calculate_delay(attempt + 1)
@@ -696,34 +777,15 @@ class MCPGateway:
         request: dict[str, Any],
         tool_name: str,
     ) -> ToolResult:
-        """Call tool using stdio transport."""
-        process = await asyncio.create_subprocess_exec(
-            config.command,
-            *config.args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        """Call an stdio tool through the persistent official SDK session."""
+        arguments = (
+            request.get("params", {})
+            .get("arguments", {})
         )
-        
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(
-                input=json.dumps(request).encode(),
-            ),
-            timeout=30.0,
-        )
-        
-        response = json.loads(stdout.decode())
-        
-        if "error" in response:
-            return ToolResult.failure(
-                "MCP_TOOL_ERROR",
-                f"Tool {tool_name} failed: {response['error']}",
-            )
-        
-        result = response.get("result", {})
-        return ToolResult.ok(
-            result.get("message", "Success"),
-            data=result.get("data", {}),
+        return await self._call_tool_with_sdk(
+            config,
+            tool_name,
+            arguments,
         )
 
     async def _call_tool_sse(
@@ -732,34 +794,92 @@ class MCPGateway:
         request: dict[str, Any],
         tool_name: str,
     ) -> ToolResult:
-        """Call tool using SSE transport."""
-        import aiohttp
-        
+        """Call an HTTP/SSE tool through the persistent SDK session."""
         if not config.url:
             return ToolResult.failure(
                 "MCP_CONFIG_ERROR",
-                "SSE transport requires 'url' in config",
+                "HTTP transport requires 'url' in config",
             )
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                config.url,
-                json=request,
-                timeout=aiohttp.ClientTimeout(total=30.0),
-            ) as response:
-                data = await response.json()
-                
-                if "error" in data:
-                    return ToolResult.failure(
-                        "MCP_TOOL_ERROR",
-                        f"Tool {tool_name} failed: {data['error']}",
-                    )
-                
-                result = data.get("result", {})
-                return ToolResult.ok(
-                    result.get("message", "Success"),
-                    data=result.get("data", {}),
+        arguments = (
+            request.get("params", {})
+            .get("arguments", {})
+        )
+        return await self._call_tool_with_sdk(
+            config,
+            tool_name,
+            arguments,
+        )
+
+    async def _call_tool_with_sdk(
+        self,
+        config: MCPServerConfig,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> ToolResult:
+        client = await self._get_sdk_client(config)
+        response = await asyncio.wait_for(
+            client.call_tool(tool_name, arguments),
+            timeout=config.timeout,
+        )
+
+        is_error = bool(
+            getattr(
+                response,
+                "is_error",
+                getattr(response, "isError", False),
+            )
+        )
+        structured_content = getattr(
+            response,
+            "structured_content",
+            getattr(response, "structuredContent", None),
+        )
+        content_blocks: list[dict[str, Any]] = []
+        text_parts: list[str] = []
+
+        for block in getattr(response, "content", []) or []:
+            if isinstance(block, dict):
+                raw_block = dict(block)
+            elif hasattr(block, "model_dump"):
+                raw_block = block.model_dump(
+                    by_alias=True,
+                    exclude_none=True,
                 )
+            else:
+                raw_block = {
+                    "type": getattr(block, "type", "unknown"),
+                    "text": getattr(block, "text", ""),
+                }
+
+            content_blocks.append(raw_block)
+            block_text = raw_block.get("text")
+            if isinstance(block_text, str) and block_text:
+                text_parts.append(block_text)
+
+        message = "\n".join(text_parts).strip()
+        if not message and structured_content is not None:
+            message = json.dumps(
+                structured_content,
+                ensure_ascii=False,
+            )
+        if not message:
+            message = (
+                f"MCP tool '{tool_name}' returned no text."
+            )
+
+        data = {
+            "structured_content": structured_content,
+            "content": content_blocks,
+            "server": config.name,
+            "tool": tool_name,
+        }
+        if is_error:
+            return ToolResult.failure(
+                "MCP_TOOL_ERROR",
+                message,
+                data=data,
+            )
+        return ToolResult.ok(message, data=data)
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
         """Get all discovered tool schemas for model consumption."""
@@ -786,6 +906,24 @@ class MCPGateway:
         """Get set of available MCP tool names."""
         return set(self._tool_schemas.keys())
 
+    async def close(self) -> None:
+        """Закрывает MCP-сессии и запущенные ими subprocesses."""
+        stacks = list(self._sdk_stacks.items())
+        self._sdk_clients.clear()
+        self._sdk_stacks.clear()
+
+        for server_name, stack in reversed(stacks):
+            try:
+                await stack.aclose()
+            except Exception:
+                logger.exception(
+                    "Failed to close MCP server: %s",
+                    server_name,
+                )
+
+        self._pool.close()
+        self._initialized = False
+
     async def register_with_registry(
         self,
         registry: Any,
@@ -798,18 +936,36 @@ class MCPGateway:
         count = 0
         for tool_name, schema in self._tool_schemas.items():
             try:
+                server_name = next(
+                    (
+                        server
+                        for server in sorted(
+                            self._servers,
+                            key=len,
+                            reverse=True,
+                        )
+                        if tool_name.startswith(
+                            f"mcp_{server}_"
+                        )
+                    ),
+                    "",
+                )
+                actual_tool_name = (
+                    tool_name[len(f"mcp_{server_name}_"):]
+                    if server_name
+                    else tool_name
+                )
                 # Infer risk and category for the tool
                 risk = infer_mcp_tool_risk(
-                    tool_name.split("_", 2)[-1] if "_" in tool_name else tool_name,
+                    actual_tool_name,
                     schema.get("description", ""),
                 )
                 category = infer_mcp_tool_category(
-                    tool_name.split("_", 2)[-1] if "_" in tool_name else tool_name,
+                    actual_tool_name,
                     schema.get("description", ""),
                 )
                 
                 # Register security info for the tool
-                server_name = tool_name.split("_", 2)[1] if "_" in tool_name else ""
                 self._security.register_tool(
                     MCPToolSecurityInfo(
                         tool_name=tool_name,
@@ -821,10 +977,13 @@ class MCPGateway:
                     ),
                 )
                 
-                # Create sync handler wrapper that calls async method via asyncio
+                # MCP transports принадлежат текущему event loop. Синхронная
+                # обёртка с asyncio.run() создавала новый loop в worker thread
+                # ToolRunner и ломала живые stdio/SSE-сессии.
                 def make_handler(name: str) -> Callable[..., Any]:
-                    def handler(**kwargs) -> ToolResult:
-                        return asyncio.run(self.call_tool(name, kwargs))
+                    async def handler(**kwargs) -> ToolResult:
+                        return await self.call_tool(name, kwargs)
+
                     return handler
                 
                 self._handlers[tool_name] = make_handler(tool_name)
@@ -843,6 +1002,8 @@ class MCPGateway:
                         },
                     },
                     handler=self._handlers[tool_name],
+                    risk=risk,
+                    category=category,
                 )
                 count += 1
             except ValueError:

@@ -334,6 +334,14 @@ Agent workflow:
 4. Execute tools.
 5. Examine structured results.
 6. Give the final answer based on confirmed facts.
+7. Treat every tool schema attached to the current request as a real available
+   capability. Inspect the schemas before claiming that an action is impossible.
+8. If the preferred tool is unsuitable, choose a safe alternative tool or
+   high-level skill that can achieve the same result.
+9. Ask for clarification only when a critical argument cannot be inferred
+   safely. Fill non-critical details with conservative defaults.
+10. For actionable requests, prefer attempting an available tool over describing
+    manual steps to the user.
 
 High-level Windows skills:
 1. Prefer write_in_application when the user asks to write prepared text into
@@ -350,7 +358,7 @@ SYSTEM_PROMPT = build_system_prompt()
 # MCP Auto-Discovery Configuration
 MCP_AUTO_DISCOVERY: Final[bool] = os.getenv(
     "NOVA_MCP_AUTO_DISCOVERY",
-    "true",
+    "false",
 ).lower() in {
     "1",
     "true",

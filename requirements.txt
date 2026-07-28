@@ -1,5 +1,6 @@
 beautifulsoup4>=4.15.0
 keyboard>=0.13.5
+mcp>=1.27,<3
 numpy>=2.5.1
 openai>=2.45.0
 pillow>=12.3.0

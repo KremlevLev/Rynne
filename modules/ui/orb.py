@@ -33,12 +33,10 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QRadialGradient,
-    QConicalGradient,
 )
 from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
-    QVBoxLayout,
     QLabel,
     QFrame,
 )
@@ -107,18 +105,21 @@ class NovaOrb(QWidget):
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
+        try:
+            self._paint_orb(painter)
+        finally:
+            # Даже при ошибке отрисовки QBackingStore не должен получить
+            # активный painter и начать бесконечно печатать warnings.
+            if painter.isActive():
+                painter.end()
+
+    def _paint_orb(self, painter: QPainter) -> None:
         painter.setRenderHint(QPainter.Antialiasing)
 
         rect = QRectF(0, 0, self._size, self._size)
         center = QPointF(self._size / 2, self._size / 2)
         radius = self._size / 2 - 2
 
-        # Фоновый градиент
-        gradient = QRadialGradient(center, radius)
-        gradient.setColorAt(0, QColor(theme.color("accent.primary")))
-        gradient.setColorAt(1, QColor(theme.color("bg.base")))
-
-        # Цвет в зависимости от состояния
         state_colors = {
             "idle": theme.color("text.muted"),
             "listening": theme.color("accent.secondary"),
@@ -131,7 +132,6 @@ class NovaOrb(QWidget):
         }
         color = state_colors.get(self._state, state_colors["idle"])
 
-        # Интенсивность в зависимости от состояния
         if self._state == "idle":
             intensity = 0.3 + 0.2 * abs(
                 (self._pulse_phase % 1.0) - 0.5
@@ -153,54 +153,54 @@ class NovaOrb(QWidget):
         else:
             intensity = 0.2
 
-        # Применяем интенсивность к цвету
         base_color = QColor(color)
-        r = base_color.red() * intensity
-        g = base_color.green() * intensity
-        b = base_color.blue() * intensity
-        final_color = QColor(int(r), int(g), int(b))
+        final_color = QColor(
+            int(base_color.red() * intensity),
+            int(base_color.green() * intensity),
+            int(base_color.blue() * intensity),
+        )
+        gradient = QRadialGradient(center, radius)
+        center_color = QColor(base_color)
+        center_color.setAlpha(235)
+        edge_color = QColor(final_color)
+        edge_color.setAlpha(210)
+        gradient.setColorAt(0.0, center_color)
+        gradient.setColorAt(0.72, edge_color)
+        gradient.setColorAt(1.0, QColor(theme.color("bg.base")))
 
-        # Рисуем орб
-        painter.setBrush(QBrush(final_color))
+        painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.NoPen)
         painter.drawEllipse(rect)
 
-        # Свечение
         if intensity > 0.3:
-            glow_color = QColor(
-                final_color.red(),
-                final_color.green(),
-                final_color.blue(),
-                int(80 * intensity),
-            )
-            glow_pen = QPen(glow_color, 4)
-            painter.setPen(glow_pen)
-            painter.setBrush(Qt.NoPen)
+            glow_color = QColor(final_color)
+            glow_color.setAlpha(int(80 * intensity))
+            painter.setPen(QPen(glow_color, 4))
+            painter.setBrush(QBrush(Qt.NoBrush))
             painter.drawEllipse(
                 QRectF(
-                    2, 2,
+                    2,
+                    2,
                     self._size - 4,
                     self._size - 4,
                 )
             )
 
-        # Вращение для thinking/working
         if self._state in ("thinking", "working"):
             painter.save()
             painter.translate(center)
             painter.rotate(self._rotation)
-            pen = QPen(
-                QColor(
-                    theme.color("accent.primary"),
-                    int(60 * intensity),
-                ),
-                2,
-            )
-            painter.setPen(pen)
-            painter.setBrush(Qt.NoPen)
+            orbit_color = QColor(theme.color("accent.primary"))
+            orbit_color.setAlpha(int(60 * intensity))
+            painter.setPen(QPen(orbit_color, 2))
+            painter.setBrush(QBrush(Qt.NoBrush))
             painter.drawEllipse(
-                QRectF(-radius + 4, -radius + 4,
-                       radius * 2 - 8, radius * 2 - 8)
+                QRectF(
+                    -radius + 4,
+                    -radius + 4,
+                    radius * 2 - 8,
+                    radius * 2 - 8,
+                )
             )
             painter.restore()
 

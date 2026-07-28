@@ -36,7 +36,6 @@ from modules.routing.direct_executor import (
 
 from modules.input_hub.models import (
     InputMode,
-    RequestSource,
 )
 
 from core.config import NOVA_DESKTOP_UI, NOVA_PREMIUM_UI
@@ -126,7 +125,6 @@ from modules.tools.os_utils import (
     configure_assistant,
     control_smart_home,
     create_quick_note,
-    encode_image_base64,
     execute_cmd_command,
     focus_window,
     get_clipboard_content,
@@ -589,7 +587,6 @@ async def run_voice_loop(
         await runtime.set_state(AssistantState.THINKING)
 
         image_path = ""
-        user_content: Any = user_request
         has_image = has_vision_trigger(user_request)
 
         if has_image:
@@ -599,29 +596,7 @@ async def run_voice_loop(
             )
 
             if image_path:
-                encoded_image = await asyncio.to_thread(
-                    encode_image_base64,
-                    image_path,
-                )
-
-                if encoded_image:
-                    user_content = [
-                        {
-                            "type": "text",
-                            "text": user_request,
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": (
-                                    "data:image/png;base64,"
-                                    + encoded_image
-                                )
-                            },
-                        },
-                    ]
-                else:
-                    has_image = False
+                has_image = True
             else:
                 has_image = False
         resolved_request = (
@@ -1207,6 +1182,8 @@ async def async_main() -> None:
         await speech.close()
         await background_plan_manager.close()
         await browser_manager.close()
+        if mcp_gateway is not None:
+            await mcp_gateway.close()
         await llm.close()
 
         process_manager.cleanup_all()

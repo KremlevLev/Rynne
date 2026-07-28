@@ -1,9 +1,13 @@
 # modules/application/agent.py
 from __future__ import annotations
+import asyncio
+import base64
 import uuid
 import json
 import logging
+import mimetypes
 import re
+from pathlib import Path
 from typing import Any
 from modules.application.reporting import (
     build_assistant_response_from_tools,
@@ -24,7 +28,6 @@ from modules.routing.intent import (
 )
 
 from core.config import (
-    MAX_AGENT_TURNS,
     MAX_CONTEXT_ESTIMATED_TOKENS,
     MAX_TOOL_CALLS,
     SYSTEM_PROMPT,
@@ -43,7 +46,6 @@ from modules.brain.tool_calls import (
 from modules.domain.results import AssistantResponse
 from modules.tools.runtime import ToolRegistry, ToolRunner
 from modules.tools.selection import (
-    get_tool_schemas_for_request,
     get_selected_tool_names,
 )
 
@@ -70,7 +72,30 @@ ACTION_PATTERNS = (
     r"\bвыполни\b",
     r"\bзапомни\b",
     r"\bнапомни\b",
+    r"\bнайди\b",
+    r"\bпоищи\b",
+    r"\bпрочитай\b",
+    r"\bпроверь\b",
+    r"\bпроанализируй\b",
+    r"\bисправь\b",
+    r"\bобнови\b",
+    r"\bпереименуй\b",
+    r"\bотправь\b",
+    r"\bзаполни\b",
+    r"\bсобери\b",
 )
+
+
+CAPABILITY_RECOVERY_PROMPT = """
+CAPABILITY RECOVERY:
+Пользователь запросил действие, и тебе передан расширенный набор реально
+доступных инструментов. Сначала выбери и вызови наиболее подходящий tool или
+высокоуровневый skill. Не заявляй, что действие невозможно, пока не проверила
+этот набор. Если не хватает только одного критичного аргумента, задай один
+короткий уточняющий вопрос. Не имитируй успешное выполнение без tool result.
+""".strip()
+
+MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 def request_requires_action(text: str) -> bool:
@@ -80,6 +105,90 @@ def request_requires_action(text: str) -> bool:
         re.search(pattern, lowered)
         for pattern in ACTION_PATTERNS
     )
+
+
+def build_request_model_content(
+    request: UserRequest,
+) -> str | list[dict[str, Any]]:
+    """Собирает реальный multimodal content из вложений UserRequest."""
+    parts: list[dict[str, Any]] = []
+    if request.text:
+        parts.append({
+            "type": "text",
+            "text": request.text,
+        })
+
+    image_added = False
+    for attachment in request.attachments:
+        if not attachment.path:
+            continue
+
+        attachment_path = Path(
+            attachment.path
+        ).expanduser()
+        if attachment.attachment_type.value not in {
+            "image",
+            "screenshot",
+        }:
+            parts.append({
+                "type": "text",
+                "text": (
+                    "[Прикреплён файл: "
+                    f"{attachment_path}]"
+                ),
+            })
+            continue
+
+        try:
+            if (
+                not attachment_path.is_file()
+                or attachment_path.stat().st_size
+                > MAX_INLINE_IMAGE_BYTES
+            ):
+                raise ValueError(
+                    "image is missing or too large"
+                )
+            encoded = base64.b64encode(
+                attachment_path.read_bytes()
+            ).decode("ascii")
+        except (OSError, ValueError) as exc:
+            logger.warning(
+                "Не удалось прочитать image attachment %s: %s",
+                attachment_path,
+                exc,
+            )
+            parts.append({
+                "type": "text",
+                "text": (
+                    "[Изображение недоступно: "
+                    f"{attachment.display_name or attachment_path.name}]"
+                ),
+            })
+            continue
+
+        mime_type = (
+            attachment.mime_type
+            or mimetypes.guess_type(
+                str(attachment_path)
+            )[0]
+            or "image/png"
+        )
+        parts.append({
+            "type": "image_url",
+            "image_url": {
+                "url": (
+                    f"data:{mime_type};base64,"
+                    + encoded
+                )
+            },
+        })
+        image_added = True
+
+    if image_added or len(parts) > 1:
+        return parts
+    if parts:
+        return str(parts[0].get("text") or "")
+    return request.text
 
 
 def content_to_text(content: Any) -> str:
@@ -537,8 +646,9 @@ class AgentService:
             )
 
             if user_content is None:
-                user_content = (
-                    resolved_user_text
+                user_content = await asyncio.to_thread(
+                    build_request_model_content,
+                    request_object,
                 )
 
             has_image = (
@@ -559,10 +669,19 @@ class AgentService:
             else user_text
         )
 
+        # В persistent history не храним base64 изображений. Текущий вызов
+        # получает оригинальный multimodal content отдельно.
+        self.history[:] = trim_history(
+            self.history
+        )
+        previous_history = list(self.history)
+        history_user_content = content_to_text(
+            actual_user_content
+        )
         self.history.append(
             {
                 "role": "user",
-                "content": actual_user_content,
+                "content": history_user_content,
             }
         )
 
@@ -654,15 +773,19 @@ class AgentService:
         elif execution_decision.required_tools:
             use_tools = True
 
-        selected_tool_names = (
-            set(
-                execution_decision.required_tools
-            )
-            if execution_decision.required_tools
-            else get_selected_tool_names(
-                user_text,
-                self.registry.names,
-            )
+        all_tool_schemas = self.registry.schemas()
+        selected_tool_names = get_selected_tool_names(
+            user_text,
+            self.registry.names,
+            has_image=has_image,
+            tool_schemas=all_tool_schemas,
+        )
+        # Детерминированный роутер задаёт обязательный минимум, а
+        # контекстный селектор добавляет альтернативы и инструменты проверки.
+        # Раньше required_tools полностью вытесняли все остальные возможности.
+        selected_tool_names.update(
+            execution_decision.required_tools
+            & self.registry.names
         )
 
         tool_schemas = (
@@ -707,21 +830,17 @@ class AgentService:
                 error_code="BUDGET_EXHAUSTED",
             )
 
-        # Добавляем пользовательское сообщение в историю.
-        self.history.append(
-            {
-                "role": "user",
-                "content": actual_user_content,
-            }
-        )
-
         # Один вызов модели.
         messages = [
             {
                 "role": "system",
                 "content": SYSTEM_PROMPT,
             },
-            *self.history,
+            *previous_history,
+            {
+                "role": "user",
+                "content": actual_user_content,
+            },
         ]
 
         try:
@@ -748,15 +867,93 @@ class AgentService:
                 error_code="MODEL_ROUTE_FAILED",
             )
 
-        native_tool_calls = generated.tool_calls
-        xml_tool_calls = extract_xml_tool_calls(
-            generated.text,
-            self.registry.names,
+        def collect_tool_calls(response) -> list[dict[str, Any]]:
+            native_tool_calls = response.tool_calls
+            xml_tool_calls = extract_xml_tool_calls(
+                response.text,
+                self.registry.names,
+            )
+            return deduplicate_tool_calls(
+                native_tool_calls + xml_tool_calls
+            )
+
+        tool_calls = collect_tool_calls(generated)
+
+        action_was_requested = (
+            request_requires_action(user_text)
+            or (
+                use_tools
+                and execution_decision.needs_tools
+                and not has_image
+            )
         )
 
-        tool_calls = deduplicate_tool_calls(
-            native_tool_calls + xml_tool_calls
-        )
+        # Небольшие модели иногда отвечают «не могу», даже когда подходящий
+        # tool был передан. Даём ровно одну повторную попытку с расширенным,
+        # но всё ещё ограниченным набором возможностей.
+        if (
+            not tool_calls
+            and use_tools
+            and action_was_requested
+            and budget_state.logical_model_calls
+            < self.default_budget.max_logical_model_calls
+        ):
+            expanded_tool_names = get_selected_tool_names(
+                user_text,
+                self.registry.names,
+                has_image=has_image,
+                max_tools=28,
+                tool_schemas=all_tool_schemas,
+                broaden=True,
+            )
+            expanded_tool_names.update(
+                selected_tool_names
+            )
+            expanded_tool_schemas = self.registry.schemas(
+                expanded_tool_names
+            )
+
+            if expanded_tool_schemas:
+                self.budget_manager.record_model_call(
+                    turn_id
+                )
+                retry_messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            SYSTEM_PROMPT
+                            + "\n\n"
+                            + CAPABILITY_RECOVERY_PROMPT
+                        ),
+                    },
+                    *messages[1:],
+                ]
+
+                try:
+                    generated = await self._request_model(
+                        complexity=complexity,
+                        messages=retry_messages,
+                        tools=expanded_tool_schemas,
+                        allow_tools=True,
+                        has_image=has_image,
+                    )
+                    tool_calls = collect_tool_calls(
+                        generated
+                    )
+                    selected_tool_names = (
+                        expanded_tool_names
+                    )
+                    tool_schemas = (
+                        expanded_tool_schemas
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        (
+                            "Повторный capability route "
+                            "завершился ошибкой: %s"
+                        ),
+                        exc,
+                    )
 
         assistant_message: dict[str, Any] = {
             "role": "assistant",
@@ -771,10 +968,6 @@ class AgentService:
         if not tool_calls:
             # Модель не вызвала инструменты.
             final_text = generated.text.strip()
-
-            action_was_requested = request_requires_action(
-                user_text
-            )
 
             if (
                 use_tools

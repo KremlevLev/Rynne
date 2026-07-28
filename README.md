@@ -103,30 +103,39 @@ python -m main
 
 ## 🔌 MCP Integration
 
-Nova поддерживает подключение к внешним MCP (Model Context Protocol) серверам для расширения возможностей:
+Nova подключает stdio, Streamable HTTP и legacy SSE серверы через официальный
+MCP Python SDK. Серверы не скачиваются и не запускаются вслепую: укажите
+проверенный конфиг явно.
 
-| Сервер | Описание | Требует токен |
-|--------|----------|---------------|
-| GitHub | Управление репозиториями, issues, PR | `GITHUB_TOKEN` |
-| Filesystem | Работа с файлами | Нет (встроен) |
-| SQLite | Запросы к базе данных | `MCP_SQLITE_PATH` |
-| Slack | Интеграция с Slack | `SLACK_TOKEN` |
-| Web Search | Поиск в интернете | Нет (встроен) |
-
-**Настройка в .env:**
 ```env
-# MCP Servers
-GITHUB_TOKEN=ghp_ваш_токен
-SLACK_TOKEN=xoxb-ваш_токен
-MCP_SQLITE_PATH=nova_memory.db
+NOVA_MCP_CONFIG=C:\Users\you\.config\nova\mcp.json
+NOVA_MCP_AUTO_DISCOVERY=false
 ```
 
-**Доступные инструменты:**
-- `mcp_github_*` — управление GitHub (issues, PR, репозитории)
-- `mcp_filesystem_*` — чтение/запись файлов, поиск
-- `mcp_sqlite_*` — SQL запросы, работа с таблицами
-- `mcp_slack_*` — каналы, сообщения, пользователи
-- `mcp_websearch_*` — поиск в интернете
+Поддерживается формат `mcpServers`, совместимый с популярными MCP hosts:
+
+```json
+{
+  "mcpServers": {
+    "project_files": {
+      "command": "python",
+      "args": ["C:\\tools\\my_mcp_server.py"],
+      "env": {
+        "PROJECT_TOKEN": "${PROJECT_TOKEN}"
+      }
+    },
+    "internal_api": {
+      "transport": "streamable_http",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
+
+После стандартного MCP handshake инструменты регистрируются как
+`mcp_<server>_<tool>`, получают risk/category metadata и участвуют в
+контекстном capability routing. Секреты лучше задавать ссылками `${ENV_NAME}`;
+их значения подставляются локально и не добавляются в prompt.
 
 ---
 

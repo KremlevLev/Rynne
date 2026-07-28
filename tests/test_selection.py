@@ -222,3 +222,98 @@ def test_keywords_by_tool_exists() -> None:
     assert "время" in KEYWORDS_BY_TOOL["get_current_time"]
     assert "get_system_status" in KEYWORDS_BY_TOOL
     assert "память" in KEYWORDS_BY_TOOL["get_system_status"]
+
+
+def test_unknown_action_gets_capability_fallback() -> None:
+    available = {
+        "get_current_time",
+        "get_system_status",
+        "search_web_tavily",
+        "read_text_file",
+        "write_text_file",
+        "run_terminal_command",
+        "execute_plan",
+    }
+
+    result = select_tools_for_request(
+        "Сделай это и проверь результат",
+        available,
+    )
+
+    assert "read_text_file" in result
+    assert "write_text_file" in result
+    assert "execute_plan" in result
+
+
+def test_explicit_hotkey_request_can_use_atomic_primitive() -> None:
+    available = {
+        "get_current_time",
+        "press_keyboard_combination",
+    }
+
+    result = select_tools_for_request(
+        "Нажми Ctrl+S",
+        available,
+    )
+
+    assert "press_keyboard_combination" in result
+
+
+def test_image_request_includes_available_recovery_tools() -> None:
+    available = {
+        "get_current_time",
+        "ocr_screen",
+        "find_ui_element",
+    }
+
+    result = select_tools_for_request(
+        "Разбери ошибку на скриншоте",
+        available,
+        has_image=True,
+    )
+
+    assert "ocr_screen" in result
+    assert "find_ui_element" in result
+
+
+def test_schema_description_participates_in_ranking() -> None:
+    schemas = [
+        {
+            "type": "function",
+            "function": {
+                "name": "custom_diagnostics",
+                "description": "Проверяет состояние Docker контейнеров.",
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "unrelated_action",
+                "description": "Управляет музыкальным проигрывателем.",
+            },
+        },
+    ]
+
+    result = get_tool_schemas_for_request(
+        "Проверь Docker контейнеры",
+        schemas,
+        max_tools=1,
+    )
+
+    assert result[0]["function"]["name"] == "custom_diagnostics"
+
+
+def test_semantic_ranking_wins_before_limit() -> None:
+    available = {
+        "aaa_unrelated",
+        "browser_open_url",
+        "zzz_unrelated",
+    }
+
+    result = select_tools_for_request(
+        "Открой сайт",
+        available,
+        max_tools=1,
+    )
+
+    assert result == {"browser_open_url"}

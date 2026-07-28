@@ -1,122 +1,80 @@
-# MCP Integration Guide for Nova Agent
+# MCP Integration Guide for Nova
 
-This guide describes how to add new features via MCP (Model Context Protocol) following the project rules.
+Nova uses the official MCP Python SDK for the protocol lifecycle, transport,
+tool discovery and tool calls. Do not add ad-hoc JSON-RPC subprocess code and
+do not assume that an npm package exists merely because its name looks right.
 
-## Quick Start
+## Configure trusted servers
 
-### 1. Find MCP Server
+Point `NOVA_MCP_CONFIG` to a JSON file:
 
-Check if there's a ready MCP server in the ecosystem:
-- https://github.com/modelcontextprotocol/servers
-- npm registry for `@modelcontextprotocol/*` packages
+```env
+NOVA_MCP_CONFIG=C:\Users\you\.config\nova\mcp.json
+NOVA_MCP_AUTO_DISCOVERY=false
+```
 
-### 2. Configuration Example
-
-Create a server configuration in `.env`:
+The file accepts the common `mcpServers` format:
 
 ```json
 {
-  "mcp": {
-    "github": {
-      "command": "node",
-      "args": ["path/to/github-mcp-server"],
+  "mcpServers": {
+    "local_project": {
+      "command": "python",
+      "args": ["C:\\tools\\project_server.py"],
       "env": {
-        "GITHUB_TOKEN": "your_token_here"
+        "PROJECT_TOKEN": "${PROJECT_TOKEN}"
       }
     },
-    "database": {
-      "command": "python",
-      "args": ["path/to/database-mcp-server"],
-      "env": {
-        "DATABASE_URL": "your_connection_string"
-      }
+    "internal_api": {
+      "transport": "streamable_http",
+      "url": "http://127.0.0.1:8000/mcp",
+      "timeout": 30
+    },
+    "legacy_service": {
+      "transport": "sse",
+      "url": "http://127.0.0.1:8001/sse"
     }
   }
 }
 ```
 
-### 3. Python Integration Code
+Supported transports:
 
-```python
-# Register MCP server for recovery
-from modules.agent.mcp_gateway import MCPGateway, MCPServerConfig
-from modules.agent.recovery import set_mcp_recovery_tools
+- `stdio` — default when `command` is present;
+- `streamable_http` — default when only `url` is present;
+- `sse` — compatibility with legacy servers.
 
-gateway = MCPGateway()
+Use `${ENV_NAME}` for secrets. Nova resolves the value locally when starting
+the server; the value does not become part of a tool schema or model prompt.
 
-# Register server
-config = MCPServerConfig(
-    name="github",
-    command="node",
-    args=["github-mcp-server"],
-    env={"GITHUB_TOKEN": "your_token"},
-)
-gateway.register_server(config)
+## Runtime flow
 
-# Initialize and get tools
-result = await gateway.initialize()
-mcp_tools = gateway.get_available_tools()
+1. `bootstrap_mcp_with_auto_discovery()` reads the explicit config.
+2. `MCPGateway` opens an official SDK client session and performs the MCP
+   handshake.
+3. Tools are discovered once and registered as
+   `mcp_<server_name>_<tool_name>`.
+4. Risk and category metadata are inferred before registration.
+5. Capability routing exposes only relevant MCP tools to the model.
+6. Tool calls reuse the same live SDK session.
+7. `MCPGateway.close()` shuts down sessions and stdio subprocesses.
 
-# Register for recovery
-set_mcp_recovery_tools(mcp_tools)
-```
+Auto-discovery is optional and disabled by default. When enabled, Nova probes
+configured localhost ports using a real SDK handshake, not a raw `tools/list`
+POST. Prefer an explicit config for predictable startup and a clear trust
+boundary.
 
-### 4. Using MCP Tools in Recovery
+## Adding an integration
 
-```python
-from modules.agent.mcp_gateway import MCPGateway
-from modules.agent.recovery import GracefulDegradation, SelfDiagnostics
+Before adding a server:
 
-# Create diagnostics and degradation
-diagnostics = SelfDiagnostics()
-degradation = GracefulDegradation(diagnostics)
+1. Verify it in the official MCP Registry or its audited source repository.
+2. Review filesystem/network access and all destructive tools.
+3. Pin the server version outside Nova where possible.
+4. Put credentials in environment variables, never in committed JSON.
+5. Start with read-only tools and test discovery plus one real tool call.
 
-# Check system health
-mode = await degradation.update_mode()
+Protocol and SDK references:
 
-if mode != "full":
-    # Get alternative tools for degraded mode
-    alternative_tools = degradation.get_alternative_tools()
-    
-    # Optionally use MCP fallback
-    if degradation.should_use_mcp_fallback():
-        mcp_tools = get_mcp_recovery_tools()
-```
-
-## MCP Server Examples
-
-### GitHub Integration
-```bash
-# Available MCP servers for GitHub
-npx @modelcontextprotocol/server-github
-# Tools: create_issue, list_issues, get_issue, search_repos, etc.
-```
-
-### Database Integration
-```bash
-# SQLite MCP server
-npm install -g @modelcontextprotocol/server-sqlite
-# Tools: query, list_tables, describe_table, etc.
-```
-
-### Slack Integration
-```bash
-# Slack MCP server
-npm install -g @modelcontextprotocol/server-slack
-# Tools: post_message, list_channels, get_channel_messages, etc.
-```
-
-## Architecture
-
-```
-modules/
-  agent/
-    mcp_gateway.py    # MCP client implementation (stdio/SDE)
-    recovery.py       # Recovery engine + SelfDiagnostics + GracefulDegradation
-    
-Application layer uses MCP tools by:
-1. Initializing MCPGateway with server configs
-2. Calling gateway.initialize() to discover tools
-3. Injecting MCP tools into the tool registry
-4. Using SelfDiagnostics to monitor health
-5. Falling back to MCP tools when primary systems fail
+- https://modelcontextprotocol.io/
+- https://github.com/modelcontextprotocol/python-sdk

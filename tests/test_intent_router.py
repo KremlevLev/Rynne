@@ -216,6 +216,15 @@ def test_unknown_action_uses_one_skill_turn() -> None:
         == ExecutionStrategy.SKILL
     )
     assert decision.expected_model_calls == 1
+
+
+def test_file_check_is_not_misclassified_as_chat() -> None:
+    decision = create_router().route(
+        "Проверь этот файл и найди ошибку"
+    )
+
+    assert decision.intent != IntentKind.CHAT
+    assert decision.needs_tools
 def test_run_tests_is_not_application_open() -> None:
     decision = create_router().route(
         "Запусти тесты"

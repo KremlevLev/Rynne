@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from typing import Any
 
@@ -25,6 +26,7 @@ from modules.agent.recovery import (
     set_mcp_recovery_tools,
 )
 from modules.domain.results import ToolResult
+from modules.tools.runtime import ToolRegistry
 
 
 def test_mcp_server_config_timeout_params() -> None:
@@ -668,6 +670,139 @@ def test_mcp_gateway_register_server_with_env() -> None:
     assert gateway._servers["github"].env == {"GITHUB_TOKEN": "test_token"}
 
 
+def test_mcp_gateway_uses_sdk_session_for_discovery_and_calls() -> None:
+    class FakeTool:
+        def model_dump(self, **kwargs) -> dict:
+            return {
+                "name": "read_value",
+                "description": "Reads a value.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "key": {"type": "string"},
+                    },
+                    "required": ["key"],
+                },
+            }
+
+    class FakeListResult:
+        tools = [FakeTool()]
+
+    class FakeText:
+        def model_dump(self, **kwargs) -> dict:
+            return {
+                "type": "text",
+                "text": "value=42",
+            }
+
+    class FakeCallResult:
+        isError = False
+        structuredContent = {"value": 42}
+        content = [FakeText()]
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.arguments: dict | None = None
+
+        async def list_tools(self) -> FakeListResult:
+            return FakeListResult()
+
+        async def call_tool(
+            self,
+            name: str,
+            arguments: dict,
+        ) -> FakeCallResult:
+            assert name == "read_value"
+            self.arguments = arguments
+            return FakeCallResult()
+
+    async def run_test() -> None:
+        gateway = MCPGateway()
+        config = MCPServerConfig(
+            name="project_files",
+            command="python",
+        )
+        fake_client = FakeClient()
+        gateway.register_server(config)
+        gateway._sdk_clients[
+            "project_files"
+        ] = fake_client
+
+        initialized = await gateway.initialize()
+        assert initialized.success
+        assert (
+            "mcp_project_files_read_value"
+            in gateway.get_available_tools()
+        )
+
+        registry = ToolRegistry()
+        count = await gateway.register_with_registry(
+            registry
+        )
+        assert count == 1
+        definition = registry.get(
+            "mcp_project_files_read_value"
+        )
+        assert definition is not None
+        assert inspect.iscoroutinefunction(
+            definition.handler
+        )
+
+        result = await gateway.call_tool(
+            "mcp_project_files_read_value",
+            {"key": "answer"},
+        )
+        assert result.success
+        assert result.data["structured_content"] == {
+            "value": 42,
+        }
+        assert fake_client.arguments == {
+            "key": "answer",
+        }
+
+    asyncio.run(run_test())
+
+
+def test_explicit_mcp_config_resolves_env(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from modules.agent.mcp_integration import (
+        create_mcp_gateway_from_config,
+        load_mcp_config,
+    )
+
+    monkeypatch.setenv(
+        "PROJECT_TOKEN",
+        "local-secret",
+    )
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        """
+        {
+          "mcpServers": {
+            "project": {
+              "command": "python",
+              "args": ["server.py"],
+              "env": {
+                "TOKEN": "${PROJECT_TOKEN}"
+              }
+            }
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    gateway = create_mcp_gateway_from_config(
+        load_mcp_config(config_path)
+    )
+
+    assert gateway._servers["project"].env == {
+        "TOKEN": "local-secret",
+    }
+
+
 # ==============================================================================
 # Filesystem MCP Server Integration Tests
 # ==============================================================================
@@ -682,7 +817,7 @@ def test_filesystem_server_config_in_defaults() -> None:
     assert "-y" in fs_config["args"]
     assert "@modelcontextprotocol/server-filesystem" in fs_config["args"]
     assert "--directory" in fs_config["args"]
-    assert fs_config["enabled"] is True  # Always enabled
+    assert fs_config["enabled"] is False
 
 
 def test_filesystem_mcp_tool_name_format() -> None:
@@ -700,12 +835,11 @@ def test_filesystem_mcp_tool_name_format() -> None:
         assert tool.startswith("mcp_filesystem_"), f"Tool {tool} should start with mcp_filesystem_"
 
 
-def test_filesystem_server_always_enabled() -> None:
-    """Test that Filesystem server is always enabled (no token required)."""
+def test_filesystem_server_requires_explicit_enable() -> None:
+    """Untrusted external servers are never started implicitly."""
     from modules.agent.mcp_integration import DEFAULT_MCP_SERVERS
     
-    # Filesystem server should be enabled by default
-    assert DEFAULT_MCP_SERVERS["filesystem"]["enabled"] is True
+    assert DEFAULT_MCP_SERVERS["filesystem"]["enabled"] is False
 
 
 # ==============================================================================
@@ -817,12 +951,11 @@ def test_websearch_server_config_in_defaults() -> None:
     assert "@modelcontextprotocol/server-web-search" in websearch_config["args"]
 
 
-def test_websearch_server_always_enabled() -> None:
-    """Test that Web Search server is always enabled (no token required)."""
+def test_websearch_server_requires_explicit_enable() -> None:
+    """Web search MCP must be configured explicitly."""
     from modules.agent.mcp_integration import DEFAULT_MCP_SERVERS
     
-    # Websearch server should be enabled by default
-    assert DEFAULT_MCP_SERVERS["websearch"]["enabled"] is True
+    assert DEFAULT_MCP_SERVERS["websearch"]["enabled"] is False
 
 
 def test_websearch_mcp_tool_name_format() -> None:
@@ -935,12 +1068,11 @@ def test_git_server_config_in_defaults() -> None:
     assert "@modelcontextprotocol/server-git" in git_config["args"]
 
 
-def test_git_server_always_enabled() -> None:
-    """Test that Git server is always enabled (no token required)."""
+def test_git_server_requires_explicit_enable() -> None:
+    """Git MCP must be configured explicitly."""
     from modules.agent.mcp_integration import DEFAULT_MCP_SERVERS
     
-    # Git server should be enabled by default
-    assert DEFAULT_MCP_SERVERS["git"]["enabled"] is True
+    assert DEFAULT_MCP_SERVERS["git"]["enabled"] is False
 
 
 def test_git_mcp_tool_name_format() -> None:
@@ -1015,12 +1147,12 @@ def test_docker_server_config_in_defaults() -> None:
     assert "@modelcontextprotocol/server-docker" in docker_config["args"]
 
 
-def test_docker_server_always_enabled() -> None:
-    """Test that Docker server is always enabled (no token required)."""
+def test_docker_server_requires_explicit_enable() -> None:
+    """Docker MCP must be configured explicitly."""
     from modules.agent.mcp_integration import DEFAULT_MCP_SERVERS
     
     # Docker server should be enabled by default
-    assert DEFAULT_MCP_SERVERS["docker"]["enabled"] is True
+    assert DEFAULT_MCP_SERVERS["docker"]["enabled"] is False
 
 
 def test_docker_mcp_tool_name_format() -> None:
@@ -1153,7 +1285,7 @@ def test_mcp_auto_discovery_create_server_configs() -> None:
     
     assert len(configs) == 2
     assert configs[0].name == "mcp_port_3000"
-    assert configs[0].transport == "sse"
+    assert configs[0].transport == "streamable_http"
     assert configs[0].url == "http://localhost:3000/mcp"
     assert configs[1].name == "mcp_port_8000"
     assert configs[1].transport == "sse"
@@ -1161,7 +1293,7 @@ def test_mcp_auto_discovery_create_server_configs() -> None:
 
 def test_mcp_auto_discovery_gw_integration() -> None:
     """Test MCP AutoDiscovery integrates with MCPGateway."""
-    from modules.agent.mcp_gateway import MCPGateway, MCPAutoDiscovery, MCPDiscoveryResult
+    from modules.agent.mcp_gateway import MCPGateway, MCPAutoDiscovery
     
     async def run_test() -> None:
         gateway = MCPGateway()
@@ -1206,8 +1338,8 @@ def test_bootstrap_mcp_with_auto_discovery_disabled() -> None:
         )
         
         assert gateway is not None
-        # Should have at least filesystem and git enabled by default
-        assert "filesystem" in gateway._servers
+        # No external process is started without an explicit config.
+        assert gateway._servers == {}
     
     asyncio.run(run_test())
 

@@ -386,10 +386,10 @@ def _install_shortcuts(
     bind("Ctrl+Return", composer._on_send_clicked)
     bind(
         "Ctrl+Shift+Space",
-        lambda: (
-            voice_overlay.show_overlay(),
-            _send_command(command_queue, "toggle_voice_mode"),
-        ),
+        # Глобальный keyboard hook в main.py выполняет переключение режима.
+        # Локальный QShortcut только показывает overlay: иначе одно физическое
+        # нажатие при активном окне Nova отправляло toggle дважды.
+        voice_overlay.show_overlay,
     )
     bind(
         "Escape",

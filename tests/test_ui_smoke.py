@@ -7,8 +7,6 @@ Smoke test для нового UI.
 """
 from __future__ import annotations
 
-import pytest
-
 
 class TestUISmoke:
     """Smoke tests для UI-модулей."""
@@ -71,6 +69,27 @@ class TestUISmoke:
         assert NovaOrb is not None
         assert VoiceOverlay is not None
 
+    def test_orb_renders_all_voice_states(self) -> None:
+        """Регрессия: Ctrl+Shift+Space не должен ломать QPainter."""
+        from modules.ui.orb import NovaOrb
+
+        orb = NovaOrb(size=64)
+        orb.resize(64, 64)
+
+        for state in (
+            "idle",
+            "listening",
+            "thinking",
+            "working",
+            "speaking",
+            "success",
+            "error",
+            "offline",
+        ):
+            orb.set_state(state)
+            pixmap = orb.grab()
+            assert not pixmap.isNull()
+
     def test_import_command_palette(self) -> None:
         from modules.ui.command_palette import (
             CommandPalette,
@@ -119,13 +138,10 @@ class TestUISmoke:
         """Проверяет, что токены theme согласованы."""
         from modules.ui.theme import (
             DARK_COLORS,
-            LIGHT_COLORS,
             RADIUS,
             SPACING,
-            FONT_SIZES,
             DURATIONS,
             EASING,
-            SHADOWS,
         )
 
         # Все цвета должны быть строками
