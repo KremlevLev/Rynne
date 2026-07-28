@@ -2,7 +2,6 @@
 """Тесты для design tokens и theme."""
 from __future__ import annotations
 
-import pytest
 
 from modules.ui.theme import (
     Theme,
@@ -63,7 +62,8 @@ class TestTheme:
     def test_font_family(self) -> None:
         t = Theme()
         assert "JetBrains" in t.font_family(mono=True)
-        assert "JetBrains" in t.font_family()
+        assert "Segoe UI" in t.font_family()
+        assert "JetBrains" not in t.font_family()
 
     def test_duration(self) -> None:
         t = Theme()
@@ -133,6 +133,7 @@ class TestTheme:
         assert "lg" in RADIUS
         assert "xl" in RADIUS
         assert "pill" in RADIUS
+        assert RADIUS["md"] != "0px"
 
     def test_duration_keys(self) -> None:
         assert "micro" in DURATIONS

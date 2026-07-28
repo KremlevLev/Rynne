@@ -23,25 +23,19 @@
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 from PySide6.QtCore import (
     Qt,
     QTimer,
     QPropertyAnimation,
     QEasingCurve,
-    Property,
-    QRect,
 )
 from PySide6.QtGui import (
     QFont,
-    QPalette,
     QColor,
-    QPixmap,
     QPainter,
-    QPen,
     QBrush,
-    QAction,
 )
 from PySide6.QtWidgets import (
     QWidget,
@@ -52,12 +46,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QFrame,
     QMenu,
-    QStyle,
-    QStyleOptionButton,
-    QApplication,
     QGraphicsOpacityEffect,
-    QSizePolicy,
-    QTextEdit,
 )
 
 from modules.ui.theme import theme
@@ -70,7 +59,10 @@ from modules.ui.theme import theme
 def _set_font(widget: QWidget, size_key: str = "body",
               weight_key: str = "regular", mono: bool = False) -> None:
     """Устанавливает шрифт на виджет из design tokens."""
-    font = QFont(theme.font_family(mono=mono))
+    # QFont принимает одно имя семейства, а не CSS fallback-список.
+    # Передача строки вида "'Inter', 'Segoe UI', sans-serif" приводила
+    # к tofu-квадратам вместо кириллицы на части Windows-систем.
+    font = QFont("Cascadia Mono" if mono else "Segoe UI")
     font.setPixelSize(theme.font_size(size_key))
     font.setWeight(QFont.Weight(theme.font_weight(weight_key)))
     widget.setFont(font)
@@ -492,6 +484,7 @@ class Dropdown(QFrame):
         super().__init__(parent)
         self._is_open = False
         self._menu: QMenu | None = None
+        self._items: list[tuple[str, str]] = []
         self._selected_text = placeholder
         self._on_select: Callable[[str], None] | None = None
         self._setup_ui()
@@ -526,8 +519,22 @@ class Dropdown(QFrame):
             self._open()
 
     def _open(self) -> None:
+        if not self._items:
+            return
         self._is_open = True
         self._arrow.setText("▲")
+        if self._menu is None:
+            self._menu = QMenu(self)
+        self._menu.clear()
+        for label, value in self._items:
+            action = self._menu.addAction(label)
+            action.triggered.connect(
+                lambda checked=False, item_label=label, item_value=value: (
+                    self._select(item_label, item_value)
+                )
+            )
+        self._menu.aboutToHide.connect(self._close)
+        self._menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
 
     def _close(self) -> None:
         self._is_open = False
@@ -535,7 +542,17 @@ class Dropdown(QFrame):
 
     def set_items(self, items: list[tuple[str, str]]) -> None:
         """Устанавливает список (label, value)."""
-        pass
+        self._items = [
+            (str(label), str(value))
+            for label, value in items
+        ]
+
+    def _select(self, label: str, value: str) -> None:
+        self._selected_text = label
+        self._button.setText(label)
+        self._close()
+        if self._on_select is not None:
+            self._on_select(value)
 
     def on_select(self, callback: Callable[[str], None]) -> None:
         self._on_select = callback

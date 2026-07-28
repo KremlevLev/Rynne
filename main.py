@@ -757,7 +757,14 @@ async def async_main() -> None:
         handlers,
     )
 
-    runner = ToolRunner(registry)
+    runner = ToolRunner(
+        registry,
+        event_sink=(
+            desktop_service.publish
+            if NOVA_DESKTOP_UI
+            else None
+        ),
+    )
 
     # =========================================================
     # PLAN SERVICES
@@ -859,6 +866,7 @@ async def async_main() -> None:
     # MCP tools are dynamically added if servers are available.
     # This is non-blocking - if MCP fails, the agent continues without it.
     
+    mcp_gateway = None
     try:
         from modules.agent.mcp_integration import bootstrap_mcp_with_auto_discovery
         
@@ -986,6 +994,11 @@ async def async_main() -> None:
         response_handler=(
             handle_request_response
         ),
+        event_handler=(
+            desktop_service.publish
+            if NOVA_DESKTOP_UI
+            else None
+        ),
     )
 
     request_service_task = asyncio.create_task(
@@ -1042,6 +1055,7 @@ async def async_main() -> None:
         background_plan_manager=(
             background_plan_manager
         ),
+        mcp_gateway=mcp_gateway,
 
     )
 

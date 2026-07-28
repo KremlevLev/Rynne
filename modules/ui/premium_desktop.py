@@ -1,103 +1,182 @@
-# modules/ui/premium_desktop.py
-"""
-Новый премиальный Desktop UI для Nova.
+"""Современный Desktop UI Nova.
 
-Это entry point для нового UI, который:
-  - использует AppShell с sidebar, workspace и context panel;
-  - подписывается на существующие события через event bus;
-  - отправляет команды через существующие интерфейсы;
-  - не содержит логики агента;
-  - не делает прямых вызовов к провайдерам, MCP или базе.
-
-Старый desktop.py сохраняется как fallback за feature flag.
+Модуль остаётся тонким presentation layer: получает сериализуемые события
+от CoreDesktopBridge и отправляет команды обратно через multiprocessing queue.
 """
 from __future__ import annotations
 
 import queue
 import sys
+import time
+from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
+from PySide6.QtWidgets import QApplication
 
+from modules.ui.chat import (
+    ArtifactCard,
+    ChatMessage,
+    ChatView,
+    Composer,
+    ToolActivityCard,
+)
+from modules.ui.command_palette import Command, CommandPalette
+from modules.ui.control_center import (
+    IntegrationsPage,
+    MemoryPage,
+    ProcessesPage,
+    SettingsPage,
+)
 from modules.ui.desktop_protocol import make_command
-from modules.ui.theme import theme
+from modules.ui.orb import VoiceOverlay
 from modules.ui.shell import AppShell
-from modules.ui.chat import ChatView, ChatMessage, Composer, ToolActivityCard
-from modules.ui.orb import NovaOrb, VoiceOverlay
-from modules.ui.command_palette import CommandPalette, Command
 from modules.ui.task_view import TaskView
-from modules.ui.primitives import EmptyState, Button
+from modules.ui.theme import theme
 
 
-def run_premium_desktop(
-    *,
-    event_queue,
-    command_queue,
-) -> None:
-    """
-    Точка входа для нового премиального Desktop UI.
-
-    Подписывается на события из event_queue и отображает их
-    через новые компоненты. Команды отправляются в command_queue.
-    """
-    try:
-        from PySide6.QtWidgets import QApplication
-    except ImportError:
-        return
-
+def run_premium_desktop(*, event_queue, command_queue) -> None:
+    """Запускает UI-процесс и связывает реальные экраны с IPC-командами."""
     app = QApplication(sys.argv)
-
-    # Применяем design tokens
+    app.setApplicationName("Nova")
+    app.setOrganizationName("Nova")
+    app.setFont(QFont("Segoe UI", 10))
     theme.set_mode("dark")
 
-    # Создаём AppShell
-    shell = AppShell()
-    shell.show()
-    shell.raise_()
-    shell.activateWindow()
+    state: dict[str, Any] = {
+        "activity_cards": {},
+        "seen_requests": set(),
+        "permission_id": "",
+        "active_task_id": "",
+    }
 
-    # --- Центральный экран: чат ---
+    shell = AppShell()
     chat_view = ChatView()
     composer = Composer(
-        on_submit=lambda text, opts: _submit_request(
-            command_queue, text, opts
+        on_submit=lambda text, options: _submit_request(
+            command_queue, text, options
         ),
         on_voice_toggle=lambda: _toggle_voice(command_queue),
     )
-
-    chat_container = shell.workspace
-    chat_container.addWidget(chat_view)
-
-    # --- Task View (скрыт пока нет активной задачи) ---
     task_view = TaskView(
-        on_pause=lambda: _send_command(command_queue, "pause_task"),
-        on_cancel=lambda: _send_command(command_queue, "cancel_task"),
-        on_approve=lambda: _send_command(command_queue, "approve_task"),
+        on_pause=lambda: _send_task_command(
+            command_queue, "pause_task", state
+        ),
+        on_cancel=lambda: _send_task_command(
+            command_queue, "cancel_task", state
+        ),
+        on_approve=lambda: _approve_permission(command_queue, state),
+        on_deny=lambda: _deny_permission(command_queue, state),
     )
-    chat_container.addWidget(task_view)
-    # QStackedWidget управляет видимостью сам; setCurrentWidget
-    # переключает между chat_view и task_view.
-    chat_container.setCurrentWidget(chat_view)
+    processes_page = ProcessesPage()
+    memory_page = MemoryPage()
+    integrations_page = IntegrationsPage()
+    settings_page = SettingsPage()
 
-    # Добавляем composer в центральный layout (внизу, под чатом)
-    shell._center_layout.setStretchFactor(shell.workspace, 1)
+    shell.add_workspace_screen(
+        "chat",
+        chat_view,
+        title="Диалог",
+        subtitle="Поставьте задачу — Nova сама выберет оркестратор и инструменты",
+    )
+    shell.add_workspace_screen(
+        "tasks",
+        task_view,
+        title="Задачи",
+        subtitle="План, прогресс и действия активного оркестратора",
+    )
+    shell.add_workspace_screen(
+        "processes",
+        processes_page,
+        title="Процессы",
+        subtitle="Фоновые процессы, которыми управляет Nova",
+    )
+    shell.add_workspace_screen(
+        "memory",
+        memory_page,
+        title="Память",
+        subtitle="Факты, доступные агенту между сессиями",
+    )
+    shell.add_workspace_screen(
+        "integrations",
+        integrations_page,
+        title="MCP-интеграции",
+        subtitle="Реальные серверы и зарегистрированные инструменты",
+    )
+    shell.add_workspace_screen(
+        "settings",
+        settings_page,
+        title="Настройки",
+        subtitle="Профиль, модель, приватность и поведение Nova",
+    )
+    shell.show_screen("chat")
     shell._center_layout.addWidget(composer)
 
-    # --- Command Palette ---
     palette = CommandPalette()
     shell.overlay_layout.addWidget(palette)
     palette.hide()
-    _register_palette_commands(palette, shell, command_queue)
+    _register_palette_commands(palette, shell, command_queue, composer)
 
-    # --- Voice Overlay ---
     voice_overlay = VoiceOverlay(
         on_stop=lambda: _send_command(command_queue, "cancel_current_request")
     )
     shell.overlay_layout.addWidget(voice_overlay)
-    shell.overlay_layout.setAlignment(voice_overlay, Qt.AlignBottom | Qt.AlignHCenter)
+    shell.overlay_layout.setAlignment(
+        voice_overlay, Qt.AlignBottom | Qt.AlignHCenter
+    )
     voice_overlay.hide()
 
-    # --- Event loop ---
+    chat_view.starter_selected.connect(
+        lambda prompt: (composer.set_text(prompt), composer.focus_input())
+    )
+    shell.new_task_requested.connect(
+        lambda: _start_new_task(shell, chat_view, task_view, composer, command_queue)
+    )
+    shell.navigate.connect(
+        lambda section: _on_navigate(section, command_queue)
+    )
+    processes_page.stop_requested.connect(
+        lambda process_id, force: _send_command(
+            command_queue,
+            "stop_process",
+            {"process_id": process_id, "force": force},
+        )
+    )
+    processes_page.refresh_requested.connect(
+        lambda: _send_command(command_queue, "refresh")
+    )
+    memory_page.delete_requested.connect(
+        lambda key: _send_command(
+            command_queue, "delete_memory", {"key": key}
+        )
+    )
+    memory_page.clear_requested.connect(
+        lambda: _send_command(command_queue, "clear_memories")
+    )
+    integrations_page.refresh_requested.connect(
+        lambda: _send_command(command_queue, "refresh")
+    )
+    settings_page.preference_changed.connect(
+        lambda key, value: _send_command(
+            command_queue,
+            "set_preference",
+            {"key": key, "value": value},
+        )
+    )
+
+    shell.show()
+    shell.raise_()
+    shell.activateWindow()
+    composer.focus_input()
+
+    _install_shortcuts(
+        shell=shell,
+        composer=composer,
+        palette=palette,
+        voice_overlay=voice_overlay,
+        command_queue=command_queue,
+    )
     _run_event_loop(
         app=app,
         shell=shell,
@@ -108,6 +187,11 @@ def run_premium_desktop(
         voice_overlay=voice_overlay,
         event_queue=event_queue,
         command_queue=command_queue,
+        processes_page=processes_page,
+        memory_page=memory_page,
+        integrations_page=integrations_page,
+        settings_page=settings_page,
+        state=state,
     )
 
 
@@ -116,7 +200,6 @@ def _submit_request(
     text: str,
     options: dict[str, Any],
 ) -> None:
-    """Отправляет запрос пользователя через command_queue."""
     _send_command(
         command_queue,
         "submit_user_request",
@@ -124,12 +207,13 @@ def _submit_request(
             "text": text,
             "profile": options.get("profile", "assistant"),
             "model_mode": options.get("model_mode", "auto"),
+            "selected_model": options.get("selected_model"),
+            "attachments": options.get("attachments", []),
         },
     )
 
 
 def _toggle_voice(command_queue: queue.Queue) -> None:
-    """Переключает голосовой режим."""
     _send_command(command_queue, "toggle_voice_mode")
 
 
@@ -138,78 +222,188 @@ def _send_command(
     action: str,
     payload: dict[str, Any] | None = None,
 ) -> None:
-    """Отправляет команду в command_queue."""
     command = make_command(action, payload)
     try:
         command_queue.put_nowait(command)
     except queue.Full:
-        pass
+        return
+
+
+def _send_task_command(
+    command_queue: queue.Queue,
+    action: str,
+    state: dict[str, Any],
+) -> None:
+    _send_command(
+        command_queue,
+        action,
+        {"task_id": str(state.get("active_task_id", ""))},
+    )
+
+
+def _approve_permission(
+    command_queue: queue.Queue,
+    state: dict[str, Any],
+) -> None:
+    operation_id = str(state.get("permission_id", ""))
+    if operation_id:
+        _send_command(
+            command_queue,
+            "confirm_permission",
+            {"operation_id": operation_id},
+        )
+
+
+def _deny_permission(
+    command_queue: queue.Queue,
+    state: dict[str, Any],
+) -> None:
+    operation_id = str(state.get("permission_id", ""))
+    if operation_id:
+        _send_command(
+            command_queue,
+            "deny_permission",
+            {"operation_id": operation_id},
+        )
+
+
+def _start_new_task(
+    shell: AppShell,
+    chat_view: ChatView,
+    task_view: TaskView,
+    composer: Composer,
+    command_queue: queue.Queue,
+) -> None:
+    chat_view.clear()
+    task_view.clear()
+    shell.sidebar.activate("chat")
+    shell.context_panel.hide_panel()
+    composer.set_disabled(False)
+    composer.set_mode("Safe autonomy")
+    composer.focus_input()
+    _send_command(command_queue, "new_task")
+
+
+def _on_navigate(section: str, command_queue: queue.Queue) -> None:
+    if section in {"processes", "memory", "integrations", "settings", "tasks"}:
+        _send_command(command_queue, "refresh")
 
 
 def _register_palette_commands(
     palette: CommandPalette,
     shell: AppShell,
     command_queue: queue.Queue,
+    composer: Composer | None = None,
 ) -> None:
-    """Регистрирует команды в command palette."""
-    palette.add_commands([
-        Command(
-            "Новая задача",
-            category="Session",
-            hotkey="Ctrl+N",
-            icon="✚",
-            callback=lambda: _send_command(command_queue, "new_task"),
+    def show(key: str) -> None:
+        shell.sidebar.activate(key)
+
+    palette.add_commands(
+        [
+            Command(
+                "Новая задача",
+                category="Session",
+                hotkey="Ctrl+N",
+                icon="+",
+                callback=lambda: shell.new_task_requested.emit(),
+            ),
+            Command(
+                "Открыть диалог",
+                category="Navigation",
+                icon="⌁",
+                callback=lambda: show("chat"),
+            ),
+            Command(
+                "Открыть задачи",
+                category="Navigation",
+                icon="✓",
+                callback=lambda: show("tasks"),
+            ),
+            Command(
+                "Открыть процессы",
+                category="Navigation",
+                icon="▣",
+                callback=lambda: show("processes"),
+            ),
+            Command(
+                "Открыть память",
+                category="Navigation",
+                icon="◇",
+                callback=lambda: show("memory"),
+            ),
+            Command(
+                "Открыть MCP-интеграции",
+                category="Navigation",
+                icon="↗",
+                callback=lambda: show("integrations"),
+            ),
+            Command(
+                "Открыть настройки",
+                category="Navigation",
+                hotkey="Ctrl+,",
+                icon="⚙",
+                callback=lambda: show("settings"),
+            ),
+            Command(
+                "Переключить голосовой режим",
+                category="Voice",
+                hotkey="Ctrl+Shift+Space",
+                icon="◎",
+                callback=lambda: _send_command(
+                    command_queue, "toggle_voice_mode"
+                ),
+            ),
+            Command(
+                "Отменить текущий запрос",
+                category="Task",
+                icon="×",
+                callback=lambda: _send_command(
+                    command_queue, "cancel_current_request"
+                ),
+            ),
+        ]
+    )
+
+
+def _install_shortcuts(
+    *,
+    shell: AppShell,
+    composer: Composer,
+    palette: CommandPalette,
+    voice_overlay: VoiceOverlay,
+    command_queue: queue.Queue,
+) -> None:
+    shortcuts: list[QShortcut] = []
+
+    def bind(sequence: str, callback) -> None:
+        shortcut = QShortcut(QKeySequence(sequence), shell)
+        shortcut.activated.connect(callback)
+        shortcuts.append(shortcut)
+
+    bind("Ctrl+K", palette.show_palette)
+    bind("Ctrl+,", lambda: shell.sidebar.activate("settings"))
+    bind("Ctrl+N", shell.new_task_requested.emit)
+    bind("Ctrl+Return", composer._on_send_clicked)
+    bind(
+        "Ctrl+Shift+Space",
+        lambda: (
+            voice_overlay.show_overlay(),
+            _send_command(command_queue, "toggle_voice_mode"),
         ),
-        Command(
-            "Начать голосовой режим",
-            category="Voice",
-            hotkey="Ctrl+Shift+Space",
-            icon="🎙",
-            callback=lambda: _send_command(command_queue, "toggle_voice_mode"),
+    )
+    bind(
+        "Escape",
+        lambda: (
+            palette.hide(),
+            voice_overlay.hide_overlay(),
         ),
-        Command(
-            "Открыть настройки",
-            category="General",
-            hotkey="Ctrl+,",
-            icon="⚙",
-            callback=lambda: _send_command(command_queue, "open_settings"),
-        ),
-        Command(
-            "Переключить модель",
-            category="Models",
-            icon="🤖",
-            callback=lambda: _send_command(command_queue, "switch_model"),
-        ),
-        Command(
-            "Пауза активной задачи",
-            category="Task",
-            icon="⏸",
-            callback=lambda: _send_command(command_queue, "pause_task"),
-        ),
-        Command(
-            "Отменить активную задачу",
-            category="Task",
-            icon="⏹",
-            callback=lambda: _send_command(command_queue, "cancel_task"),
-        ),
-        Command(
-            "Открыть MCP менеджер",
-            category="Integrations",
-            icon="🔌",
-            callback=lambda: _send_command(command_queue, "open_mcp_manager"),
-        ),
-        Command(
-            "Открыть диагностику",
-            category="Advanced",
-            icon="📊",
-            callback=lambda: _send_command(command_queue, "open_diagnostics"),
-        ),
-    ])
+    )
+    shell._nova_shortcuts = shortcuts
 
 
 def _run_event_loop(
     *,
-    app: Any,
+    app: QApplication,
     shell: AppShell,
     chat_view: ChatView,
     composer: Composer,
@@ -218,22 +412,22 @@ def _run_event_loop(
     voice_overlay: VoiceOverlay,
     event_queue: queue.Queue,
     command_queue: queue.Queue,
+    processes_page: ProcessesPage,
+    memory_page: MemoryPage,
+    integrations_page: IntegrationsPage,
+    settings_page: SettingsPage,
+    state: dict[str, Any],
 ) -> None:
-    """Главный event loop — обрабатывает события из event_queue."""
-    from PySide6.QtCore import QTimer, QTimer as _QTimer
-
     def process_events() -> None:
-        for _ in range(100):
+        for _ in range(120):
             try:
                 event = event_queue.get_nowait()
             except queue.Empty:
                 break
             except (BrokenPipeError, EOFError, OSError):
                 break
-
             if not isinstance(event, dict):
                 continue
-
             _handle_event(
                 event,
                 shell=shell,
@@ -243,68 +437,59 @@ def _run_event_loop(
                 palette=palette,
                 voice_overlay=voice_overlay,
                 command_queue=command_queue,
+                processes_page=processes_page,
+                memory_page=memory_page,
+                integrations_page=integrations_page,
+                settings_page=settings_page,
+                state=state,
             )
 
     timer = QTimer(app)
     timer.timeout.connect(process_events)
     timer.start(50)
-
-    # Горячие клавиши
-    from PySide6.QtGui import QShortcut, QKeySequence
-
-    # Ctrl+K — command palette
-    shortcut = QShortcut(QKeySequence("Ctrl+K"), shell)
-    shortcut.activated.connect(palette.show_palette)
-
-    # Ctrl+, — настройки
-    settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), shell)
-    settings_shortcut.activated.connect(
-        lambda: _send_command(command_queue, "open_settings")
-    )
-
-    # Ctrl+N — новая задача
-    new_task_shortcut = QShortcut(QKeySequence("Ctrl+N"), shell)
-    new_task_shortcut.activated.connect(
-        lambda: _send_command(command_queue, "new_task")
-    )
-
-    # Ctrl+Enter — отправить
-    send_shortcut = QShortcut(QKeySequence("Ctrl+Return"), shell)
-    send_shortcut.activated.connect(composer._on_send_clicked)
-
-    # Ctrl+Shift+Space — голосовой overlay
-    voice_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Space"), shell)
-    voice_shortcut.activated.connect(
-        lambda: voice_overlay.show_overlay()
-    )
-
+    app._nova_event_timer = timer
     app.exec()
 
 
 def _handle_event(
     event: dict[str, Any],
     *,
-    shell: AppShell,
-    chat_view: ChatView,
-    composer: Composer,
-    task_view: TaskView,
-    palette: CommandPalette,
-    voice_overlay: VoiceOverlay,
+    shell: Any,
+    chat_view: Any,
+    composer: Any,
+    task_view: Any,
+    palette: Any,
+    voice_overlay: Any,
     command_queue: queue.Queue | None = None,
+    processes_page: ProcessesPage | None = None,
+    memory_page: MemoryPage | None = None,
+    integrations_page: IntegrationsPage | None = None,
+    settings_page: SettingsPage | None = None,
+    state: dict[str, Any] | None = None,
 ) -> None:
-    """Обрабатывает одно событие из event_queue."""
-    event_type = event.get("event_type", "")
+    """Применяет одно backend-событие к UI.
+
+    Дополнительные экраны optional, чтобы mapping можно было тестировать
+    без поднятия полного окна.
+    """
+    del palette
+    state = state if state is not None else {}
+    activity_cards: dict[str, ToolActivityCard] = state.setdefault(
+        "activity_cards", {}
+    )
+    seen_requests: set[str] = state.setdefault("seen_requests", set())
+    event_type = str(event.get("event_type", ""))
     payload = event.get("payload", {})
+    if not isinstance(payload, dict):
+        payload = {}
 
     if event_type == "shutdown":
         shell.close()
         return
 
     if event_type == "runtime":
-        state = str(payload.get("state", "НЕИЗВЕСТНО"))
-        active = payload.get("active", False)
-
-        state_labels = {
+        runtime_state = str(payload.get("state", "UNKNOWN"))
+        status_map = {
             "SLEEPING": ("offline", "Спит"),
             "LISTENING": ("active", "Слушает"),
             "THINKING": ("active", "Думает"),
@@ -312,195 +497,351 @@ def _handle_event(
             "SPEAKING": ("active", "Говорит"),
             "ERROR": ("danger", "Ошибка"),
         }
-        status, label = state_labels.get(state, ("idle", state))
+        status, label = status_map.get(runtime_state, ("idle", "Готова"))
         shell.set_status(status, label)
-
-        # Обновляем voice overlay
-        if state == "LISTENING":
+        if runtime_state == "LISTENING":
             voice_overlay.show_overlay()
             voice_overlay.set_state("listening")
-        elif state == "THINKING":
-            voice_overlay.set_state("thinking")
-        elif state == "WORKING":
-            voice_overlay.set_state("working")
-        elif state == "SPEAKING":
-            voice_overlay.set_state("speaking")
-        elif state == "SLEEPING":
+            if hasattr(composer, "set_voice_state"):
+                composer.set_voice_state(True, listening=True)
+        elif runtime_state in {"THINKING", "WORKING", "SPEAKING"}:
+            voice_overlay.set_state(runtime_state.lower())
+        elif runtime_state == "SLEEPING":
             voice_overlay.hide_overlay()
+            if hasattr(composer, "set_voice_state"):
+                composer.set_voice_state(False)
+        return
 
-    elif event_type == "user_message":
-        msg = ChatMessage(
-            author="Вы",
-            text=str(payload.get("text", "")),
-            is_user=True,
-            timestamp=_format_time(payload),
-            status="sent",
+    if event_type == "request_started":
+        request_id = str(payload.get("request_id", ""))
+        text = str(payload.get("text", ""))
+        if request_id and request_id not in seen_requests:
+            seen_requests.add(request_id)
+            chat_view.add_message(
+                ChatMessage(
+                    author="Вы",
+                    text=text,
+                    is_user=True,
+                    timestamp=_format_time(payload),
+                    status="в очереди",
+                )
+            )
+        if hasattr(composer, "set_mode"):
+            composer.set_mode("Nova работает…")
+        if hasattr(shell, "show_screen"):
+            shell.show_screen("chat")
+        return
+
+    if event_type == "request_cancelled":
+        if hasattr(composer, "set_mode"):
+            composer.set_mode("Запрос отменён")
+        return
+
+    if event_type == "request_failed":
+        if hasattr(composer, "set_mode"):
+            composer.set_mode("Ошибка выполнения")
+        chat_view.add_message(
+            ChatMessage(
+                author="Nova",
+                text=str(payload.get("error", "Запрос завершился ошибкой.")),
+                is_user=False,
+                timestamp=_format_time(payload),
+                status="ошибка",
+            )
         )
-        chat_view.add_message(msg)
+        return
 
-    elif event_type == "assistant_message":
-        msg = ChatMessage(
+    if event_type == "user_message":
+        request_id = str(payload.get("request_id", ""))
+        if request_id and request_id in seen_requests:
+            return
+        if request_id:
+            seen_requests.add(request_id)
+        chat_view.add_message(
+            ChatMessage(
+                author="Вы",
+                text=str(payload.get("text", "")),
+                is_user=True,
+                timestamp=_format_time(payload),
+                status="отправлено",
+            )
+        )
+        return
+
+    if event_type == "assistant_message":
+        success = bool(payload.get("success", True))
+        message = ChatMessage(
             author="Nova",
             text=str(payload.get("display_text", "")),
             is_user=False,
             timestamp=_format_time(payload),
-            status="sent",
+            status="готово" if success else "ошибка",
         )
-        chat_view.add_message(msg)
+        if not success and command_queue is not None:
+            message.add_action(
+                "Повторить",
+                lambda: _send_command(command_queue, "retry_last"),
+            )
+        _add_artifacts(message, payload, command_queue)
+        chat_view.add_message(message)
+        if hasattr(composer, "set_mode"):
+            composer.set_mode("Safe autonomy")
+        return
 
-        # Добавляем действия
-        if payload.get("success"):
-            msg.add_action("Открыть", lambda: None)
-        else:
-            def _retry() -> None:
-                if command_queue is not None:
-                    _send_command(
-                        command_queue, "retry_last"
-                    )
-            msg.add_action("Повторить", _retry)
-
-    elif event_type == "tool_started":
-        # Добавляем ToolActivityCard в чат
-        tool_name = str(payload.get("tool_name", ""))
-        description = str(payload.get("description", ""))
+    if event_type == "tool_started":
+        operation_id = str(
+            payload.get("operation_id")
+            or payload.get("tool_call_id")
+            or f"tool-{len(activity_cards)}"
+        )
+        tool_name = str(payload.get("tool_name", "tool"))
         card = ToolActivityCard(
             tool_name=tool_name,
-            description=description or tool_name,
+            description=str(payload.get("description") or _humanize_tool(tool_name)),
             status="active",
         )
+        details = payload.get("details")
+        if details:
+            card.set_details(str(details))
+        activity_cards[operation_id] = card
         chat_view.add_widget(card)
+        return
 
-    elif event_type == "tool_completed":
-        # Обновляем последнюю ToolActivityCard
-        if chat_view._messages:
-            last_msg = chat_view._messages[-1]
-            if last_msg._artifacts:
-                last_artifact = last_msg._artifacts[-1]
-                if isinstance(last_artifact, ToolActivityCard):
-                    last_artifact.set_status("success")
-                    last_artifact.set_duration(
-                        str(payload.get("duration", ""))
-                    )
-                    last_artifact.set_details(
-                        str(payload.get("result", ""))
-                    )
+    if event_type == "tool_completed":
+        operation_id = str(
+            payload.get("operation_id")
+            or payload.get("tool_call_id")
+            or ""
+        )
+        card = activity_cards.get(operation_id)
+        if card is None:
+            tool_name = str(payload.get("tool_name", "tool"))
+            card = ToolActivityCard(
+                tool_name=tool_name,
+                description=_humanize_tool(tool_name),
+            )
+            chat_view.add_widget(card)
+        success = bool(payload.get("success", True))
+        card.set_status("success" if success else "danger")
+        duration_ms = payload.get("duration_ms")
+        if duration_ms is not None:
+            card.set_duration(f"{int(duration_ms)} мс")
+        card.set_details(str(payload.get("message") or payload.get("result") or ""))
+        return
 
-    elif event_type == "task_started":
-        # Переключаемся на task_view (если shell имеет workspace)
-        if hasattr(shell, "workspace"):
-            shell.workspace.setCurrentWidget(task_view)
+    if event_type == "task_started":
+        state["active_task_id"] = str(payload.get("task_id", ""))
+        if hasattr(task_view, "clear"):
+            task_view.clear()
+        if hasattr(shell, "show_screen"):
+            shell.show_screen("tasks")
         task_view.show()
         task_view.set_title(str(payload.get("title", "Новая задача")))
         task_view.set_status("active", "Выполняется")
-        task_view.set_task_id(str(payload.get("task_id", "")))
+        task_view.set_task_id(state["active_task_id"])
+        for step in payload.get("plan", []):
+            if isinstance(step, dict):
+                task_view.add_plan_step(
+                    str(step.get("text", "")),
+                    status=str(step.get("status", "pending")),
+                )
+        return
 
-        plan = payload.get("plan", [])
-        for step in plan:
-            task_view.add_plan_step(
-                str(step.get("text", "")),
-                status=step.get("status", "pending"),
-            )
-
-    elif event_type == "task_progress":
-        plan = payload.get("plan", [])
-        for i, step in enumerate(plan):
-            task_view.set_step_status(
-                i, step.get("status", "pending")
-            )
-
-        # Добавляем событие в timeline
+    if event_type == "task_progress":
+        for index, step in enumerate(payload.get("plan", [])):
+            if isinstance(step, dict):
+                task_view.set_step_status(
+                    index, str(step.get("status", "pending"))
+                )
         task_view.add_timeline_event(
             _format_time(payload),
-            str(payload.get("description", "")),
-            status=payload.get("status", "completed"),
+            str(payload.get("description", "Обновлён прогресс задачи")),
+            status=str(payload.get("status", "completed")),
         )
+        return
 
-    elif event_type == "task_completed":
-        task_view.set_status("success", "Завершена")
+    if event_type in {"task_completed", "task_failed", "task_cancelled"}:
+        if event_type == "task_completed":
+            task_view.set_status("success", "Завершена")
+            description = "Задача завершена"
+            status = "success"
+        elif event_type == "task_cancelled":
+            task_view.set_status("offline", "Отменена")
+            description = "Задача отменена"
+            status = "skipped"
+        else:
+            task_view.set_status("danger", "Ошибка")
+            description = f"Ошибка: {payload.get('error', '')}"
+            status = "failed"
         task_view.add_timeline_event(
-            _format_time(payload),
-            "Задача завершена",
-            status="success",
+            _format_time(payload), description, status=status
         )
+        return
 
-    elif event_type == "task_failed":
-        task_view.set_status("danger", "Ошибка")
-        task_view.add_timeline_event(
-            _format_time(payload),
-            f"Ошибка: {payload.get('error', '')}",
-            status="failed",
-        )
-
-    elif event_type == "approval_requested":
+    if event_type in {"approval_requested", "permissions"}:
+        permission = payload
+        if event_type == "permissions":
+            items = payload.get("items", [])
+            if not items:
+                if hasattr(shell, "set_badge"):
+                    shell.set_badge("tasks", 0)
+                return
+            permission = items[0] if isinstance(items[0], dict) else {}
+            if hasattr(shell, "set_badge"):
+                shell.set_badge("tasks", len(items))
+        operation_id = str(permission.get("operation_id", ""))
+        state["permission_id"] = operation_id
+        if hasattr(shell, "show_screen"):
+            shell.show_screen("tasks")
         task_view.show_approval(
             title="Nova просит разрешение",
-            description=str(payload.get("description", "")),
-            details=str(payload.get("details", "")),
+            description=str(
+                permission.get("description")
+                or permission.get("message")
+                or "Подтвердите действие."
+            ),
+            details=_permission_details(permission),
         )
+        return
 
-    elif event_type == "processes":
-        # Обновляем список процессов в task_view или context_panel
+    if event_type == "processes":
         items = payload.get("items", [])
-        if hasattr(task_view, "_processes"):
-            task_view._processes = items
+        if processes_page is not None:
+            processes_page.set_items(items if isinstance(items, list) else [])
+        if hasattr(shell, "set_badge"):
+            running = sum(
+                1
+                for item in items
+                if isinstance(item, dict) and item.get("is_running")
+            )
+            shell.set_badge("processes", running)
+        return
 
-    elif event_type == "memories":
-        # Обновляем список воспоминаний
+    if event_type == "memories":
         items = payload.get("items", [])
-        if hasattr(task_view, "_memories"):
-            task_view._memories = items
+        if memory_page is not None:
+            memory_page.set_items(items if isinstance(items, list) else [])
+        if hasattr(shell, "set_badge"):
+            shell.set_badge("memory", len(items) if isinstance(items, list) else 0)
+        return
 
-    elif event_type == "permissions":
-        # Показываем pending permissions
+    if event_type == "integrations":
         items = payload.get("items", [])
-        if items:
-            task_view.show()
-            shell.workspace.setCurrentWidget(task_view)
-            first = items[0]
-            task_view.show_approval(
-                title="Nova просит разрешение",
-                description=str(first.get("message", "")),
-                details=(
-                    f"Инструмент: {first.get('tool_name', '')}\n"
-                    f"Риск: {first.get('risk', '')}\n"
-                    f"Категория: {first.get('category', '')}"
-                ),
+        if integrations_page is not None:
+            integrations_page.set_items(
+                items if isinstance(items, list) else []
+            )
+        if hasattr(shell, "set_badge"):
+            connected = sum(
+                1
+                for item in items
+                if isinstance(item, dict) and int(item.get("tools_count", 0) or 0) > 0
+            )
+            shell.set_badge("integrations", connected)
+        return
+
+    if event_type == "preferences":
+        if settings_page is not None:
+            settings_page.set_preferences(payload)
+        if hasattr(composer, "set_mode"):
+            profile = str(payload.get("assistant_profile", "assistant"))
+            mode = str(payload.get("model_mode", "auto"))
+            composer.set_mode(f"{profile} · {mode}")
+        return
+
+    if event_type == "models":
+        shell.set_model(_model_label(payload))
+        return
+
+    if event_type == "command_result":
+        if not bool(payload.get("success", False)):
+            chat_view.add_message(
+                ChatMessage(
+                    author="Система",
+                    text=str(payload.get("message", "Команда не выполнена.")),
+                    is_user=False,
+                    timestamp=_format_time(payload),
+                    status="ошибка",
+                )
             )
 
-    elif event_type == "command_result":
-        # Логируем результат команды
-        msg = ChatMessage(
-            author="Система",
-            text=f"Команда: {payload.get('message', '')}",
-            is_user=False,
-            timestamp=_format_time(payload),
-            status="sent",
+
+def _add_artifacts(
+    message: ChatMessage,
+    payload: dict[str, Any],
+    command_queue: queue.Queue | None,
+) -> None:
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        data = payload.get("data", {})
+        artifacts = data.get("artifacts", []) if isinstance(data, dict) else []
+    for item in artifacts:
+        path = str(item.get("path", "")) if isinstance(item, dict) else str(item)
+        if not path:
+            continue
+        card = ArtifactCard(
+            title=Path(path).name or path,
+            artifact_type="file",
+            subtitle=path,
+            on_open=(
+                (lambda target=path: _send_command(
+                    command_queue, "open_artifact", {"path": target}
+                ))
+                if command_queue is not None
+                else None
+            ),
         )
-        chat_view.add_message(msg)
+        message.add_artifact(card)
 
-    elif event_type == "preferences":
-        # Обновляем UI из preferences
-        pass
 
-    elif event_type == "models":
-        # Обновляем статус модели
-        active_provider = payload.get("active_provider", "")
-        active_model = payload.get("active_model", "")
-        if not active_provider and not active_model:
-            # Fallback: попробуем извлечь из вложенных структур
-            providers = payload.get("providers", {})
-            if isinstance(providers, dict):
-                for prov_name, prov_data in providers.items():
-                    if isinstance(prov_data, dict) and prov_data.get("active"):
-                        active_provider = prov_name
-                        active_model = prov_data.get("model", "")
-                        break
-        shell.set_model(f"{active_provider}: {active_model}")
+def _permission_details(payload: dict[str, Any]) -> str:
+    lines: list[str] = []
+    for label, key in (
+        ("Инструмент", "tool_name"),
+        ("Риск", "risk"),
+        ("Категория", "category"),
+        ("Операция", "operation_id"),
+    ):
+        value = payload.get(key)
+        if value:
+            lines.append(f"{label}: {value}")
+    details = payload.get("details")
+    if details:
+        lines.append(str(details))
+    return "\n".join(lines)
+
+
+def _model_label(payload: dict[str, Any]) -> str:
+    active_provider = str(payload.get("active_provider", ""))
+    active_model = str(payload.get("active_model", ""))
+    if active_provider or active_model:
+        return ": ".join(filter(None, (active_provider, active_model)))
+    for provider, data in payload.items():
+        if not isinstance(data, dict):
+            continue
+        model = data.get("active_model") or data.get("model")
+        if data.get("active") or model:
+            return ": ".join(filter(None, (str(provider), str(model or ""))))
+    return "auto"
+
+
+def _humanize_tool(name: str) -> str:
+    aliases = {
+        "read_text_file": "Читает файл",
+        "write_text_file": "Изменяет файл",
+        "apply_text_patch": "Применяет патч",
+        "run_terminal_command": "Выполняет команду",
+        "search_web_tavily": "Ищет источники",
+        "browser_open_url": "Открывает страницу",
+        "execute_plan": "Запускает план",
+        "start_background_plan": "Запускает фоновую задачу",
+    }
+    return aliases.get(name, name.replace("_", " ").strip().capitalize())
 
 
 def _format_time(payload: dict[str, Any]) -> str:
-    """Форматирует время из payload."""
-    import time
-
-    ts = payload.get("created_at", time.time())
-    return time.strftime("%H:%M:%S", time.localtime(ts))
+    timestamp = payload.get("created_at", time.time())
+    try:
+        return time.strftime("%H:%M:%S", time.localtime(float(timestamp)))
+    except (TypeError, ValueError, OSError):
+        return time.strftime("%H:%M:%S")

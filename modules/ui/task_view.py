@@ -13,9 +13,9 @@ Task Execution UI — экран активной задачи.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QScrollArea,
     QFrame,
-    QPushButton,
 )
 
 from modules.ui.theme import theme
@@ -33,10 +32,7 @@ from modules.ui.primitives import (
     Card,
     Badge,
     StatusIndicator,
-    AnimationLayer,
-    EmptyState,
 )
-from modules.ui.chat import ToolActivityCard
 
 
 class PlanStep(QWidget):
@@ -224,11 +220,11 @@ class TimelineView(QScrollArea):
         self._apply_style()
 
     def _apply_style(self) -> None:
-        self.setStyleSheet(f"""
-            QScrollArea {{
+        self.setStyleSheet("""
+            QScrollArea {
                 background: transparent;
                 border: none;
-            }}
+            }
         """)
 
     def add_event(self, event: TimelineEvent) -> None:
@@ -260,6 +256,7 @@ class TaskView(QWidget):
         on_cancel: Callable[[], None] | None = None,
         on_retry: Callable[[], None] | None = None,
         on_approve: Callable[[], None] | None = None,
+        on_deny: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -268,6 +265,7 @@ class TaskView(QWidget):
         self._on_cancel = on_cancel
         self._on_retry = on_retry
         self._on_approve = on_approve
+        self._on_deny = on_deny
         self._task_id: str | None = None
         self._setup_ui()
 
@@ -322,7 +320,7 @@ class TaskView(QWidget):
         self._controls = QHBoxLayout()
         self._controls.setSpacing(8)
 
-        self._pause_btn = Button("Пауза", variant="ghost", size="sm")
+        self._pause_btn = Button("Остановить", variant="ghost", size="sm")
         self._pause_btn.clicked.connect(self._on_pause_clicked)
         self._controls.addWidget(self._pause_btn)
 
@@ -497,6 +495,8 @@ class TaskView(QWidget):
         self._hide_approval()
 
     def _on_reject_approval(self) -> None:
+        if self._on_deny:
+            self._on_deny()
         self._hide_approval()
 
     def _hide_approval(self) -> None:

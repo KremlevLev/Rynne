@@ -1,0 +1,212 @@
+Date : 2026-07-26 15:50:56
+Directory : c:\Users\Utest\Desktop\nova
+Total : 166 files,  39964 codes, 4563 comments, 8305 blanks, all 52832 lines
+
+Languages
++------------------+------------+------------+------------+------------+------------+
+| language         | files      | code       | comment    | blank      | total      |
++------------------+------------+------------+------------+------------+------------+
+| Python           |        157 |     36,751 |      4,563 |      7,734 |     49,048 |
+| Markdown         |          8 |      3,196 |          0 |        570 |      3,766 |
+| pip requirements |          1 |         17 |          0 |          1 |         18 |
++------------------+------------+------------+------------+------------+------------+
+
+Directories
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                  | files      | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                     |        166 |     39,964 |      4,563 |      8,305 |     52,832 |
+| . (Files)                                                             |         12 |      4,252 |         86 |        679 |      5,017 |
+| core                                                                  |          3 |        276 |         49 |         66 |        391 |
+| modules                                                               |         92 |     25,872 |      3,717 |      4,508 |     34,097 |
+| modules\agent                                                         |         10 |      3,277 |        522 |        677 |      4,476 |
+| modules\application                                                   |          8 |      2,193 |        205 |        450 |      2,848 |
+| modules\audio                                                         |          2 |        967 |         79 |        191 |      1,237 |
+| modules\brain                                                         |          8 |      2,368 |        171 |        443 |      2,982 |
+| modules\browser                                                       |          3 |        967 |        111 |        168 |      1,246 |
+| modules\domain                                                        |          5 |        562 |         99 |         98 |        759 |
+| modules\input_hub                                                     |          6 |      1,285 |         96 |        258 |      1,639 |
+| modules\integrations                                                  |          2 |        272 |         42 |         62 |        376 |
+| modules\local                                                         |          2 |        441 |         30 |         76 |        547 |
+| modules\routing                                                       |          4 |      1,422 |         78 |        183 |      1,683 |
+| modules\security                                                      |          1 |        193 |         14 |         34 |        241 |
+| modules\storage                                                       |          4 |        569 |        165 |        118 |        852 |
+| modules\tools                                                         |         18 |      5,428 |        532 |        919 |      6,879 |
+| modules\ui                                                            |         14 |      4,386 |      1,475 |        529 |      6,390 |
+| modules\windows                                                       |          5 |      1,542 |         98 |        302 |      1,942 |
+| scripts                                                               |          3 |        247 |         36 |         61 |        344 |
+| tests                                                                 |         56 |      9,317 |        675 |      2,991 |     12,983 |
++-----------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++-----------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| filename                                                              | language         | code       | comment    | blank      | total      |
++-----------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| c:\Users\Utest\Desktop\nova\CRASH_RECOVERY.md                         | Markdown         |         25 |          0 |         12 |         37 |
+| c:\Users\Utest\Desktop\nova\INSTRUCTION.md                            | Markdown         |        138 |          0 |         34 |        172 |
+| c:\Users\Utest\Desktop\nova\MCP_INTEGRATION_GUIDE.md                  | Markdown         |         96 |          0 |         26 |        122 |
+| c:\Users\Utest\Desktop\nova\README.md                                 | Markdown         |        243 |          0 |         87 |        330 |
+| c:\Users\Utest\Desktop\nova\conftest.py                               | Python           |          9 |          9 |          5 |         23 |
+| c:\Users\Utest\Desktop\nova\core\__init__.py                          | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\core\config.py                            | Python           |        276 |         49 |         64 |        389 |
+| c:\Users\Utest\Desktop\nova\core\prompts.py                           | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\documentation.md                          | Markdown         |         53 |          0 |         11 |         64 |
+| c:\Users\Utest\Desktop\nova\frontroadmap.md                           | Markdown         |        648 |          0 |        216 |        864 |
+| c:\Users\Utest\Desktop\nova\main.py                                   | Python           |      1,069 |         54 |        170 |      1,293 |
+| c:\Users\Utest\Desktop\nova\modules\agent\background_plans.py         | Python           |        324 |         23 |         66 |        413 |
+| c:\Users\Utest\Desktop\nova\modules\agent\mcp_gateway.py              | Python           |        606 |        141 |        117 |        864 |
+| c:\Users\Utest\Desktop\nova\modules\agent\mcp_integration.py          | Python           |        245 |         80 |         49 |        374 |
+| c:\Users\Utest\Desktop\nova\modules\agent\mcp_security.py             | Python           |        196 |         63 |         60 |        319 |
+| c:\Users\Utest\Desktop\nova\modules\agent\plan_service.py             | Python           |        206 |         13 |         40 |        259 |
+| c:\Users\Utest\Desktop\nova\modules\agent\planning.py                 | Python           |        564 |          7 |         96 |        667 |
+| c:\Users\Utest\Desktop\nova\modules\agent\reasoning.py                | Python           |        343 |         55 |         85 |        483 |
+| c:\Users\Utest\Desktop\nova\modules\agent\reasoning_demo.py           | Python           |        119 |         19 |         34 |        172 |
+| c:\Users\Utest\Desktop\nova\modules\agent\recovery.py                 | Python           |        477 |         68 |         86 |        631 |
+| c:\Users\Utest\Desktop\nova\modules\agent\workflow_recorder.py        | Python           |        197 |         53 |         44 |        294 |
+| c:\Users\Utest\Desktop\nova\modules\application\__init__.py           | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\application\agent.py              | Python           |        759 |         46 |        131 |        936 |
+| c:\Users\Utest\Desktop\nova\modules\application\interaction_modes.py  | Python           |        184 |         50 |         41 |        275 |
+| c:\Users\Utest\Desktop\nova\modules\application\preferences.py        | Python           |        179 |          7 |         37 |        223 |
+| c:\Users\Utest\Desktop\nova\modules\application\reporting.py          | Python           |        251 |          1 |         58 |        310 |
+| c:\Users\Utest\Desktop\nova\modules\application\request_dispatcher.py | Python           |        187 |         16 |         23 |        226 |
+| c:\Users\Utest\Desktop\nova\modules\application\request_service.py    | Python           |        159 |          7 |         32 |        198 |
+| c:\Users\Utest\Desktop\nova\modules\application\speech.py             | Python           |        474 |         78 |        127 |        679 |
+| c:\Users\Utest\Desktop\nova\modules\audio\stt.py                      | Python           |        672 |         39 |        140 |        851 |
+| c:\Users\Utest\Desktop\nova\modules\audio\tts.py                      | Python           |        295 |         40 |         51 |        386 |
+| c:\Users\Utest\Desktop\nova\modules\brain\__init__.py                 | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\brain\bypass.py                   | Python           |        139 |         16 |         18 |        173 |
+| c:\Users\Utest\Desktop\nova\modules\brain\llm.py                      | Python           |        131 |          5 |         24 |        160 |
+| c:\Users\Utest\Desktop\nova\modules\brain\memory.py                   | Python           |        248 |         65 |         66 |        379 |
+| c:\Users\Utest\Desktop\nova\modules\brain\model_catalog.py            | Python           |        159 |         26 |         31 |        216 |
+| c:\Users\Utest\Desktop\nova\modules\brain\model_gateway.py            | Python           |      1,252 |         57 |        223 |      1,532 |
+| c:\Users\Utest\Desktop\nova\modules\brain\model_router.py             | Python           |        316 |          1 |         46 |        363 |
+| c:\Users\Utest\Desktop\nova\modules\brain\tool_calls.py               | Python           |        123 |          1 |         34 |        158 |
+| c:\Users\Utest\Desktop\nova\modules\browser\__init__.py               | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\browser\manager.py                | Python           |        708 |         27 |        137 |        872 |
+| c:\Users\Utest\Desktop\nova\modules\browser\security.py               | Python           |        259 |         84 |         30 |        373 |
+| c:\Users\Utest\Desktop\nova\modules\domain\__init__.py                | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\domain\ledger.py                  | Python           |         99 |         53 |         19 |        171 |
+| c:\Users\Utest\Desktop\nova\modules\domain\results.py                 | Python           |        326 |         44 |         39 |        409 |
+| c:\Users\Utest\Desktop\nova\modules\domain\state.py                   | Python           |         71 |          1 |         19 |         91 |
+| c:\Users\Utest\Desktop\nova\modules\domain\windows_context.py         | Python           |         66 |          1 |         20 |         87 |
+| c:\Users\Utest\Desktop\nova\modules\input_hub\__init__.py             | Python           |         20 |          1 |          3 |         24 |
+| c:\Users\Utest\Desktop\nova\modules\input_hub\coordinator.py          | Python           |        164 |         13 |         38 |        215 |
+| c:\Users\Utest\Desktop\nova\modules\input_hub\models.py               | Python           |        241 |          1 |         36 |        278 |
+| c:\Users\Utest\Desktop\nova\modules\input_hub\voice_owner.py          | Python           |        130 |         47 |         38 |        215 |
+| c:\Users\Utest\Desktop\nova\modules\input_hub\wake_runtime.py         | Python           |        190 |         13 |         31 |        234 |
+| c:\Users\Utest\Desktop\nova\modules\input_hub\wake_word.py            | Python           |        540 |         21 |        112 |        673 |
+| c:\Users\Utest\Desktop\nova\modules\integrations\__init__.py          | Python           |         25 |          1 |          2 |         28 |
+| c:\Users\Utest\Desktop\nova\modules\integrations\obsidian.py          | Python           |        247 |         41 |         60 |        348 |
+| c:\Users\Utest\Desktop\nova\modules\local\__init__.py                 | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\local\inference.py                | Python           |        441 |         30 |         75 |        546 |
+| c:\Users\Utest\Desktop\nova\modules\routing\__init__.py               | Python           |         14 |          1 |          3 |         18 |
+| c:\Users\Utest\Desktop\nova\modules\routing\decision.py               | Python           |        142 |          1 |         25 |        168 |
+| c:\Users\Utest\Desktop\nova\modules\routing\direct_executor.py        | Python           |        676 |         12 |         83 |        771 |
+| c:\Users\Utest\Desktop\nova\modules\routing\intent.py                 | Python           |        590 |         64 |         72 |        726 |
+| c:\Users\Utest\Desktop\nova\modules\security\sandbox.py               | Python           |        193 |         14 |         34 |        241 |
+| c:\Users\Utest\Desktop\nova\modules\storage\artifacts.py              | Python           |        260 |         16 |         49 |        325 |
+| c:\Users\Utest\Desktop\nova\modules\storage\conversations.py          | Python           |        110 |         43 |         21 |        174 |
+| c:\Users\Utest\Desktop\nova\modules\storage\database.py               | Python           |         95 |         59 |         22 |        176 |
+| c:\Users\Utest\Desktop\nova\modules\storage\memories.py               | Python           |        104 |         47 |         26 |        177 |
+| c:\Users\Utest\Desktop\nova\modules\tools\__init__.py                 | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\tools\app_indexer.py              | Python           |        282 |          1 |         87 |        370 |
+| c:\Users\Utest\Desktop\nova\modules\tools\base.py                     | Python           |        222 |         29 |         51 |        302 |
+| c:\Users\Utest\Desktop\nova\modules\tools\budgets.py                  | Python           |        256 |         25 |         61 |        342 |
+| c:\Users\Utest\Desktop\nova\modules\tools\coding_workspace.py         | Python           |        206 |        103 |         48 |        357 |
+| c:\Users\Utest\Desktop\nova\modules\tools\composition.py              | Python           |        144 |         50 |         43 |        237 |
+| c:\Users\Utest\Desktop\nova\modules\tools\executor.py                 | Python           |        181 |         33 |         41 |        255 |
+| c:\Users\Utest\Desktop\nova\modules\tools\os_utils.py                 | Python           |        537 |         57 |         92 |        686 |
+| c:\Users\Utest\Desktop\nova\modules\tools\permissions.py              | Python           |        322 |         10 |         61 |        393 |
+| c:\Users\Utest\Desktop\nova\modules\tools\policy.py                   | Python           |        149 |          4 |         37 |        190 |
+| c:\Users\Utest\Desktop\nova\modules\tools\registry.py                 | Python           |      1,389 |          2 |         41 |      1,432 |
+| c:\Users\Utest\Desktop\nova\modules\tools\runtime.py                  | Python           |        885 |          4 |        146 |      1,035 |
+| c:\Users\Utest\Desktop\nova\modules\tools\selection.py                | Python           |        124 |         65 |         35 |        224 |
+| c:\Users\Utest\Desktop\nova\modules\tools\skills.py                   | Python           |        140 |         20 |         42 |        202 |
+| c:\Users\Utest\Desktop\nova\modules\tools\synthesis.py                | Python           |        133 |         56 |         34 |        223 |
+| c:\Users\Utest\Desktop\nova\modules\tools\tasks.py                    | Python           |        268 |          1 |         55 |        324 |
+| c:\Users\Utest\Desktop\nova\modules\tools\tool_visibility.py          | Python           |         35 |         20 |         12 |         67 |
+| c:\Users\Utest\Desktop\nova\modules\tools\vision.py                   | Python           |        155 |         52 |         32 |        239 |
+| c:\Users\Utest\Desktop\nova\modules\ui\__init__.py                    | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\modules\ui\chat.py                        | Python           |        434 |        302 |         11 |        747 |
+| c:\Users\Utest\Desktop\nova\modules\ui\command_palette.py             | Python           |        146 |        126 |         14 |        286 |
+| c:\Users\Utest\Desktop\nova\modules\ui\core_bridge.py                 | Python           |        639 |          7 |         70 |        716 |
+| c:\Users\Utest\Desktop\nova\modules\ui\desktop.py                     | Python           |        921 |         63 |        145 |      1,129 |
+| c:\Users\Utest\Desktop\nova\modules\ui\desktop_protocol.py            | Python           |        101 |          4 |         23 |        128 |
+| c:\Users\Utest\Desktop\nova\modules\ui\desktop_service.py             | Python           |        150 |         11 |         34 |        195 |
+| c:\Users\Utest\Desktop\nova\modules\ui\orb.py                         | Python           |        251 |         77 |         32 |        360 |
+| c:\Users\Utest\Desktop\nova\modules\ui\overlay.py                     | Python           |        114 |          1 |         33 |        148 |
+| c:\Users\Utest\Desktop\nova\modules\ui\premium_desktop.py             | Python           |        388 |         55 |         64 |        507 |
+| c:\Users\Utest\Desktop\nova\modules\ui\primitives.py                  | Python           |        615 |        215 |         18 |        848 |
+| c:\Users\Utest\Desktop\nova\modules\ui\shell.py                       | Python           |        221 |        278 |         16 |        515 |
+| c:\Users\Utest\Desktop\nova\modules\ui\task_view.py                   | Python           |        232 |        269 |         10 |        511 |
+| c:\Users\Utest\Desktop\nova\modules\ui\theme.py                       | Python           |        174 |         67 |         58 |        299 |
+| c:\Users\Utest\Desktop\nova\modules\windows\filesystem.py             | Python           |        477 |         16 |        102 |        595 |
+| c:\Users\Utest\Desktop\nova\modules\windows\git_tools.py              | Python           |        240 |          1 |         49 |        290 |
+| c:\Users\Utest\Desktop\nova\modules\windows\process_manager.py        | Python           |        528 |         16 |         86 |        630 |
+| c:\Users\Utest\Desktop\nova\modules\windows\project_inspector.py      | Python           |        145 |         11 |         27 |        183 |
+| c:\Users\Utest\Desktop\nova\modules\windows\uia.py                    | Python           |        152 |         54 |         38 |        244 |
+| c:\Users\Utest\Desktop\nova\requirements.txt                          | pip requirements |         17 |          0 |          1 |         18 |
+| c:\Users\Utest\Desktop\nova\roadmap.md                                | Markdown         |      1,879 |          0 |        100 |      1,979 |
+| c:\Users\Utest\Desktop\nova\scripts\__init__.py                       | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\scripts\build_installer.py                | Python           |         88 |         10 |         18 |        116 |
+| c:\Users\Utest\Desktop\nova\scripts\install_dependencies.py           | Python           |        159 |         26 |         42 |        227 |
+| c:\Users\Utest\Desktop\nova\silero_install.py                         | Python           |         32 |          4 |          6 |         42 |
+| c:\Users\Utest\Desktop\nova\tests\__init__.py                         | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\Utest\Desktop\nova\tests\test.md                             | Markdown         |        114 |          0 |         84 |        198 |
+| c:\Users\Utest\Desktop\nova\tests\test_artifacts.py                   | Python           |         86 |          1 |         37 |        124 |
+| c:\Users\Utest\Desktop\nova\tests\test_background_plans.py            | Python           |        128 |          1 |         42 |        171 |
+| c:\Users\Utest\Desktop\nova\tests\test_browser_manager.py             | Python           |        119 |          1 |         56 |        176 |
+| c:\Users\Utest\Desktop\nova\tests\test_browser_security.py            | Python           |        124 |         23 |         51 |        198 |
+| c:\Users\Utest\Desktop\nova\tests\test_budgets.py                     | Python           |         78 |          1 |         40 |        119 |
+| c:\Users\Utest\Desktop\nova\tests\test_coding_workspace.py            | Python           |         90 |         19 |         42 |        151 |
+| c:\Users\Utest\Desktop\nova\tests\test_composition.py                 | Python           |        171 |         18 |         67 |        256 |
+| c:\Users\Utest\Desktop\nova\tests\test_conversations.py               | Python           |         58 |          1 |         22 |         81 |
+| c:\Users\Utest\Desktop\nova\tests\test_crash_recovery.py              | Python           |         85 |          3 |         35 |        123 |
+| c:\Users\Utest\Desktop\nova\tests\test_database.py                    | Python           |         39 |          1 |         15 |         55 |
+| c:\Users\Utest\Desktop\nova\tests\test_desktop_bridge.py              | Python           |        306 |          1 |         74 |        381 |
+| c:\Users\Utest\Desktop\nova\tests\test_desktop_protocol.py            | Python           |         67 |          1 |         24 |         92 |
+| c:\Users\Utest\Desktop\nova\tests\test_direct_executor.py             | Python           |        303 |          1 |         64 |        368 |
+| c:\Users\Utest\Desktop\nova\tests\test_filesystem.py                  | Python           |        182 |          1 |         58 |        241 |
+| c:\Users\Utest\Desktop\nova\tests\test_git_tools.py                   | Python           |         85 |          2 |         30 |        117 |
+| c:\Users\Utest\Desktop\nova\tests\test_input_coordinator.py           | Python           |         64 |          1 |         33 |         98 |
+| c:\Users\Utest\Desktop\nova\tests\test_input_models.py                | Python           |         89 |          1 |         21 |        111 |
+| c:\Users\Utest\Desktop\nova\tests\test_intent_router.py               | Python           |        239 |          1 |         54 |        294 |
+| c:\Users\Utest\Desktop\nova\tests\test_interaction_modes.py           | Python           |        226 |          3 |         77 |        306 |
+| c:\Users\Utest\Desktop\nova\tests\test_ledger.py                      | Python           |        223 |         20 |         68 |        311 |
+| c:\Users\Utest\Desktop\nova\tests\test_local_inference.py             | Python           |         72 |          1 |         15 |         88 |
+| c:\Users\Utest\Desktop\nova\tests\test_mcp_gateway.py                 | Python           |        741 |        202 |        329 |      1,272 |
+| c:\Users\Utest\Desktop\nova\tests\test_mcp_security.py                | Python           |        162 |         40 |         61 |        263 |
+| c:\Users\Utest\Desktop\nova\tests\test_memories.py                    | Python           |         62 |          1 |         28 |         91 |
+| c:\Users\Utest\Desktop\nova\tests\test_memory_enhancement.py          | Python           |        128 |         28 |         50 |        206 |
+| c:\Users\Utest\Desktop\nova\tests\test_model_catalog.py               | Python           |         97 |          3 |         35 |        135 |
+| c:\Users\Utest\Desktop\nova\tests\test_model_gateway_cooldowns.py     | Python           |        704 |          6 |        171 |        881 |
+| c:\Users\Utest\Desktop\nova\tests\test_obsidian.py                    | Python           |         86 |         11 |         25 |        122 |
+| c:\Users\Utest\Desktop\nova\tests\test_permissions.py                 | Python           |        158 |          1 |         63 |        222 |
+| c:\Users\Utest\Desktop\nova\tests\test_plan_service.py                | Python           |        125 |          1 |         31 |        157 |
+| c:\Users\Utest\Desktop\nova\tests\test_planning.py                    | Python           |        543 |          1 |        102 |        646 |
+| c:\Users\Utest\Desktop\nova\tests\test_policy.py                      | Python           |        140 |          1 |         46 |        187 |
+| c:\Users\Utest\Desktop\nova\tests\test_preferences.py                 | Python           |         90 |          1 |         25 |        116 |
+| c:\Users\Utest\Desktop\nova\tests\test_process_manager.py             | Python           |         86 |          2 |         43 |        131 |
+| c:\Users\Utest\Desktop\nova\tests\test_project_inspector.py           | Python           |         58 |          1 |         21 |         80 |
+| c:\Users\Utest\Desktop\nova\tests\test_reasoning.py                   | Python           |        143 |         14 |         46 |        203 |
+| c:\Users\Utest\Desktop\nova\tests\test_recovery.py                    | Python           |        110 |          1 |         34 |        145 |
+| c:\Users\Utest\Desktop\nova\tests\test_reporting.py                   | Python           |        146 |          6 |         32 |        184 |
+| c:\Users\Utest\Desktop\nova\tests\test_request_dispatcher.py          | Python           |        122 |          1 |         29 |        152 |
+| c:\Users\Utest\Desktop\nova\tests\test_security_redteam.py            | Python           |        279 |          7 |         80 |        366 |
+| c:\Users\Utest\Desktop\nova\tests\test_selection.py                   | Python           |        136 |         27 |         62 |        225 |
+| c:\Users\Utest\Desktop\nova\tests\test_skills_v2.py                   | Python           |         61 |          1 |         22 |         84 |
+| c:\Users\Utest\Desktop\nova\tests\test_smoke.py                       | Python           |        315 |         42 |        109 |        466 |
+| c:\Users\Utest\Desktop\nova\tests\test_speech_service.py              | Python           |        131 |          4 |         43 |        178 |
+| c:\Users\Utest\Desktop\nova\tests\test_synthesis.py                   | Python           |        115 |         15 |         45 |        175 |
+| c:\Users\Utest\Desktop\nova\tests\test_tool_platform.py               | Python           |        372 |          1 |         80 |        453 |
+| c:\Users\Utest\Desktop\nova\tests\test_ui_smoke.py                    | Python           |        147 |         67 |         28 |        242 |
+| c:\Users\Utest\Desktop\nova\tests\test_ui_state_mapping.py            | Python           |        471 |         24 |        136 |        631 |
+| c:\Users\Utest\Desktop\nova\tests\test_ui_theme.py                    | Python           |        119 |          2 |         26 |        147 |
+| c:\Users\Utest\Desktop\nova\tests\test_uia.py                         | Python           |        130 |         19 |         31 |        180 |
+| c:\Users\Utest\Desktop\nova\tests\test_vision_tools.py                | Python           |         56 |         10 |         22 |         88 |
+| c:\Users\Utest\Desktop\nova\tests\test_voice_owner.py                 | Python           |         94 |         11 |         34 |        139 |
+| c:\Users\Utest\Desktop\nova\tests\test_wake_word.py                   | Python           |         85 |          1 |         28 |        114 |
+| c:\Users\Utest\Desktop\nova\tests\test_workflow_recorder.py           | Python           |        157 |         21 |         64 |        242 |
+| c:\Users\Utest\Desktop\nova\vosk_install.py                           | Python           |         43 |         19 |         11 |         73 |
+| Total                                                                 |                  |     39,964 |      4,563 |      8,305 |     52,832 |
++-----------------------------------------------------------------------+------------------+------------+------------+------------+------------+

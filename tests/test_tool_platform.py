@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 
 from modules.domain.results import (
     ToolResult,
@@ -198,6 +197,53 @@ def test_registry_rejects_duplicate_definition() -> None:
         raise AssertionError(
             "Повторная регистрация не была отклонена."
         )
+
+
+def test_runner_emits_live_ui_events() -> None:
+    async def scenario() -> None:
+        events: list[tuple[str, dict]] = []
+        registry = ToolRegistry()
+        registry.register_definition(
+            ToolDefinition(
+                name="echo_live",
+                description="Проверяет live events.",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string"},
+                    },
+                    "required": ["value"],
+                },
+                handler=lambda value: ToolResult.ok(value),
+                category=ToolCategory.SYSTEM_READ,
+                risk=RiskLevel.READ_ONLY,
+                idempotent=True,
+            )
+        )
+        runner = ToolRunner(
+            registry,
+            event_sink=lambda event_type, payload: events.append(
+                (event_type, payload)
+            ),
+        )
+
+        result = await runner.execute(
+            create_tool_call("echo_live", {"value": "ok"})
+        )
+
+        assert result.success is True
+        assert [event_type for event_type, _ in events] == [
+            "tool_started",
+            "tool_completed",
+        ]
+        assert events[0][1]["tool_name"] == "echo_live"
+        assert events[1][1]["success"] is True
+        assert (
+            events[0][1]["operation_id"]
+            == events[1][1]["operation_id"]
+        )
+
+    asyncio.run(scenario())
 
 
 def test_runner_executes_context_aware_tool() -> None:

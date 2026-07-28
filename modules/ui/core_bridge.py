@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 from modules.tools.permissions import (
@@ -22,6 +24,8 @@ from modules.input_hub.coordinator import (
 )
 from modules.input_hub.models import (
     AssistantProfile,
+    Attachment,
+    AttachmentType,
     ModelSelectionMode,
     RequestSource,
 )
@@ -54,6 +58,7 @@ class CoreDesktopBridge:
         cancel_current_request=None,
         plan_service=None,
         background_plan_manager=None,
+        mcp_gateway=None,
     ) -> None:
         self.desktop = desktop
         self.process_manager = (
@@ -78,9 +83,13 @@ class CoreDesktopBridge:
         self.background_plan_manager = (
             background_plan_manager
         )
+        self.mcp_gateway = mcp_gateway
+        self._last_submission: dict[str, Any] | None = None
         self._reported_plan_ids: set[str] = set()
         self._reported_bg_ids: set[str] = set()
         self._reported_completed_ids: set[str] = set()
+        self._plan_fingerprints: dict[str, tuple[str, ...]] = {}
+        self._bg_fingerprints: dict[str, str] = {}
 
 
     async def run(
@@ -183,6 +192,12 @@ class CoreDesktopBridge:
             "models",
             model_data,
         )
+        self.desktop.publish(
+            "integrations",
+            {
+                "items": self._integration_snapshot(),
+            },
+        )
 
         # Публикуем события жизненного цикла задач
         if self.plan_service is not None:
@@ -201,23 +216,32 @@ class CoreDesktopBridge:
                         },
                     )
                 else:
-                    # Публикуем прогресс активных задач
-                    self.desktop.publish(
-                        "task_progress",
-                        {
-                            "task_id": plan_id,
-                            "plan": [
-                                {
-                                    "text": s.description,
-                                    "status": s.status.value
-                                    if hasattr(s.status, "value")
-                                    else str(s.status),
-                                }
-                                for s in plan.steps
-                            ],
-                            "description": plan.goal,
-                        },
+                    statuses = tuple(
+                        (
+                            s.status.value
+                            if hasattr(s.status, "value")
+                            else str(s.status)
+                        )
+                        for s in plan.steps
                     )
+                    if self._plan_fingerprints.get(plan_id) != statuses:
+                        self._plan_fingerprints[plan_id] = statuses
+                        self.desktop.publish(
+                            "task_progress",
+                            {
+                                "task_id": plan_id,
+                                "plan": [
+                                    {
+                                        "text": s.description,
+                                        "status": status,
+                                    }
+                                    for s, status in zip(
+                                        plan.steps, statuses
+                                    )
+                                ],
+                                "description": plan.goal,
+                            },
+                        )
 
         if self.background_plan_manager is not None:
             for bg_id, bg_plan in self.background_plan_manager._plans.items():
@@ -234,6 +258,25 @@ class CoreDesktopBridge:
                             ],
                         },
                     )
+                else:
+                    status = (
+                        bg_plan.status.value
+                        if hasattr(bg_plan.status, "value")
+                        else str(bg_plan.status)
+                    )
+                    if self._bg_fingerprints.get(bg_id) != status:
+                        self._bg_fingerprints[bg_id] = status
+                        self.desktop.publish(
+                            "task_progress",
+                            {
+                                "task_id": bg_id,
+                                "plan": [],
+                                "description": (
+                                    f"{bg_plan.goal} · {status}"
+                                ),
+                                "status": status,
+                            },
+                        )
 
         # Публикуем события завершения/отмены задач
         completed_ids = set()
@@ -248,6 +291,71 @@ class CoreDesktopBridge:
                         "task_id": completed_id,
                     },
                 )
+        if self.background_plan_manager is not None:
+            for bg_id, bg_plan in self.background_plan_manager._plans.items():
+                status = (
+                    bg_plan.status.value
+                    if hasattr(bg_plan.status, "value")
+                    else str(bg_plan.status)
+                )
+                if (
+                    status in {"completed", "failed", "cancelled"}
+                    and bg_id not in self._reported_completed_ids
+                ):
+                    self._reported_completed_ids.add(bg_id)
+                    event_type = {
+                        "completed": "task_completed",
+                        "failed": "task_failed",
+                        "cancelled": "task_cancelled",
+                    }[status]
+                    self.desktop.publish(
+                        event_type,
+                        {
+                            "task_id": bg_id,
+                            "error": str(bg_plan.error or ""),
+                        },
+                    )
+
+    def _integration_snapshot(
+        self,
+    ) -> list[dict[str, Any]]:
+        """Возвращает безопасный MCP snapshot без env и секретов."""
+        gateway = self.mcp_gateway
+        if gateway is None:
+            return []
+
+        servers = getattr(gateway, "_servers", {})
+        available = set(
+            gateway.get_available_tools()
+            if hasattr(gateway, "get_available_tools")
+            else []
+        )
+        items: list[dict[str, Any]] = []
+        for name, config in servers.items():
+            prefix = f"mcp_{name}_"
+            count = sum(
+                1
+                for tool_name in available
+                if str(tool_name).startswith(prefix)
+            )
+            items.append(
+                {
+                    "name": str(name),
+                    "enabled": bool(
+                        getattr(config, "enabled", True)
+                    ),
+                    "transport": str(
+                        getattr(config, "transport", "stdio")
+                    ),
+                    "tools_count": count,
+                    "url": (
+                        str(getattr(config, "url", ""))
+                        if getattr(config, "url", None)
+                        else ""
+                    ),
+                }
+            )
+        return items
 
     async def handle_command(
         self,
@@ -282,6 +390,16 @@ class CoreDesktopBridge:
             "payload",
             {},
         )
+        if action == "retry_last":
+            if self._last_submission is None:
+                self._publish_command_result(
+                    command_id,
+                    success=False,
+                    message="Нет предыдущего запроса для повтора.",
+                )
+                return
+            action = "submit_user_request"
+            payload = dict(self._last_submission)
         if action == "set_input_mode":
             if self.mode_manager is None:
                 self._publish_command_result(
@@ -324,6 +442,58 @@ class CoreDesktopBridge:
                     f"Режим переключён: "
                     f"{snapshot.input_mode.value}."
                 ),
+            )
+            return
+
+        if action == "set_preference":
+            if self.preferences is None:
+                self._publish_command_result(
+                    command_id,
+                    success=False,
+                    message="Менеджер настроек не подключён.",
+                )
+                return
+            key = str(payload.get("key", ""))
+            value = payload.get("value")
+            try:
+                if key == "assistant_profile":
+                    snapshot = self.preferences.set_assistant_profile(
+                        AssistantProfile(str(value))
+                    )
+                elif key == "model_mode":
+                    snapshot = self.preferences.set_model_mode(
+                        ModelSelectionMode(str(value)),
+                        selected_model=(
+                            str(payload.get("selected_model"))
+                            if payload.get("selected_model")
+                            else None
+                        ),
+                    )
+                elif key == "tts_enabled":
+                    snapshot = self.preferences.set_tts_enabled(bool(value))
+                elif key == "cloud_enabled":
+                    snapshot = self.preferences.set_cloud_enabled(bool(value))
+                elif key == "history_enabled":
+                    snapshot = self.preferences.set_history_enabled(bool(value))
+                else:
+                    raise ValueError(
+                        f"Неизвестная настройка: {key}"
+                    )
+            except (TypeError, ValueError) as exc:
+                self._publish_command_result(
+                    command_id,
+                    success=False,
+                    message=str(exc),
+                )
+                return
+            self.desktop.publish(
+                "preferences",
+                snapshot.to_dict(),
+            )
+            self._publish_command_result(
+                command_id,
+                success=True,
+                message=f"Настройка {key} обновлена.",
             )
             return
 
@@ -516,6 +686,40 @@ class CoreDesktopBridge:
                         ModelSelectionMode.AUTO
                     )
 
+                attachments: list[Attachment] = []
+                raw_attachments = payload.get(
+                    "attachments",
+                    [],
+                )
+                if isinstance(raw_attachments, list):
+                    image_suffixes = {
+                        ".png", ".jpg", ".jpeg",
+                        ".webp", ".bmp", ".gif",
+                    }
+                    for raw_item in raw_attachments[:20]:
+                        path_value = (
+                            raw_item.get("path")
+                            if isinstance(raw_item, dict)
+                            else raw_item
+                        )
+                        if not path_value:
+                            continue
+                        path = Path(str(path_value)).expanduser()
+                        if not path.exists():
+                            continue
+                        attachment_type = (
+                            AttachmentType.IMAGE
+                            if path.suffix.lower() in image_suffixes
+                            else AttachmentType.FILE
+                        )
+                        attachments.append(
+                            Attachment(
+                                attachment_type=attachment_type,
+                                path=str(path),
+                                display_name=path.name,
+                            )
+                        )
+
                 request = (
                     await self.input_coordinator
                     .submit_text(
@@ -530,8 +734,11 @@ class CoreDesktopBridge:
                                 "selected_model"
                             )
                         ),
+                        attachments=attachments,
                     )
                 )
+                if request is not None:
+                    self._last_submission = dict(payload)
 
                 self._publish_command_result(
                     command_id,
@@ -579,6 +786,9 @@ class CoreDesktopBridge:
                 return
 
             if action == "new_task":
+                if hasattr(self.llm, "reset_context"):
+                    self.llm.reset_context()
+                self._last_submission = None
                 self._publish_command_result(
                     command_id,
                     success=True,
@@ -603,17 +813,34 @@ class CoreDesktopBridge:
                 return
 
             if action == "pause_task":
+                cancelled = False
                 if self.cancel_current_request is not None:
-                    await self.cancel_current_request()
+                    cancelled = await self.cancel_current_request()
                 self._publish_command_result(
                     command_id,
-                    success=True,
-                    message="Задача приостановлена.",
+                    success=cancelled,
+                    message=(
+                        "Текущее выполнение остановлено."
+                        if cancelled
+                        else "Активного выполнения нет."
+                    ),
                 )
                 return
 
             if action == "cancel_task":
-                if self.cancel_current_request is not None:
+                task_id = str(payload.get("task_id", ""))
+                if (
+                    task_id.startswith("background_")
+                    and self.background_plan_manager is not None
+                ):
+                    result = await self.background_plan_manager.cancel_plan(
+                        task_id
+                    )
+                    self._publish_tool_result(command_id, result)
+                elif task_id and self.plan_service is not None:
+                    result = self.plan_service.cancel_plan(task_id)
+                    self._publish_tool_result(command_id, result)
+                elif self.cancel_current_request is not None:
                     cancelled = await self.cancel_current_request()
                     self._publish_command_result(
                         command_id,
@@ -661,6 +888,24 @@ class CoreDesktopBridge:
                     command_id,
                     success=True,
                     message=f"Команда {action} принята.",
+                )
+                return
+
+            if action == "open_artifact":
+                raw_path = str(payload.get("path", "")).strip()
+                path = Path(raw_path)
+                if not raw_path or not path.exists():
+                    self._publish_command_result(
+                        command_id,
+                        success=False,
+                        message="Артефакт не найден.",
+                    )
+                    return
+                os.startfile(str(path))
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message=f"Открыт артефакт: {path.name}",
                 )
                 return
 

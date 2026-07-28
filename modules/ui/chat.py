@@ -12,14 +12,14 @@ Chat UI и Composer для Nova Desktop UI.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 from PySide6.QtCore import (
     Qt,
     QTimer,
-    QSize,
+    Signal,
 )
-from PySide6.QtGui import QFont, QTextCursor
+from PySide6.QtGui import QKeyEvent, QTextCursor
 from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
@@ -30,19 +30,17 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QFrame,
     QSizePolicy,
-    QStyle,
+    QComboBox,
+    QFileDialog,
 )
 
 from modules.ui.theme import theme
 from modules.ui.primitives import (
     Button,
     IconButton,
-    Input,
     Card,
     Badge,
     StatusIndicator,
-    AnimationLayer,
-    Skeleton,
 )
 
 
@@ -92,9 +90,8 @@ class ChatMessage(QWidget):
         # Аватар
         self._avatar = StatusIndicator(
             "active" if self._is_user else "idle",
-            size=24,
+            size=10,
         )
-        self._layout.addWidget(self._avatar)
 
         # Контейнер сообщения
         self._bubble = Card(
@@ -102,6 +99,21 @@ class ChatMessage(QWidget):
             radius_key="lg",
             hover=not self._is_user,
         )
+        self._bubble.setMaximumWidth(820)
+        self._bubble.setSizePolicy(
+            QSizePolicy.Preferred,
+            QSizePolicy.Maximum,
+        )
+        if self._is_user:
+            self._bubble.setStyleSheet(
+                f"""
+                Card {{
+                    background: {theme.color("accent.soft")};
+                    border: 1px solid #3a3267;
+                    border-radius: {theme.radius("lg")};
+                }}
+                """
+            )
         self._bubble_layout = QVBoxLayout()
         self._bubble_layout.setContentsMargins(0, 0, 0, 0)
         self._bubble_layout.setSpacing(6)
@@ -180,12 +192,20 @@ class ChatMessage(QWidget):
         self._artifacts_layout.setSpacing(8)
         self._bubble_layout.addLayout(self._artifacts_layout)
 
-        self._bubble_layout.addStretch()
-        self._layout.addWidget(self._bubble, stretch=1)
-
-        # Выравнивание: пользователь — справа
         if self._is_user:
-            self._layout.setDirection(QHBoxLayout.RightToLeft)
+            self._layout.addStretch(1)
+            self._layout.addWidget(self._bubble)
+            self._layout.addWidget(
+                self._avatar,
+                alignment=Qt.AlignTop,
+            )
+        else:
+            self._layout.addWidget(
+                self._avatar,
+                alignment=Qt.AlignTop,
+            )
+            self._layout.addWidget(self._bubble)
+            self._layout.addStretch(1)
 
     def set_text(self, text: str) -> None:
         """Обновляет текст сообщения (для streaming)."""
@@ -239,13 +259,19 @@ class ChatMessage(QWidget):
 class ChatView(QScrollArea):
     """Прокручиваемый список сообщений чата."""
 
+    starter_selected = Signal(str)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._messages: list[ChatMessage] = []
+        self._widgets: list[QWidget] = []
         self._container = QWidget()
+        self._container.setObjectName("chatCanvas")
         self._layout = QVBoxLayout(self._container)
-        self._layout.setContentsMargins(16, 16, 16, 16)
-        self._layout.setSpacing(4)
+        self._layout.setContentsMargins(34, 28, 34, 28)
+        self._layout.setSpacing(10)
+        self._welcome = self._build_welcome()
+        self._layout.addWidget(self._welcome, stretch=1)
         self._layout.addStretch()
 
         self.setWidget(self._container)
@@ -254,7 +280,7 @@ class ChatView(QScrollArea):
 
     def _apply_style(self) -> None:
         self.setStyleSheet(f"""
-            QScrollArea {{
+            QScrollArea, QWidget#chatCanvas {{
                 background: transparent;
                 border: none;
             }}
@@ -274,14 +300,101 @@ class ChatView(QScrollArea):
             }}
         """)
 
+    def _build_welcome(self) -> QWidget:
+        welcome = QWidget()
+        welcome.setObjectName("welcome")
+        layout = QVBoxLayout(welcome)
+        layout.setContentsMargins(40, 40, 40, 34)
+        layout.setSpacing(12)
+        layout.addStretch()
+
+        orb = QLabel("N")
+        orb.setFixedSize(54, 54)
+        orb.setAlignment(Qt.AlignCenter)
+        orb.setStyleSheet(
+            f"""
+            QLabel {{
+                color: white;
+                background: {theme.color("accent.primary")};
+                border: 4px solid {theme.color("accent.soft")};
+                border-radius: 27px;
+                font-size: 20px;
+                font-weight: 700;
+            }}
+            """
+        )
+        layout.addWidget(orb, alignment=Qt.AlignCenter)
+
+        title = QLabel("Чем займёмся?")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(
+            f"color: {theme.color('text.primary')}; font-size: 26px; font-weight: 680;"
+        )
+        layout.addWidget(title)
+        subtitle = QLabel(
+            "Работаю с кодом, файлами, приложениями, браузером и долгими задачами."
+        )
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet(
+            f"color: {theme.color('text.secondary')}; font-size: 13px;"
+        )
+        layout.addWidget(subtitle)
+        layout.addSpacing(10)
+
+        starters = (
+            "Открой проект и запусти тесты",
+            "Разбери папку Downloads",
+            "Исследуй тему и создай заметку",
+            "Покажи активные процессы Nova",
+        )
+        grid = QVBoxLayout()
+        grid.setSpacing(7)
+        for prompt in starters:
+            button = QPushButton(prompt)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setMinimumHeight(38)
+            button.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background: {theme.color("bg.surface")};
+                    color: {theme.color("text.secondary")};
+                    border: 1px solid {theme.color("border.subtle")};
+                    border-radius: {theme.radius("md")};
+                    padding: 8px 12px;
+                    text-align: left;
+                    font-size: 12px;
+                }}
+                QPushButton:hover {{
+                    color: {theme.color("text.primary")};
+                    background: {theme.color("bg.surfaceHover")};
+                    border-color: {theme.color("border.active")};
+                }}
+                """
+            )
+            button.clicked.connect(
+                lambda checked=False, value=prompt: self.starter_selected.emit(value)
+            )
+            grid.addWidget(button)
+        starter_wrap = QWidget()
+        starter_wrap.setMaximumWidth(540)
+        starter_wrap.setLayout(grid)
+        layout.addWidget(starter_wrap, alignment=Qt.AlignHCenter)
+        layout.addStretch()
+        return welcome
+
     def add_message(self, message: ChatMessage) -> None:
         """Добавляет сообщение в чат."""
+        self._welcome.hide()
         self._messages.append(message)
+        self._widgets.append(message)
         self._layout.insertWidget(self._layout.count() - 1, message)
         self._scroll_to_bottom()
 
     def add_widget(self, widget: QWidget) -> None:
         """Добавляет произвольный виджет (например, ToolActivityCard) в чат."""
+        self._welcome.hide()
+        self._widgets.append(widget)
         self._layout.insertWidget(self._layout.count() - 1, widget)
         self._scroll_to_bottom()
 
@@ -293,9 +406,12 @@ class ChatView(QScrollArea):
 
     def clear(self) -> None:
         """Очищает чат."""
-        for msg in self._messages:
-            msg.deleteLater()
+        for widget in self._widgets:
+            self._layout.removeWidget(widget)
+            widget.deleteLater()
         self._messages.clear()
+        self._widgets.clear()
+        self._welcome.show()
 
     def _scroll_to_bottom(self) -> None:
         QTimer.singleShot(10, self._do_scroll)
@@ -309,6 +425,19 @@ class ChatView(QScrollArea):
 # ---------------------------------------------------------------------------
 # Composer
 # ---------------------------------------------------------------------------
+
+class _ComposerInput(QTextEdit):
+    submit_requested = Signal()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if (
+            event.key() in (Qt.Key_Return, Qt.Key_Enter)
+            and not event.modifiers() & Qt.ShiftModifier
+        ):
+            self.submit_requested.emit()
+            return
+        super().keyPressEvent(event)
+
 
 class Composer(QWidget):
     """
@@ -332,76 +461,164 @@ class Composer(QWidget):
         self._on_submit = on_submit
         self._on_voice_toggle = on_voice_toggle
         self._voice_active = False
+        self._attachments: list[str] = []
         self._setup_ui()
 
     def _setup_ui(self) -> None:
-        self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(16, 12, 16, 12)
-        self._layout.setSpacing(8)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 10, 24, 18)
+        outer.setSpacing(0)
 
-        # Кнопка добавления вложения
-        self._attach_btn = IconButton(
-            "📎", tooltip="Добавить файл или скриншот", size="sm"
-        )
-        self._layout.addWidget(self._attach_btn)
+        self._surface = QFrame()
+        self._surface.setObjectName("composerSurface")
+        surface = QVBoxLayout(self._surface)
+        surface.setContentsMargins(14, 10, 10, 9)
+        surface.setSpacing(6)
 
-        # Поле ввода
-        self._input = Input(
-            placeholder="Спроси Nova или дай задачу..."
-        )
-        self._input.setFixedHeight(36)
-        self._layout.addWidget(self._input, stretch=1)
-
-        # Статус модели и режим
-        self._mode_label = QLabel("Safe autonomy")
-        self._mode_label.setStyleSheet(f"""
-            QLabel {{
-                color: {theme.color("text.muted")};
+        self._input = _ComposerInput()
+        self._input.setPlaceholderText("Спроси Nova или дай задачу…")
+        self._input.setAcceptRichText(False)
+        self._input.setMinimumHeight(44)
+        self._input.setMaximumHeight(72)
+        self._input.setTabChangesFocus(True)
+        self._input.submit_requested.connect(self._on_send_clicked)
+        self._input.setStyleSheet(
+            f"""
+            QTextEdit {{
+                background: transparent;
+                color: {theme.color("text.primary")};
+                border: none;
+                padding: 3px 2px;
                 font-family: {theme.font_family()};
-                font-size: {theme.font_size("caption")}px;
+                font-size: {theme.font_size("body")}px;
+                selection-background-color: {theme.color("accent.primary")};
             }}
-        """)
-        self._layout.addWidget(self._mode_label)
+            """
+        )
+        surface.addWidget(self._input)
 
-        # Кнопка микрофона
+        self._attachment_label = QLabel()
+        self._attachment_label.hide()
+        self._attachment_label.setStyleSheet(
+            f"color: {theme.color('accent.secondary')}; font-size: 11px;"
+        )
+        surface.addWidget(self._attachment_label)
+
+        controls = QHBoxLayout()
+        controls.setSpacing(7)
+        self._attach_btn = Button("＋  Контекст", variant="ghost", size="sm")
+        self._attach_btn.setToolTip("Добавить файлы или изображения")
+        self._attach_btn.clicked.connect(self._pick_attachments)
+        controls.addWidget(self._attach_btn)
+
+        self._mode_select = QComboBox()
+        for label, value in (
+            ("Auto", "auto"),
+            ("Fast", "fast"),
+            ("Smart", "smart"),
+            ("Coding", "coding"),
+            ("Local", "local_only"),
+        ):
+            self._mode_select.addItem(label, value)
+        self._mode_select.setFixedHeight(30)
+        self._mode_select.setStyleSheet(
+            f"""
+            QComboBox {{
+                background: transparent;
+                color: {theme.color("text.muted")};
+                border: 1px solid transparent;
+                border-radius: {theme.radius("sm")};
+                padding: 3px 8px;
+                font-size: 11px;
+            }}
+            QComboBox:hover {{
+                color: {theme.color("text.primary")};
+                border-color: {theme.color("border.subtle")};
+            }}
+            QComboBox QAbstractItemView {{
+                background: {theme.color("bg.surfaceHover")};
+                color: {theme.color("text.primary")};
+                border: 1px solid {theme.color("border.strong")};
+                selection-background-color: {theme.color("accent.soft")};
+            }}
+            """
+        )
+        controls.addWidget(self._mode_select)
+
+        self._mode_label = QLabel("Safe autonomy")
+        self._mode_label.setStyleSheet(
+            f"color: {theme.color('text.muted')}; font-size: 11px;"
+        )
+        controls.addWidget(self._mode_label)
+        controls.addStretch()
+
         self._voice_btn = IconButton(
-            "🎙", tooltip="Голосовой ввод (удерживайте)", size="sm"
+            "◎", tooltip="Переключить голосовой режим", size="sm"
         )
         self._voice_btn.clicked.connect(self._on_voice_clicked)
-        self._layout.addWidget(self._voice_btn)
+        controls.addWidget(self._voice_btn)
 
-        # Кнопка отправки
         self._send_btn = IconButton(
             "↑", tooltip="Отправить (Enter)", size="md", variant="primary"
         )
         self._send_btn.clicked.connect(self._on_send_clicked)
-        self._layout.addWidget(self._send_btn)
-
-        # Обработка клавиш
-        self._input.returnPressed.connect(self._on_send_clicked)
-
+        controls.addWidget(self._send_btn)
+        surface.addLayout(controls)
+        outer.addWidget(self._surface)
         self._apply_style()
 
     def _apply_style(self) -> None:
         self.setStyleSheet(f"""
             Composer {{
-                background: {theme.color("bg.surface")};
-                border-top: 1px solid {theme.color("border.subtle")};
+                background: {theme.color("bg.base")};
+                border: none;
+            }}
+            QFrame#composerSurface {{
+                background: {theme.color("bg.input")};
+                border: 1px solid {theme.color("border.strong")};
+                border-radius: {theme.radius("lg")};
             }}
         """)
 
     def _on_send_clicked(self) -> None:
-        text = self._input.text().strip()
-        if not text:
+        text = self._input.toPlainText().strip()
+        if not text and not self._attachments:
             return
 
         if self._on_submit:
             self._on_submit(text, {
                 "profile": "assistant",
-                "model_mode": "auto",
+                "model_mode": self._mode_select.currentData() or "auto",
+                "attachments": list(self._attachments),
             })
 
         self._input.clear()
+        self._attachments.clear()
+        self._update_attachment_label()
+
+    def _pick_attachments(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Добавить контекст",
+            "",
+            "Все файлы (*.*)",
+        )
+        if not paths:
+            return
+        for path in paths:
+            if path not in self._attachments:
+                self._attachments.append(path)
+        self._update_attachment_label()
+
+    def _update_attachment_label(self) -> None:
+        if not self._attachments:
+            self._attachment_label.clear()
+            self._attachment_label.hide()
+            return
+        names = [path.replace("\\", "/").rsplit("/", 1)[-1] for path in self._attachments]
+        suffix = "" if len(names) <= 3 else f"  +{len(names) - 3}"
+        self._attachment_label.setText("Контекст: " + " · ".join(names[:3]) + suffix)
+        self._attachment_label.show()
 
     def _on_voice_clicked(self) -> None:
         self._voice_active = not self._voice_active
@@ -409,21 +626,19 @@ class Composer(QWidget):
             self._on_voice_toggle()
 
         if self._voice_active:
-            self._voice_btn.setStyleSheet(
-                f"background: {theme.color('accent.primary')};"
-            )
+            self._voice_btn.setText("●")
+            self._voice_btn.setToolTip("Остановить голосовой режим")
         else:
-            self._voice_btn.setStyleSheet("")
+            self._voice_btn.setText("◎")
+            self._voice_btn.setToolTip("Переключить голосовой режим")
 
     def set_voice_state(self, active: bool, listening: bool = False) -> None:
         """Обновляет состояние кнопки микрофона."""
         self._voice_active = active
         if active:
-            self._voice_btn.setStyleSheet(
-                f"background: {theme.color('accent.primary')};"
-            )
+            self._voice_btn.setText("●")
         else:
-            self._voice_btn.setStyleSheet("")
+            self._voice_btn.setText("◎")
 
     def set_disabled(self, disabled: bool) -> None:
         self._input.setDisabled(disabled)
@@ -434,6 +649,12 @@ class Composer(QWidget):
 
     def focus_input(self) -> None:
         self._input.setFocus()
+
+    def set_text(self, text: str) -> None:
+        self._input.setPlainText(text)
+        cursor = self._input.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self._input.setTextCursor(cursor)
 
 
 # ---------------------------------------------------------------------------
@@ -461,13 +682,15 @@ class ToolActivityCard(QWidget):
         self._setup_ui()
 
     def _setup_ui(self) -> None:
-        self._layout = QHBoxLayout(self)
-        self._layout.setContentsMargins(12, 8, 12, 8)
-        self._layout.setSpacing(12)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(12, 9, 12, 9)
+        self._layout.setSpacing(6)
+        summary = QHBoxLayout()
+        summary.setSpacing(10)
 
         # Индикатор статуса
         self._indicator = StatusIndicator(self._status)
-        self._layout.addWidget(self._indicator)
+        summary.addWidget(self._indicator)
 
         # Контент
         content = QVBoxLayout()
@@ -497,12 +720,13 @@ class ToolActivityCard(QWidget):
         """)
         content.addWidget(self._meta_label)
 
-        self._layout.addLayout(content, stretch=1)
+        summary.addLayout(content, stretch=1)
 
         # Кнопка раскрытия
         self._expand_btn = IconButton("▼", tooltip="Подробнее", size="sm")
         self._expand_btn.clicked.connect(self._toggle_expand)
-        self._layout.addWidget(self._expand_btn)
+        summary.addWidget(self._expand_btn)
+        self._layout.addLayout(summary)
 
         # Раскрываемый контент
         self._details = QFrame()
@@ -519,6 +743,7 @@ class ToolActivityCard(QWidget):
             }}
         """)
         details_layout.addWidget(self._details_label)
+        self._layout.addWidget(self._details)
 
         self._apply_style()
 
@@ -534,7 +759,6 @@ class ToolActivityCard(QWidget):
     def _toggle_expand(self) -> None:
         self._expanded = not self._expanded
         if self._expanded:
-            self.layout().addWidget(self._details)
             self._details.show()
             self._expand_btn.setText("▲")
         else:

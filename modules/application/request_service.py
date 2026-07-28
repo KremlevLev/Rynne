@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from modules.application.request_dispatcher import (
     RequestDispatcher,
@@ -46,12 +48,17 @@ class RequestService:
         response_handler: (
             ResponseHandler | None
         ) = None,
+        event_handler: Callable[
+            [str, dict[str, Any]],
+            Any,
+        ] | None = None,
     ) -> None:
         self.coordinator = coordinator
         self.dispatcher = dispatcher
         self.response_handler = (
             response_handler
         )
+        self.event_handler = event_handler
 
         self._current_request: (
             UserRequest | None
@@ -59,6 +66,27 @@ class RequestService:
         self._current_task: (
             asyncio.Task | None
         ) = None
+
+    async def _emit_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self.event_handler is None:
+            return
+        try:
+            result = self.event_handler(
+                event_type,
+                payload,
+            )
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            # UI/телеметрия не должны ломать оркестратор запросов.
+            logger.exception(
+                "Не удалось отправить событие RequestService: %s.",
+                event_type,
+            )
 
     @property
     def current_request(
@@ -123,6 +151,10 @@ class RequestService:
                 break
 
             self._current_request = request
+            await self._emit_event(
+                "request_started",
+                request.to_dict(),
+            )
 
             try:
                 self._current_task = (
@@ -158,6 +190,14 @@ class RequestService:
                         request,
                         response,
                     )
+                await self._emit_event(
+                    "request_completed",
+                    {
+                        "request_id": request.request_id,
+                        "success": response.success,
+                        "error_code": response.error_code,
+                    },
+                )
 
             except asyncio.CancelledError:
                 if shutdown_event.is_set():
@@ -167,11 +207,26 @@ class RequestService:
                     "Запрос %s отменён.",
                     request.request_id,
                 )
+                await self._emit_event(
+                    "request_cancelled",
+                    {
+                        "request_id": request.request_id,
+                        "text": request.text,
+                    },
+                )
 
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "Ошибка RequestService для %s.",
                     request.request_id,
+                )
+                await self._emit_event(
+                    "request_failed",
+                    {
+                        "request_id": request.request_id,
+                        "text": request.text,
+                        "error": str(exc),
+                    },
                 )
 
             finally:

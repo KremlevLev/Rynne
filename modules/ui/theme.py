@@ -5,13 +5,12 @@
 Централизует цвета, геометрию, типографику, переходы и тени.
 Поддерживает тёмную и (позже) светлую тему через TOKEN_GROUPS.
 
-Стиль: Mistral AI Brutalism
-  - Фон: #121212 (матовый чёрный)
-  - Сайдбар: #000000 (глубокий чёрный)
-  - Акцент: #ff4e00 (Mistral Orange) / #ffffff (чистый белый)
-  - Шрифты: только моноширинные (JetBrains Mono, Courier New)
-  - Все углы острые (border-radius: 0px)
-  - Разделители: border: 1px solid #2a2a2a
+Стиль: спокойный premium dark
+  - глубокий сине-графитовый фон;
+  - мягкие поверхности и тонкие границы;
+  - холодный violet/cyan accent;
+  - системный UI-шрифт с корректным fallback на Windows;
+  - моноширинный шрифт только для кода и логов.
 
 Использование:
     from modules.ui.theme import Theme
@@ -24,19 +23,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 
 # ---------------------------------------------------------------------------
-# Цветовые токены (Mistral AI Premium Dark)
+# Цветовые токены (Nova Premium Dark)
 # ---------------------------------------------------------------------------
 
 DARK_COLORS: dict[str, str] = {
     # Фон
     "bg.base": "#0b0d12",
-    "bg.elevated": "#000000",
-    "bg.surface": "#11141c",
-    "bg.surfaceHover": "#1d2330",
+    "bg.elevated": "#10131a",
+    "bg.surface": "#151923",
+    "bg.surfaceHover": "#1c2230",
+    "bg.input": "#0f1219",
+    "bg.accent": "#17142a",
     "bg.overlay": "rgba(8, 10, 15, 0.72)",
 
     # Текст
@@ -48,7 +48,7 @@ DARK_COLORS: dict[str, str] = {
     # Акценты
     "accent.primary": "#8b7cff",
     "accent.secondary": "#4cc9f0",
-    "accent.soft": "rgba(139, 124, 255, 0.14)",
+    "accent.soft": "#211e3a",
 
     # Статусы
     "success": "#4ade80",
@@ -57,8 +57,9 @@ DARK_COLORS: dict[str, str] = {
     "info": "#60a5fa",
 
     # Границы
-    "border.subtle": "#2a2a2a",
-    "border.active": "#8b7cff",
+    "border.subtle": "#252b38",
+    "border.strong": "#343c4d",
+    "border.active": "#7668ed",
 }
 
 # Светлая тема (заготовка — используется позже)
@@ -67,6 +68,8 @@ LIGHT_COLORS: dict[str, str] = {
     "bg.elevated": "#ffffff",
     "bg.surface": "#f1f3f5",
     "bg.surfaceHover": "#e9ecef",
+    "bg.input": "#ffffff",
+    "bg.accent": "#efedff",
     "bg.overlay": "rgba(255, 255, 255, 0.72)",
 
     "text.primary": "#121212",
@@ -76,7 +79,7 @@ LIGHT_COLORS: dict[str, str] = {
 
     "accent.primary": "#8b7cff",
     "accent.secondary": "#4cc9f0",
-    "accent.soft": "rgba(139, 124, 255, 0.14)",
+    "accent.soft": "#efedff",
 
     "success": "#22c55e",
     "warning": "#f59e0b",
@@ -84,6 +87,7 @@ LIGHT_COLORS: dict[str, str] = {
     "info": "#3b82f6",
 
     "border.subtle": "rgba(0, 0, 0, 0.07)",
+    "border.strong": "rgba(0, 0, 0, 0.14)",
     "border.active": "rgba(139, 124, 255, 0.55)",
 }
 
@@ -98,11 +102,11 @@ TOKEN_GROUPS: dict[str, dict[str, str]] = {
 # ---------------------------------------------------------------------------
 
 RADIUS: dict[str, str] = {
-    "sm": "0px",
-    "md": "0px",
-    "lg": "0px",
-    "xl": "0px",
-    "pill": "0px",
+    "sm": "7px",
+    "md": "10px",
+    "lg": "14px",
+    "xl": "18px",
+    "pill": "999px",
 }
 
 SPACING: dict[str, int] = {
@@ -122,8 +126,10 @@ SPACING: dict[str, int] = {
 # Типографика
 # ---------------------------------------------------------------------------
 
-FONT_FAMILY_INTERFACE = "'JetBrains Mono', 'Courier New', monospace"
-FONT_FAMILY_MONO = "'JetBrains Mono', 'Courier New', monospace"
+# Segoe UI гарантированно присутствует в поддерживаемых версиях Windows и
+# корректно отображает кириллицу. Inter/Manrope используются, если установлены.
+FONT_FAMILY_INTERFACE = "'Inter', 'Manrope', 'Segoe UI', sans-serif"
+FONT_FAMILY_MONO = "'JetBrains Mono', 'Cascadia Code', Consolas, monospace"
 
 FONT_SIZES: dict[str, int] = {
     "caption": 12,
@@ -167,7 +173,8 @@ EASING = {
 
 
 # ---------------------------------------------------------------------------
-# Тени — отключены (brutalism: тени запрещены в QSS)
+# Тени используются точечно. QSS не поддерживает box-shadow, поэтому токены
+# применяются виджетами через QGraphicsDropShadowEffect.
 # ---------------------------------------------------------------------------
 
 SHADOWS: dict[str, str] = {

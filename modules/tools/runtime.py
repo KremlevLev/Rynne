@@ -9,8 +9,6 @@ import time
 from typing import Any, Callable
 from modules.tools.policy import (
     PolicyContext,
-    PolicyDecision,
-    evaluate_policy,
 )
 from modules.tools.permissions import (
     PermissionManager,
@@ -19,11 +17,9 @@ from modules.tools.permissions import (
 from core.config import TOOL_TIMEOUT_SECONDS
 from modules.domain.results import (
     ToolResult,
-    ToolWarning,
     VerificationResult,
 )
 from modules.tools.base import (
-    RegisteredTool,
     RiskLevel,
     ToolCategory,
     ToolContext,
@@ -668,12 +664,43 @@ class ToolRunner:
         permission_manager: (
             PermissionManager | None
         ) = None,
+        event_sink: Callable[
+            [str, dict[str, Any]],
+            Any,
+        ] | None = None,
     ) -> None:
         self.registry = registry
         self.permission_manager = (
             permission_manager
             or PermissionManager()
         )
+        self._event_sink = event_sink
+
+    def set_event_sink(
+        self,
+        event_sink: Callable[
+            [str, dict[str, Any]],
+            Any,
+        ] | None,
+    ) -> None:
+        """Подключает наблюдателя presentation layer без зависимости от UI."""
+        self._event_sink = event_sink
+
+    def _emit_event(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> None:
+        if self._event_sink is None:
+            return
+        try:
+            self._event_sink(event_type, payload)
+        except Exception:
+            # Сбой UI/телеметрии не должен ломать выполнение инструмента.
+            logger.exception(
+                "Не удалось отправить событие ToolRunner: %s.",
+                event_type,
+            )
 
     @staticmethod
     def _parse_arguments(
@@ -874,6 +901,22 @@ class ToolRunner:
             definition.risk.value,
             definition.category.value,
         )
+        self._emit_event(
+            "tool_started",
+            {
+                "tool_name": definition.name,
+                "operation_id": actual_context.operation_id,
+                "turn_id": actual_context.turn_id,
+                "session_id": actual_context.session_id,
+                "description": (
+                    definition.description
+                    or definition.name
+                ),
+                "risk": definition.risk.value,
+                "category": definition.category.value,
+                "argument_names": sorted(arguments),
+            },
+        )
 
         try:
             call_arguments = dict(arguments)
@@ -991,7 +1034,7 @@ class ToolRunner:
                 ),
             )
 
-            logger.info(
+        logger.info(
             (
                 "Инструмент завершён: name=%s "
                 "operation_id=%s success=%s "
@@ -1002,6 +1045,22 @@ class ToolRunner:
             result.success,
             result.code,
             result.duration_ms,
+        )
+
+        self._emit_event(
+            "tool_completed",
+            {
+                "tool_name": definition.name,
+                "operation_id": actual_context.operation_id,
+                "turn_id": actual_context.turn_id,
+                "session_id": actual_context.session_id,
+                "success": result.success,
+                "code": result.code,
+                "message": result.message,
+                "duration_ms": result.duration_ms,
+                "artifacts": result.artifacts,
+                "retryable": result.retryable,
+            },
         )
 
         # Record to ledger (all side effects, not just successful ones)
