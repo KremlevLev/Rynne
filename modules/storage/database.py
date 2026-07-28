@@ -117,6 +117,14 @@ class Database:
                     )
                 );
 
+                CREATE TABLE IF NOT EXISTS proactive_state (
+                    state_key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT (
+                        datetime('now')
+                    )
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
 

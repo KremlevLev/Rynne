@@ -149,3 +149,105 @@ def test_successful_test_process_is_classified_separately() -> None:
         assert len(suggestions) == 1
         assert suggestions[0].kind == "tests_completed"
         database.close()
+
+
+def test_disk_space_alerts_only_on_new_low_space_transition() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+        gib = 1024**3
+        low_usage = (100 * gib, 95 * gib, 5 * gib)
+        normal_usage = (100 * gib, 60 * gib, 40 * gib)
+
+        first = engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=low_usage,
+        )
+        repeated = engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=low_usage,
+        )
+        recovered = engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=normal_usage,
+        )
+        second = engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=low_usage,
+        )
+
+        assert len(first) == 1
+        assert first[0].kind == "disk_space_low"
+        assert repeated == []
+        assert recovered == []
+        assert len(second) == 1
+        assert second[0].source_key != first[0].source_key
+        assert len(engine.journal()) == 2
+        database.close()
+
+
+def test_disk_space_state_survives_engine_restart() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        usage = (1000, 950, 50)
+        first_engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+
+        assert len(
+            first_engine.observe_disk_space(
+                directory,
+                free_percent_threshold=10,
+                free_bytes_threshold=0,
+                usage=usage,
+            )
+        ) == 1
+
+        restarted_engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+        assert restarted_engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=usage,
+        ) == []
+        database.close()
+
+
+def test_proactive_kind_can_be_disabled() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            disabled_kinds={"disk_space_low"},
+            local_hour=lambda: 12,
+        )
+
+        suggestions = engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=(1000, 950, 50),
+        )
+
+        assert suggestions == []
+        assert engine.journal() == []
+        database.close()

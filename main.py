@@ -1,5 +1,7 @@
 # main.py
 from __future__ import annotations
+from pathlib import Path
+
 from modules.windows.process_manager import (
     ProcessManager
 )
@@ -42,6 +44,10 @@ from core.config import (
     NOVA_DESKTOP_UI,
     NOVA_PREMIUM_UI,
     NOVA_PROACTIVE_COOLDOWN_SECONDS,
+    NOVA_PROACTIVE_DISABLED_KINDS,
+    NOVA_PROACTIVE_DISK_CHECK_SECONDS,
+    NOVA_PROACTIVE_DISK_FREE_GB,
+    NOVA_PROACTIVE_DISK_FREE_PERCENT,
     NOVA_PROACTIVE_ENABLED,
     NOVA_PROACTIVE_QUIET_END,
     NOVA_PROACTIVE_QUIET_START,
@@ -781,9 +787,11 @@ async def async_main() -> None:
             NOVA_PROACTIVE_QUIET_START,
             NOVA_PROACTIVE_QUIET_END,
         ),
+        disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
 
     async def proactive_worker() -> None:
+        next_disk_check = 0.0
         while not runtime.shutdown_event.is_set():
             if NOVA_PROACTIVE_ENABLED:
                 suggestions = list(
@@ -804,6 +812,27 @@ async def async_main() -> None:
                         process_items
                     )
                 )
+                loop_now = asyncio.get_running_loop().time()
+                if loop_now >= next_disk_check:
+                    suggestions.extend(
+                        proactive_engine.observe_disk_space(
+                            Path.cwd(),
+                            free_percent_threshold=(
+                                NOVA_PROACTIVE_DISK_FREE_PERCENT
+                            ),
+                            free_bytes_threshold=int(
+                                NOVA_PROACTIVE_DISK_FREE_GB
+                                * 1024**3
+                            ),
+                        )
+                    )
+                    next_disk_check = (
+                        loop_now
+                        + max(
+                            5.0,
+                            NOVA_PROACTIVE_DISK_CHECK_SECONDS,
+                        )
+                    )
                 for suggestion in suggestions:
                     desktop_service.publish(
                         "proactive_suggestion",

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from modules.agent.background_plans import (
@@ -46,18 +48,23 @@ class ProactiveSuggestionEngine:
         *,
         cooldown_seconds: float = 60.0,
         quiet_hours: tuple[int, int] = (22, 8),
+        disabled_kinds: Iterable[str] = (),
         clock: Callable[[], float] = time.time,
         local_hour: Callable[[], int] | None = None,
     ) -> None:
         self.database = database
         self.cooldown_seconds = max(0.0, cooldown_seconds)
         self.quiet_hours = quiet_hours
+        self.disabled_kinds = frozenset(disabled_kinds)
         self.clock = clock
         self.local_hour = (
             local_hour
             or (lambda: datetime.now().astimezone().hour)
         )
         self._last_emitted: dict[str, float] = {}
+
+    def _kind_enabled(self, kind: str) -> bool:
+        return kind not in self.disabled_kinds
 
     def _is_quiet_time(self) -> bool:
         start, end = self.quiet_hours
@@ -96,6 +103,42 @@ class ProactiveSuggestionEngine:
         )
         self.database.commit()
 
+    def _get_state(self, state_key: str) -> dict[str, Any]:
+        row = self.database.fetchone(
+            """
+            SELECT value FROM proactive_state
+            WHERE state_key = ?
+            """,
+            (state_key,),
+        )
+        if row is None:
+            return {}
+        try:
+            value = json.loads(row["value"])
+        except (TypeError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def _set_state(
+        self,
+        state_key: str,
+        value: Mapping[str, Any],
+    ) -> None:
+        self.database.execute(
+            """
+            INSERT INTO proactive_state (state_key, value, updated_at)
+            VALUES (?, ?, datetime('now'))
+            ON CONFLICT(state_key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (
+                state_key,
+                json.dumps(dict(value), ensure_ascii=False),
+            ),
+        )
+        self.database.commit()
+
     def observe_background_plans(
         self,
         plans: Iterable[BackgroundPlan],
@@ -117,6 +160,8 @@ class ProactiveSuggestionEngine:
                 if plan.status == BackgroundPlanStatus.COMPLETED
                 else "background_plan_failed"
             )
+            if not self._kind_enabled(kind):
+                continue
             source_key = (
                 f"background:{plan.background_id}:{plan.status.value}"
             )
@@ -245,6 +290,8 @@ class ProactiveSuggestionEngine:
                 )
                 importance = "high"
 
+            if not self._kind_enabled(kind):
+                continue
             last_emitted = self._last_emitted.get(kind, 0.0)
             if now - last_emitted < self.cooldown_seconds:
                 continue
@@ -266,6 +313,85 @@ class ProactiveSuggestionEngine:
             suggestions.append(suggestion)
 
         return suggestions
+
+    def observe_disk_space(
+        self,
+        path: str | Path,
+        *,
+        free_percent_threshold: float = 10.0,
+        free_bytes_threshold: int = 5 * 1024**3,
+        usage: tuple[int, int, int] | None = None,
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        resolved = Path(path).resolve()
+        volume = resolved.anchor or str(resolved)
+        total, _used, free = usage or shutil.disk_usage(resolved)
+        free_percent = (free / total * 100.0) if total else 0.0
+        is_low = (
+            free_percent <= max(0.0, free_percent_threshold)
+            or free <= max(0, free_bytes_threshold)
+        )
+        state_key = f"disk_space:{volume.casefold()}"
+        previous = self._get_state(state_key)
+        cycle = int(previous.get("cycle", 0))
+
+        if not is_low:
+            if previous.get("status") != "normal":
+                self._set_state(
+                    state_key,
+                    {"status": "normal", "cycle": cycle},
+                )
+            return []
+
+        if previous.get("status") == "low":
+            return []
+
+        kind = "disk_space_low"
+        if not self._kind_enabled(kind):
+            return []
+
+        now = self.clock()
+        if (
+            now - self._last_emitted.get(kind, 0.0)
+            < self.cooldown_seconds
+        ):
+            return []
+
+        cycle += 1
+        source_key = f"disk:{volume.casefold()}:low:{cycle}"
+        if self._was_emitted(source_key):
+            self._set_state(
+                state_key,
+                {"status": "low", "cycle": cycle},
+            )
+            return []
+
+        free_gib = free / 1024**3
+        suggestion = ProactiveSuggestion(
+            event_id=f"proactive_{uuid.uuid4().hex}",
+            kind=kind,
+            title="Заканчивается место на диске",
+            message=(
+                f"На диске {volume} осталось "
+                f"{free_gib:.1f} ГБ ({free_percent:.1f}%)."
+            ),
+            reason=(
+                "Свободное место пересекло настроенный порог: "
+                f"{free_percent_threshold:.1f}% или "
+                f"{free_bytes_threshold / 1024**3:.1f} ГБ."
+            ),
+            source_key=source_key,
+            importance="high",
+        )
+        self._store(suggestion)
+        self._set_state(
+            state_key,
+            {"status": "low", "cycle": cycle},
+        )
+        self._last_emitted[kind] = now
+        return [suggestion]
 
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(
