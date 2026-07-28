@@ -429,3 +429,139 @@ def test_repository_conflict_is_reported_immediately() -> None:
         assert first[0].importance == "high"
         assert repeated == []
         database.close()
+
+
+def test_tool_activity_stores_only_successful_non_read_only_metadata() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: 100.0,
+            local_hour=lambda: 12,
+        )
+        base = {
+            "session_id": "session",
+            "turn_id": "turn",
+            "tool_name": "write_text_file",
+            "risk": "write",
+            "success": True,
+            "arguments": {"content": "secret"},
+            "message": "private result",
+        }
+
+        engine.record_tool_completion(
+            {**base, "operation_id": "successful"}
+        )
+        engine.record_tool_completion(
+            {
+                **base,
+                "operation_id": "failed",
+                "success": False,
+            }
+        )
+        engine.record_tool_completion(
+            {
+                **base,
+                "operation_id": "read",
+                "tool_name": "read_text_file",
+                "risk": "read_only",
+            }
+        )
+
+        rows = database.fetchall(
+            "SELECT * FROM tool_activity"
+        )
+        assert len(rows) == 1
+        assert rows[0] == {
+            "operation_id": "successful",
+            "tool_name": "write_text_file",
+            "session_id": "session",
+            "turn_id": "turn",
+            "observed_at": 100.0,
+        }
+        database.close()
+
+
+def test_repeated_tool_sequence_suggests_workflow_once() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = [100.0]
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now[0],
+            local_hour=lambda: 12,
+        )
+        for turn_index in range(3):
+            for tool_index, tool_name in enumerate(
+                ("open_application", "write_in_application")
+            ):
+                now[0] += 1
+                engine.record_tool_completion(
+                    {
+                        "operation_id": (
+                            f"op_{turn_index}_{tool_index}"
+                        ),
+                        "session_id": "session",
+                        "turn_id": f"turn_{turn_index}",
+                        "tool_name": tool_name,
+                        "risk": "write",
+                        "success": True,
+                    }
+                )
+
+        first = engine.observe_repeated_actions(
+            min_repetitions=3,
+            lookback_seconds=1000,
+        )
+        repeated = engine.observe_repeated_actions(
+            min_repetitions=3,
+            lookback_seconds=1000,
+        )
+
+        assert len(first) == 1
+        assert first[0].kind == "workflow_suggested"
+        assert "open_application → write_in_application" in (
+            first[0].message
+        )
+        assert repeated == []
+        database.close()
+
+
+def test_workflow_is_not_suggested_before_repetition_threshold() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = [100.0]
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now[0],
+            local_hour=lambda: 12,
+        )
+        for index in range(2):
+            engine.record_tool_completion(
+                {
+                    "operation_id": f"op_{index}",
+                    "session_id": "session",
+                    "turn_id": f"turn_{index}",
+                    "tool_name": "open_application",
+                    "risk": "low",
+                    "success": True,
+                }
+            )
+
+        assert engine.observe_repeated_actions(
+            min_repetitions=3,
+            lookback_seconds=1000,
+        ) == []
+
+        now[0] = 1000.0
+        assert engine.observe_repeated_actions(
+            min_repetitions=3,
+            lookback_seconds=100,
+        ) == []
+        assert database.fetchall(
+            "SELECT operation_id FROM tool_activity"
+        ) == []
+        database.close()

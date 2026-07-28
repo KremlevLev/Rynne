@@ -55,6 +55,9 @@ from core.config import (
     NOVA_PROACTIVE_RESUME_PLAN_MINUTES,
     NOVA_PROACTIVE_STALE_PROCESS_HOURS,
     NOVA_PROACTIVE_UNCOMMITTED_MINUTES,
+    NOVA_PROACTIVE_WORKFLOW_CHECK_SECONDS,
+    NOVA_PROACTIVE_WORKFLOW_LOOKBACK_DAYS,
+    NOVA_PROACTIVE_WORKFLOW_MIN_REPETITIONS,
 )
 
 from modules.ui.desktop_service import (
@@ -794,9 +797,26 @@ async def async_main() -> None:
         disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
 
+    def handle_tool_event(
+        event_type: str,
+        payload: dict,
+    ) -> None:
+        if NOVA_DESKTOP_UI:
+            desktop_service.publish(event_type, payload)
+        if (
+            NOVA_PROACTIVE_ENABLED
+            and "workflow_suggested"
+            not in NOVA_PROACTIVE_DISABLED_KINDS
+            and event_type == "tool_completed"
+        ):
+            proactive_engine.record_tool_completion(payload)
+
+    runner.set_event_sink(handle_tool_event)
+
     async def proactive_worker() -> None:
         next_disk_check = 0.0
         next_repository_check = 0.0
+        next_workflow_check = 0.0
         while not runtime.shutdown_event.is_set():
             if NOVA_PROACTIVE_ENABLED:
                 suggestions = list(
@@ -883,6 +903,27 @@ async def async_main() -> None:
                         + max(
                             5.0,
                             NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS,
+                        )
+                    )
+                if loop_now >= next_workflow_check:
+                    suggestions.extend(
+                        proactive_engine.observe_repeated_actions(
+                            min_repetitions=(
+                                NOVA_PROACTIVE_WORKFLOW_MIN_REPETITIONS
+                            ),
+                            lookback_seconds=(
+                                NOVA_PROACTIVE_WORKFLOW_LOOKBACK_DAYS
+                                * 24
+                                * 60
+                                * 60
+                            ),
+                        )
+                    )
+                    next_workflow_check = (
+                        loop_now
+                        + max(
+                            5.0,
+                            NOVA_PROACTIVE_WORKFLOW_CHECK_SECONDS,
                         )
                     )
                 for suggestion in suggestions:

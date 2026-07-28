@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-677%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-680%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -113,11 +113,16 @@ Nova сообщает, когда:
 - на диске заканчивается место;
 - одноразовый процесс подозрительно долго остаётся запущенным;
 - в Git появился конфликт или изменения давно не закоммичены;
-- failed-план можно безопасно продолжить с последнего checkpoint.
+- failed-план можно безопасно продолжить с последнего checkpoint;
+- повторяющуюся последовательность действий стоит сохранить как workflow.
 
 Уведомления имеют cooldown, quiet hours, уровень важности и объяснимую
 причину. Nova предлагает действие, но не выполняет новый side effect без
 запроса пользователя.
+
+Для поиска повторов сохраняются только названия инструментов, случайные
+operation/turn/session ID и время. Аргументы, пути, сообщения и результаты не
+попадают в эту историю; записи старше configured lookback удаляются.
 
 ## Почему Nova реже отвечает «я не могу»
 
@@ -270,6 +275,8 @@ NOVA_PROACTIVE_STALE_PROCESS_HOURS=4
 NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS=60
 NOVA_PROACTIVE_UNCOMMITTED_MINUTES=30
 NOVA_PROACTIVE_RESUME_PLAN_MINUTES=15
+NOVA_PROACTIVE_WORKFLOW_LOOKBACK_DAYS=14
+NOVA_PROACTIVE_WORKFLOW_MIN_REPETITIONS=3
 NOVA_PROACTIVE_DISABLED_KINDS=disk_space_low,tests_completed
 ```
 
@@ -313,7 +320,7 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **677 тестов**.
+Текущий regression suite: **680 тестов**.
 
 ## Статус проекта
 

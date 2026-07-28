@@ -1064,6 +1064,8 @@ class ToolRunner:
                 "duration_ms": result.duration_ms,
                 "artifacts": result.artifacts,
                 "retryable": result.retryable,
+                "risk": definition.risk.value,
+                "category": definition.category.value,
             },
         )
 

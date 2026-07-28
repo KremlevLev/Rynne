@@ -125,6 +125,14 @@ class Database:
                     )
                 );
 
+                CREATE TABLE IF NOT EXISTS tool_activity (
+                    operation_id TEXT PRIMARY KEY,
+                    tool_name TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    turn_id TEXT NOT NULL,
+                    observed_at REAL NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, created_at);
 
@@ -133,6 +141,9 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_memories_category
                     ON memories(category);
+
+                CREATE INDEX IF NOT EXISTS idx_tool_activity_observed
+                    ON tool_activity(observed_at);
                 """
             )
 

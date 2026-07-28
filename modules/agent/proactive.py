@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import time
 import uuid
@@ -681,6 +682,147 @@ class ProactiveSuggestionEngine:
 
         self._set_state(state_key, state)
         return suggestions
+
+    def record_tool_completion(
+        self,
+        payload: Mapping[str, Any],
+    ) -> None:
+        if not bool(payload.get("success")):
+            return
+        if str(payload.get("risk") or "") == "read_only":
+            return
+
+        tool_name = str(payload.get("tool_name") or "")
+        operation_id = str(payload.get("operation_id") or "")
+        session_id = str(payload.get("session_id") or "")
+        turn_id = str(payload.get("turn_id") or "")
+        if not all(
+            (tool_name, operation_id, session_id, turn_id)
+        ):
+            return
+        if tool_name in {
+            "execute_plan",
+            "start_background_plan",
+            "retry_background_plan",
+            "cancel_background_plan",
+        }:
+            return
+
+        self.database.execute(
+            """
+            INSERT OR IGNORE INTO tool_activity (
+                operation_id,
+                tool_name,
+                session_id,
+                turn_id,
+                observed_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                operation_id,
+                tool_name,
+                session_id,
+                turn_id,
+                self.clock(),
+            ),
+        )
+        self.database.commit()
+
+    def observe_repeated_actions(
+        self,
+        *,
+        min_repetitions: int = 3,
+        lookback_seconds: float = 14 * 24 * 60 * 60,
+        max_sequence_length: int = 8,
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        kind = "workflow_suggested"
+        if not self._kind_enabled(kind):
+            return []
+
+        cutoff = self.clock() - max(0.0, lookback_seconds)
+        self.database.execute(
+            """
+            DELETE FROM tool_activity
+            WHERE observed_at < ?
+            """,
+            (cutoff,),
+        )
+        self.database.commit()
+        rows = self.database.fetchall(
+            """
+            SELECT tool_name, session_id, turn_id
+            FROM tool_activity
+            WHERE observed_at >= ?
+            ORDER BY observed_at ASC, rowid ASC
+            LIMIT 2000
+            """,
+            (cutoff,),
+        )
+        turns: dict[tuple[str, str], list[str]] = {}
+        for row in rows:
+            turn_key = (
+                str(row["session_id"]),
+                str(row["turn_id"]),
+            )
+            turns.setdefault(turn_key, []).append(
+                str(row["tool_name"])
+            )
+
+        patterns: dict[tuple[str, ...], int] = {}
+        for tools in turns.values():
+            if not 1 <= len(tools) <= max(1, max_sequence_length):
+                continue
+            pattern = tuple(tools)
+            patterns[pattern] = patterns.get(pattern, 0) + 1
+
+        threshold = max(2, int(min_repetitions))
+        candidates = sorted(
+            (
+                (count, pattern)
+                for pattern, count in patterns.items()
+                if count >= threshold
+            ),
+            key=lambda item: (-item[0], item[1]),
+        )
+        now = self.clock()
+        for count, pattern in candidates:
+            fingerprint = hashlib.sha256(
+                "\0".join(pattern).encode("utf-8")
+            ).hexdigest()[:20]
+            source_key = f"workflow-pattern:{fingerprint}"
+            if self._was_emitted(source_key):
+                continue
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                < self.cooldown_seconds
+            ):
+                return []
+
+            sequence = " → ".join(pattern)
+            suggestion = ProactiveSuggestion(
+                event_id=f"proactive_{uuid.uuid4().hex}",
+                kind=kind,
+                title="Превратить повторяющиеся действия в workflow?",
+                message=(
+                    f"Последовательность «{sequence}» повторилась "
+                    f"{count} раза."
+                ),
+                reason=(
+                    "Совпала последовательность успешных tool-вызовов "
+                    "в разных пользовательских turn; аргументы и "
+                    "результаты для анализа не сохранялись."
+                ),
+                source_key=source_key,
+                importance="normal",
+            )
+            self._store(suggestion)
+            self._last_emitted[kind] = now
+            return [suggestion]
+
+        return []
 
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(
