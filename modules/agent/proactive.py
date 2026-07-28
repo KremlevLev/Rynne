@@ -6,7 +6,7 @@ import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -392,6 +392,100 @@ class ProactiveSuggestionEngine:
         )
         self._last_emitted[kind] = now
         return [suggestion]
+
+    def observe_stale_processes(
+        self,
+        processes: Iterable[Mapping[str, Any]],
+        *,
+        stale_after_seconds: float = 4 * 60 * 60,
+    ) -> list[ProactiveSuggestion]:
+        if self._is_quiet_time():
+            return []
+
+        kind = "stale_process"
+        if not self._kind_enabled(kind):
+            return []
+
+        now = self.clock()
+        suggestions: list[ProactiveSuggestion] = []
+        for process in processes:
+            if str(process.get("status") or "") != "running":
+                continue
+
+            process_id = str(process.get("process_id") or "")
+            started_at = str(process.get("started_at") or "")
+            if not process_id or not started_at:
+                continue
+
+            raw_command = process.get("command")
+            command = " ".join(
+                str(item)
+                for item in raw_command
+            ) if isinstance(raw_command, list) else str(
+                raw_command or ""
+            )
+            label = str(process.get("label") or process_id)
+            searchable = f"{label} {command}".lower()
+            is_server = (
+                bool(process.get("health_check_url"))
+                or bool(process.get("health_check_port"))
+                or any(
+                    marker in searchable
+                    for marker in (
+                        "server",
+                        "uvicorn",
+                        "gunicorn",
+                        "http.server",
+                        "vite",
+                    )
+                )
+            )
+            if is_server:
+                continue
+
+            try:
+                started = datetime.fromisoformat(
+                    started_at.replace("Z", "+00:00")
+                )
+            except ValueError:
+                continue
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+
+            age_seconds = max(0.0, now - started.timestamp())
+            if age_seconds < max(0.0, stale_after_seconds):
+                continue
+
+            source_key = f"process:{process_id}:stale"
+            if self._was_emitted(source_key):
+                continue
+            if (
+                now - self._last_emitted.get(kind, 0.0)
+                < self.cooldown_seconds
+            ):
+                continue
+
+            age_hours = age_seconds / 3600
+            suggestion = ProactiveSuggestion(
+                event_id=f"proactive_{uuid.uuid4().hex}",
+                kind=kind,
+                title="Процесс всё ещё работает",
+                message=(
+                    f"{label} запущен уже {age_hours:.1f} ч. "
+                    "Остановить его?"
+                ),
+                reason=(
+                    "Управляемый процесс превысил настроенное время "
+                    "работы и не похож на долгоживущий сервер."
+                ),
+                source_key=source_key,
+                importance="normal",
+            )
+            self._store(suggestion)
+            self._last_emitted[kind] = now
+            suggestions.append(suggestion)
+
+        return suggestions
 
     def journal(self, limit: int = 100) -> list[dict]:
         rows = self.database.fetchall(

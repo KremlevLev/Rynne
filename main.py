@@ -51,6 +51,7 @@ from core.config import (
     NOVA_PROACTIVE_ENABLED,
     NOVA_PROACTIVE_QUIET_END,
     NOVA_PROACTIVE_QUIET_START,
+    NOVA_PROACTIVE_STALE_PROCESS_HOURS,
 )
 
 from modules.ui.desktop_service import (
@@ -810,6 +811,16 @@ async def async_main() -> None:
                 suggestions.extend(
                     proactive_engine.observe_processes(
                         process_items
+                    )
+                )
+                suggestions.extend(
+                    proactive_engine.observe_stale_processes(
+                        process_items,
+                        stale_after_seconds=(
+                            NOVA_PROACTIVE_STALE_PROCESS_HOURS
+                            * 60
+                            * 60
+                        ),
                     )
                 )
                 loop_now = asyncio.get_running_loop().time()

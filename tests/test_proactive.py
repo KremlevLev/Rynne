@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from modules.agent.background_plans import (
@@ -250,4 +251,71 @@ def test_proactive_kind_can_be_disabled() -> None:
 
         assert suggestions == []
         assert engine.journal() == []
+        database.close()
+
+
+def test_stale_process_suggests_cleanup_only_once() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = datetime(2026, 7, 28, 12, tzinfo=timezone.utc)
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now.timestamp(),
+            local_hour=lambda: 12,
+        )
+        process = {
+            "process_id": "proc_worker",
+            "label": "one-off report",
+            "command": ["python", "report.py"],
+            "status": "running",
+            "started_at": (
+                now - timedelta(hours=5)
+            ).isoformat(),
+        }
+
+        first = engine.observe_stale_processes(
+            [process],
+            stale_after_seconds=4 * 60 * 60,
+        )
+        repeated = engine.observe_stale_processes(
+            [process],
+            stale_after_seconds=4 * 60 * 60,
+        )
+
+        assert len(first) == 1
+        assert first[0].kind == "stale_process"
+        assert "5.0 ч" in first[0].message
+        assert repeated == []
+        database.close()
+
+
+def test_stale_process_monitor_ignores_servers() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = datetime(2026, 7, 28, 12, tzinfo=timezone.utc)
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now.timestamp(),
+            local_hour=lambda: 12,
+        )
+
+        suggestions = engine.observe_stale_processes(
+            [
+                {
+                    "process_id": "proc_server",
+                    "label": "development server",
+                    "command": ["python", "-m", "http.server"],
+                    "status": "running",
+                    "started_at": (
+                        now - timedelta(days=1)
+                    ).isoformat(),
+                    "health_check_port": 8000,
+                }
+            ],
+            stale_after_seconds=60,
+        )
+
+        assert suggestions == []
         database.close()
