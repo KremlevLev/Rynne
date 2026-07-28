@@ -301,7 +301,11 @@ run_terminal_tool = {
         "parameters": {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "Полный текст консольной команды."}
+                "command": {"type": "string", "description": "Полный текст консольной команды."},
+                "working_directory": {
+                    "type": "string",
+                    "description": "Абсолютный путь проекта. Если не задан, Nova автоматически использует активный workspace."
+                }
             },
                         },
             "required": ["command"]
@@ -355,7 +359,11 @@ run_terminal_tool = {
         "parameters": {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "Полный текст консольной команды."}
+                "command": {"type": "string", "description": "Полный текст консольной команды."},
+                "working_directory": {
+                    "type": "string",
+                    "description": "Абсолютный путь проекта. Если не задан, Nova автоматически использует активный workspace."
+                }
             },
             "required": ["command"]
         }

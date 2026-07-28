@@ -172,6 +172,30 @@ class OrchestratorAcceptanceHarness:
                 continue
 
             result.executed_tools.append(replay.tool_name)
+            invoked_arguments = (
+                self.invocations[-1][1]
+                if self.invocations
+                else {}
+            )
+            definition = self.registry.get(
+                replay.tool_name
+            )
+            if (
+                definition is not None
+                and "working_directory"
+                in definition.parameters.get(
+                    "properties",
+                    {},
+                )
+                and "working_directory"
+                not in replay.arguments
+                and not invoked_arguments.get(
+                    "working_directory"
+                )
+            ):
+                result.errors.append(
+                    f"{replay.tool_name} did not inherit workspace cwd"
+                )
             decisions = self.permissions.decisions[decision_start:]
             actual_decision = (
                 decisions[-1][1] if decisions else None

@@ -129,6 +129,9 @@ from typing import Any, Callable
 from modules.domain.results import ToolResult
 from modules.tools.skills import WindowsSkills
 from modules.domain.windows_context import WindowsContext
+from modules.domain.workspace_context import (
+    WorkspaceContextResolver,
+)
 
 import keyboard
 import winsound
@@ -697,6 +700,10 @@ async def run_voice_loop(
 
 async def async_main() -> None:
     instance_lock = acquire_instance_lock()
+    workspace_context = WorkspaceContextResolver()
+    await asyncio.to_thread(
+        workspace_context.observe_foreground
+    )
     desktop_service = DesktopService()
 
     if NOVA_DESKTOP_UI:
@@ -1290,6 +1297,12 @@ async def async_main() -> None:
             if NOVA_DESKTOP_UI
             else None
         ),
+        request_enricher=(
+            lambda request: asyncio.to_thread(
+                workspace_context.enrich,
+                request,
+            )
+        ),
     )
 
     request_service_task = asyncio.create_task(
@@ -1462,6 +1475,12 @@ async def async_main() -> None:
         ),
         name="nova-voice-loop",
     )
+    workspace_context_task = asyncio.create_task(
+        workspace_context.monitor(
+            runtime.shutdown_event
+        ),
+        name="nova-workspace-context",
+    )
 
 
     try:
@@ -1485,6 +1504,7 @@ async def async_main() -> None:
         desktop_bridge_task.cancel()
         wake_runtime_task.cancel()
         proactive_task.cancel()
+        workspace_context_task.cancel()
         await asyncio.gather(
             reminder_task,
             voice_task,
@@ -1492,6 +1512,7 @@ async def async_main() -> None:
             wake_runtime_task,
             desktop_bridge_task,
             proactive_task,
+            workspace_context_task,
             return_exceptions=True,
         )
 

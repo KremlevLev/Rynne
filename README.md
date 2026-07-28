@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-691%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-696%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -78,6 +78,8 @@ Nova: понимает цель
 
 ### Работать как инженерный агент
 
+- Автоматически понимать активный Git/workspace по IDE, терминалу и файлам.
+- Выполнять относительные terminal/file/Git-команды именно в этом проекте.
 - Читать, создавать и изменять файлы с backup и diff.
 - Проверять Git status, diff, log, ветки и делать commit.
 - Запускать команды, тесты и долгоживущие процессы.
@@ -85,6 +87,7 @@ Nova: понимает цель
 - Управлять Playwright-браузером.
 
 ```text
+«Запусти тесты здесь» — полный путь к проекту указывать не нужно
 «Покажи изменения в проекте и предложи название коммита»
 «Запусти python -m pytest в фоне и покажи итог»
 «Подними HTTP-сервер на 8000 и следи, чтобы он не упал»
@@ -335,7 +338,7 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **691 тест**.
+Текущий regression suite: **696 тестов**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

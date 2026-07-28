@@ -118,6 +118,26 @@ def build_request_model_content(
             "text": request.text,
         })
 
+    workspace_path = str(
+        request.metadata.get("workspace_path") or ""
+    ).strip()
+    if workspace_path:
+        workspace_name = str(
+            request.metadata.get("workspace_name")
+            or Path(workspace_path).name
+        )
+        parts.append({
+            "type": "text",
+            "text": (
+                "[Доверенный локальный контекст]\n"
+                f"Активный workspace: {workspace_name}\n"
+                f"Абсолютный путь: {workspace_path}\n"
+                "Используй этот путь по умолчанию для относительных "
+                "операций с файлами, Git, терминалом и тестами, если "
+                "пользователь не указал другой workspace."
+            ),
+        })
+
     image_added = False
     for attachment in request.attachments:
         if not attachment.path:
@@ -1078,6 +1098,13 @@ class AgentService:
             tool_context = ToolContext.create(
                 session_id=self.session_id,
                 turn_id=turn_id,
+                working_directory=(
+                    request_object.metadata.get(
+                        "workspace_path"
+                    )
+                    if request_object is not None
+                    else None
+                ),
                 source="assistant",
                 metadata={
                     "user_request": user_text,
@@ -1087,6 +1114,13 @@ class AgentService:
                     ),
                     "tool_call_id": (
                         tool_call.get("id")
+                    ),
+                    "workspace_path": (
+                        request_object.metadata.get(
+                            "workspace_path"
+                        )
+                        if request_object is not None
+                        else None
                     ),
                 },
             )

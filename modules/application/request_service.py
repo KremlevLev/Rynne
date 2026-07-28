@@ -30,6 +30,10 @@ ResponseHandler = Callable[
     [UserRequest, AssistantResponse],
     Awaitable[None],
 ]
+RequestEnricher = Callable[
+    [UserRequest],
+    Any,
+]
 
 
 class RequestService:
@@ -52,6 +56,9 @@ class RequestService:
             [str, dict[str, Any]],
             Any,
         ] | None = None,
+        request_enricher: (
+            RequestEnricher | None
+        ) = None,
     ) -> None:
         self.coordinator = coordinator
         self.dispatcher = dispatcher
@@ -59,6 +66,7 @@ class RequestService:
             response_handler
         )
         self.event_handler = event_handler
+        self.request_enricher = request_enricher
 
         self._current_request: (
             UserRequest | None
@@ -149,6 +157,19 @@ class RequestService:
                     None
                 )
                 break
+
+            if self.request_enricher is not None:
+                try:
+                    enriched = self.request_enricher(
+                        request
+                    )
+                    if inspect.isawaitable(enriched):
+                        await enriched
+                except Exception:
+                    logger.exception(
+                        "Не удалось определить workspace для запроса %s.",
+                        request.request_id,
+                    )
 
             self._current_request = request
             await self._emit_event(

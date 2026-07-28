@@ -892,6 +892,20 @@ class ToolRunner:
             definition.parameters,
         )
 
+        if (
+            "working_directory"
+            in definition.parameters.get(
+                "properties",
+                {},
+            )
+            and not arguments.get(
+                "working_directory"
+            )
+        ):
+            arguments["working_directory"] = str(
+                actual_context.working_directory
+            )
+
         removed_arguments = sorted(
             original_argument_names
             - set(arguments)

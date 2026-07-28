@@ -442,7 +442,12 @@ def set_clipboard_content(text: str, *args, **kwargs) -> str:  # Добавле�
     except Exception as e:
         return f"Не удалось записать в буфер обмена: {e}"
     
-def run_terminal_command(command: str, *args, **kwargs) -> str:  # Добавлен прием *args, **kwargs
+def run_terminal_command(
+    command: str,
+    working_directory: str | None = None,
+    *args,
+    **kwargs,
+) -> str:
     """
     Выполняет консольную команду (CMD/PowerShell) на ПК и возвращает её вывод.
     Каждый запуск защищен блокирующим окном согласия HITL.
@@ -451,7 +456,27 @@ def run_terminal_command(command: str, *args, **kwargs) -> str:  # Добавл�
     from modules.tools.executor import prompt_hitl_permission
     
     # 1. Запрос физического подтверждения от пользователя перед запуском шелла
-    details = f"Действие: Выполнение консольной команды\n\nКоманда для запуска:\n> {command}"
+    resolved_cwd = None
+    if working_directory:
+        try:
+            resolved_cwd = os.path.abspath(
+                os.path.expanduser(
+                    str(working_directory)
+                )
+            )
+        except (OSError, TypeError, ValueError):
+            return "Ошибка: Некорректный путь рабочего каталога."
+        if not os.path.isdir(resolved_cwd):
+            return (
+                "Ошибка: Рабочий каталог не найден: "
+                f"{resolved_cwd}"
+            )
+
+    details = (
+        "Действие: Выполнение консольной команды\n\n"
+        f"Рабочий каталог: {resolved_cwd or os.getcwd()}\n"
+        f"Команда для запуска:\n> {command}"
+    )
     if not prompt_hitl_permission("Терминальный оператор", details):
         return "Ошибка: Выполнение консольной команды заблокировано пользователем."
         
@@ -462,6 +487,7 @@ def run_terminal_command(command: str, *args, **kwargs) -> str:  # Добавл�
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            cwd=resolved_cwd,
             timeout=15.0
         )
         
