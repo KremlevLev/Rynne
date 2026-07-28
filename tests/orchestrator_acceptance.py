@@ -281,6 +281,18 @@ GOLDEN_SCENARIOS = (
         ),
     ),
     AcceptanceScenario(
+        name="safe-file-undo",
+        request="Отмени последнее изменение файла, которое сделала Nova",
+        expected_tools=frozenset({"undo_last_file_change"}),
+        calls=(
+            ReplayCall(
+                "undo_last_file_change",
+                {},
+                PolicyDecision.REQUIRE_CONFIRMATION,
+            ),
+        ),
+    ),
+    AcceptanceScenario(
         name="backup-watch",
         request=(
             "Следи за резервной копией проекта и предупреди, "

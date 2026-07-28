@@ -744,6 +744,23 @@ filesystem_tools = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "undo_last_file_change",
+            "description": (
+                "Безопасно отменяет последнее изменение файла, "
+                "которое Nova выполнила через write_text_file или "
+                "apply_text_patch. Восстанавливает точный backup и "
+                "отказывается перезаписывать более свежие ручные правки."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 ALL_TOOLS.extend(filesystem_tools)

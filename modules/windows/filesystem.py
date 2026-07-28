@@ -189,8 +189,9 @@ def _backup_path(
         exist_ok=True
     )
 
-    timestamp = time.strftime(
-        "%Y%m%d_%H%M%S"
+    timestamp = (
+        time.strftime("%Y%m%d_%H%M%S")
+        + f"_{time.time_ns() % 1_000_000_000:09d}"
     )
 
     safe_name = (
@@ -252,8 +253,10 @@ def write_text_file(
         )
 
         original_hash = None
+        backup: Path | None = None
+        existed_before = resolved.exists()
 
-        if resolved.exists() and create_backup:
+        if existed_before and create_backup:
             backup = _backup_path(resolved)
 
             shutil.copy2(
@@ -292,6 +295,11 @@ def write_text_file(
             data["original_hash"] = (
                 original_hash
             )
+        if backup is not None:
+            data["backup_path"] = str(
+                backup.resolve()
+            )
+        data["existed_before"] = existed_before
 
         return ToolResult.ok(
             f"Файл записан: {resolved.name} "
@@ -324,6 +332,8 @@ def apply_text_patch(
         )
 
         original_content = _safe_read(resolved)
+        original_hash = _file_hash(resolved)
+        backup: Path | None = None
 
         if create_backup:
             backup = _backup_path(resolved)
@@ -388,6 +398,7 @@ def apply_text_patch(
                     )
 
         _atomic_write(resolved, patched_content)
+        new_hash = _file_hash(resolved)
 
         return ToolResult.ok(
             f"Патч применён к файлу: "
@@ -399,6 +410,13 @@ def apply_text_patch(
                 ),
                 "new_size": len(
                     patched_content
+                ),
+                "hash": new_hash,
+                "original_hash": original_hash,
+                "backup_path": (
+                    str(backup.resolve())
+                    if backup is not None
+                    else None
                 ),
             },
             verification=VerificationResult(
@@ -592,3 +610,127 @@ def rollback_file(
             "ROLLBACK_FAILED",
             str(exc),
         )
+
+
+def undo_last_file_change() -> ToolResult:
+    """
+    Restores the newest reversible file write made through ToolRunner.
+
+    A hash guard refuses the rollback if the file changed after Nova's
+    operation, so a later manual edit is never overwritten silently.
+    """
+    from modules.domain.ledger import get_ledger
+
+    ledger = get_ledger()
+    records = reversed(
+        ledger.get_rollbackable_records()
+    )
+
+    for record in records:
+        rollback = record.rollback_info or {}
+        if (
+            rollback.get("type")
+            != "restore_file_backup"
+            or rollback.get("undone")
+        ):
+            continue
+
+        try:
+            path = _resolve_path(
+                str(rollback["path"]),
+                allow_write=True,
+            )
+            backup_path = Path(
+                str(rollback["backup_path"])
+            ).resolve()
+            expected_hash = str(
+                rollback["expected_hash"]
+            )
+            original_hash = str(
+                rollback["original_hash"]
+            )
+        except (
+            KeyError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ):
+            continue
+
+        if not path.is_file():
+            return ToolResult.failure(
+                "ROLLBACK_TARGET_MISSING",
+                (
+                    "Откат остановлен: изменённый файл "
+                    f"больше не существует — {path}."
+                ),
+            )
+        if not backup_path.is_file():
+            return ToolResult.failure(
+                "ROLLBACK_BACKUP_MISSING",
+                (
+                    "Откат недоступен: backup не найден — "
+                    f"{backup_path}."
+                ),
+            )
+
+        current_hash = _file_hash(path)
+        if current_hash != expected_hash:
+            return ToolResult.failure(
+                "ROLLBACK_CONFLICT",
+                (
+                    "Откат остановлен: файл менялся после действия "
+                    "Nova. Более свежие правки не будут перезаписаны."
+                ),
+                data={
+                    "path": str(path),
+                    "expected_hash": expected_hash,
+                    "current_hash": current_hash,
+                    "record_id": record.id,
+                },
+            )
+
+        shutil.copy2(
+            str(backup_path),
+            str(path),
+        )
+        restored_hash = _file_hash(path)
+        if restored_hash != original_hash:
+            return ToolResult.failure(
+                "ROLLBACK_VERIFY_FAILED",
+                (
+                    "Backup восстановлен, но контрольный хэш "
+                    "не совпал с исходным."
+                ),
+                data={
+                    "path": str(path),
+                    "expected_hash": original_hash,
+                    "restored_hash": restored_hash,
+                },
+            )
+
+        rollback["undone"] = True
+        rollback["undone_at"] = time.time()
+        return ToolResult.ok(
+            f"Последнее изменение Nova отменено: {path.name}.",
+            data={
+                "path": str(path),
+                "restored_hash": restored_hash,
+                "record_id": record.id,
+                "original_tool": record.tool_name,
+            },
+            verification=VerificationResult(
+                verified=True,
+                method="backup_restore_sha256",
+                confidence=1.0,
+                details=(
+                    "Файл восстановлен из backup, "
+                    "исходный SHA-256 подтверждён."
+                ),
+            ),
+        )
+
+    return ToolResult.failure(
+        "NO_REVERSIBLE_FILE_CHANGE",
+        "Нет изменений файлов Nova, которые можно безопасно отменить.",
+    )

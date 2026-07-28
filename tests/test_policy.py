@@ -140,6 +140,7 @@ def test_always_confirmed_tools_require_confirmation() -> None:
         "execute_cmd_command",
         "close_application",
         "manage_windows",
+        "undo_last_file_change",
     ):
         context = create_policy_context(
             tool_name,

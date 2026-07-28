@@ -245,6 +245,26 @@ def test_unknown_action_gets_capability_fallback() -> None:
     assert "execute_plan" in result
 
 
+def test_safe_undo_is_selected_only_for_explicit_rollback() -> None:
+    available = {
+        "write_text_file",
+        "run_terminal_command",
+        "undo_last_file_change",
+    }
+
+    undo_result = select_tools_for_request(
+        "Отмени последнее изменение файла",
+        available,
+    )
+    test_result = select_tools_for_request(
+        "Запусти pytest в проекте",
+        available,
+    )
+
+    assert "undo_last_file_change" in undo_result
+    assert "undo_last_file_change" not in test_result
+
+
 def test_explicit_hotkey_request_can_use_atomic_primitive() -> None:
     available = {
         "get_current_time",

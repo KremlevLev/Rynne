@@ -119,6 +119,7 @@ from modules.windows.filesystem import (
     get_file_diff,
     search_files,
     rollback_file,
+    undo_last_file_change,
 )
 import asyncio
 import logging
@@ -437,6 +438,9 @@ def build_handlers(
         "get_file_diff": get_file_diff,
         "search_files": search_files,
         "rollback_file": rollback_file,
+        "undo_last_file_change": (
+            undo_last_file_change
+        ),
         "git_status": git_status,
         "git_diff": git_diff,
         "git_log": git_log,

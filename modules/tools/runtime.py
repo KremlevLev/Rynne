@@ -75,6 +75,7 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
     "open_website": RiskLevel.EXECUTE,
     "run_terminal_command": RiskLevel.EXECUTE,
     "execute_python_code": RiskLevel.EXECUTE,
+    "undo_last_file_change": RiskLevel.DESTRUCTIVE,
 
     "close_application": RiskLevel.DESTRUCTIVE,
     "manage_windows": RiskLevel.DESTRUCTIVE,
@@ -150,6 +151,7 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
     "create_workspace_project": (
         ToolCategory.DEVELOPMENT
     ),
+    "undo_last_file_change": ToolCategory.FILE_WRITE,
 
     "browser_start": ToolCategory.WEB_READ,
     "browser_open_url": ToolCategory.WEB_READ,
@@ -1120,13 +1122,42 @@ class ToolRunner:
         # Include artifacts if available
         artifacts = [str(a) for a in result.artifacts] if result.artifacts else []
         
+        rollback_info = definition.rollback_info
+        if (
+            result.success
+            and definition.name
+            in {"write_text_file", "apply_text_patch"}
+        ):
+            result_data = result.data or {}
+            if all(
+                result_data.get(key)
+                for key in (
+                    "path",
+                    "backup_path",
+                    "hash",
+                    "original_hash",
+                )
+            ):
+                rollback_info = {
+                    "type": "restore_file_backup",
+                    "path": result_data["path"],
+                    "backup_path": result_data[
+                        "backup_path"
+                    ],
+                    "expected_hash": result_data["hash"],
+                    "original_hash": result_data[
+                        "original_hash"
+                    ],
+                    "undone": False,
+                }
+
         get_ledger().record(
             tool_name=definition.name,
             arguments=arguments,
             result=result.to_dict(),
             session_id=actual_context.session_id,
             turn_id=actual_context.turn_id,
-            rollback_info=definition.rollback_info,
+            rollback_info=rollback_info,
             verification=verification_data,
             artifacts=artifacts,
         )

@@ -93,6 +93,7 @@ ALWAYS_CONFIRMED = frozenset(
         "close_application",
         "manage_windows",
         "execute_plan",
+        "undo_last_file_change",
 
     }
 )
