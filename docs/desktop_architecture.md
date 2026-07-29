@@ -62,6 +62,9 @@ Tauri запускает упакованный Python Core как sidecar. Ме
   команды и shutdown.
 - [ ] Version handshake и проверка совместимости Core/shell.
 - [ ] Перенос реальных chat/task/process/settings экранов.
-- [ ] PyInstaller onedir bundle для `nova-core.exe`.
+- [x] PyInstaller onedir bundle для `nova-core.exe`; Tauri включает Core как
+  resource и запускает его из writable app data working directory.
+- [x] NSIS current-user installer проверен установкой: release shell находит
+  packaged Core в Windows resource layout и завершает его вместе с окном.
 - [ ] Подписанные NSIS/MSI releases и Tauri updater.
 - [ ] Профилирование Python и решение по первому Go-worker.

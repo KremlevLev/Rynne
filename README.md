@@ -252,7 +252,34 @@ NOVA_DESKTOP_UI=false
 
 Новый desktop-клиент развивается в `apps/desktop`: React + TypeScript отвечают
 за presentation layer, Tauri — за окно, установщик и обновления, а всё AI-ядро
-остаётся в Python. Для локального просмотра кликабельного dev-сценария:
+остаётся в Python.
+
+### Обычная установка на Windows
+
+Пользователю нужен только один файл:
+
+```text
+Nova_0.1.0_x64-setup.exe
+```
+
+Запустите installer обычным двойным кликом. Nova установится для текущего
+пользователя в `%LOCALAPPDATA%\Nova`, появится в меню «Пуск» и в списке
+установленных программ. Python, Node.js и Rust на пользовательском компьютере
+не требуются.
+
+При первом старте без API-ключа приложение не падает: Core запускается в
+состоянии `unconfigured`. До появления onboarding-экрана ключ можно сохранить
+в `%APPDATA%\ai.nova.desktop\.env`:
+
+```env
+GROQ_API_KEY=gsk_...
+```
+
+После изменения `.env` перезапустите Nova.
+
+### Запуск для разработки
+
+Для локального просмотра кликабельного dev-сценария:
 
 ```powershell
 cd apps\desktop
@@ -273,8 +300,39 @@ npm run desktop
 
 Эта команда сама запускает Vite, собирает/открывает нативное окно Tauri и
 поднимает Python Core. Не запускайте `npm run dev` одновременно: оба процесса
-попытаются занять порт `1420`. Release-сборка потребует упакованный
-`nova-core.exe`.
+попытаются занять порт `1420`.
+
+### Сборка Windows installer
+
+Один раз установите build dependencies:
+
+```powershell
+python -m pip install -r requirements-build.txt
+cd apps\desktop
+npm install
+```
+
+Затем:
+
+```powershell
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+npm run installer
+```
+
+Команда собирает React, упаковывает headless Python Core через PyInstaller,
+собирает Tauri release и создаёт:
+
+```text
+apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.0_x64-setup.exe
+```
+
+Core использует source fingerprint: повторная сборка пропускает PyInstaller,
+если Python-ядро не менялось. Для принудительной пересборки:
+
+```powershell
+npm run build:core -- --force
+```
+
 Подробнее: [`docs/desktop_architecture.md`](docs/desktop_architecture.md).
 
 ## MCP: подключите рабочие сервисы

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-import tkinter as tk
+from typing import Any
 
 
 logger = logging.getLogger("Overlay")
@@ -20,7 +20,9 @@ def should_start_legacy_overlay(desktop_transport: str) -> bool:
 
 
 class NovaOverlay:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: Any) -> None:
+        import tkinter as tk
+
         self.root = root
         self.root.title("Nova Overlay")
         self.root.overrideredirect(True)
@@ -110,6 +112,8 @@ class NovaOverlay:
 
 def _run_gui() -> None:
     try:
+        import tkinter as tk
+
         root = tk.Tk()
         NovaOverlay(root)
         root.mainloop()

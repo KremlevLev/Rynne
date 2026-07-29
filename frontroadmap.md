@@ -28,6 +28,8 @@ Nova должна выглядеть как дорогой, быстрый и у
   инициализируется до появления подписанного release manifest и public key.
 - ✅ Старый непрерывный Tk overlay отключён для Tauri; runtime-состояния
   «слушает / думает / выполняет / отвечает» встроены в React activity panel.
+- ✅ Headless `nova-core.exe` собирается PyInstaller `onedir` и автоматически
+  включается в пользовательский NSIS installer.
 - ⬜ Затем: перенос task/activity, approvals и settings.
 
 Архитектурное решение и критерии для возможных Go-workers:

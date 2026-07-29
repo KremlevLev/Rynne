@@ -7,6 +7,9 @@
     "dev": "vite",
     "desktop": "tauri dev",
     "build": "tsc -b && vite build",
+    "build:core": "python ../../scripts/build_installer.py",
+    "build:bundle": "npm run build && npm run build:core",
+    "installer": "tauri build --bundles nsis",
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri"

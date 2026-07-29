@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build:bundle",
     "frontendDist": "../dist"
   },
   "app": {
@@ -27,7 +27,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
+    "category": "Productivity",
+    "publisher": "Nova",
+    "shortDescription": "Персональный AI-агент для Windows",
+    "longDescription": "Nova выполняет задачи в Windows, работает с файлами, браузером, приложениями и подключёнными инструментами.",
+    "resources": [
+      "resources/nova-core/"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -35,8 +42,12 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "allowDowngrades": false,
       "nsis": {
-        "installMode": "currentUser"
+        "compression": "lzma",
+        "installMode": "currentUser",
+        "languages": ["Russian", "English"],
+        "startMenuFolder": "Nova"
       }
     }
   }

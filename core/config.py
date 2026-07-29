@@ -91,10 +91,11 @@ OPENROUTER_API_KEY = (
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
 HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 
-if not GROQ_API_KEYS and not OPENROUTER_API_KEYS and not GEMINI_API_KEYS:
-    raise ValueError(
-        "Не найден ни один ключ Groq, OpenRouter или Gemini."
-    )
+HAS_MODEL_PROVIDER: Final[bool] = bool(
+    GROQ_API_KEYS
+    or OPENROUTER_API_KEYS
+    or GEMINI_API_KEYS
+)
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -110,10 +111,17 @@ elif GEMINI_API_KEYS:
     PROVIDER = "gemini"
     BASE_URL = GEMINI_BASE_URL
     API_KEY = GEMINI_API_KEYS[0]
-else:
+elif OPENROUTER_API_KEYS:
     PROVIDER = "openrouter"
     BASE_URL = OPENROUTER_BASE_URL
     API_KEY = OPENROUTER_API_KEYS[0]
+else:
+    # A freshly installed desktop app must reach onboarding/settings without
+    # an API key. ModelGateway already represents providers as empty key-slot
+    # lists and reports the unconfigured state to the UI.
+    PROVIDER = "unconfigured"
+    BASE_URL = ""
+    API_KEY = ""
 
 # Groq is deliberately kept on one strong tool-calling model.  A single
 # override prevents chat/tool routes from silently drifting to weaker models.

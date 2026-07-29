@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 724 tests passed
+python -m pytest tests/ -q  # 725 tests passed
 cd apps/desktop && npm test  # 4 tests passed
 ```
 
@@ -24,8 +24,17 @@ cd apps/desktop && npm test  # 4 tests passed
   на HTTPS и runtime crash updater без ключа подписи.
 - ✅ Legacy Tk overlay «СПИТ / ГОВОРИТ» отключён в Tauri-режиме; реальные
   состояния Core теперь отображаются внутри React activity panel.
+- ✅ Добавлена installer-сборка: headless Python Core пакуется PyInstaller
+  `onedir`, включается в Tauri resources и устанавливается через NSIS без
+  требования Python/Node/Rust на пользовательском компьютере.
+- ✅ Release supervisor разрешает фактический Windows NSIS resource layout
+  (`resources/nova-core`) и хранит runtime data вне каталога установки.
+- ✅ NSIS проверен end-to-end: тихая current-user установка, запуск окна и
+  packaged Core, создание app-data и совместное завершение процессов.
+- ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;
+  provider помечается `unconfigured`, чтобы UI мог провести onboarding.
 - ⬜ Перенести реальные task/process/settings экраны на React.
-- ⬜ Собрать `nova-core.exe`, включить подписанный updater и release pipeline.
+- ⬜ Подписать NSIS, включить updater и release pipeline.
 
 # КОНТЕКСТ ПРОЕКТА
 - Ты помогаешь мне развивать моего кастомного ИИ-агента.

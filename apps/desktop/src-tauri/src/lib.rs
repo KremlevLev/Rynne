@@ -91,8 +91,33 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
         .path()
         .resource_dir()
         .map_err(|error| format!("Cannot locate Nova resources: {error}"))?;
-    let executable = resource_dir.join(core_binary_name());
-    Ok(Command::new(executable))
+    let binary_name = core_binary_name();
+    let executable = [
+        resource_dir
+            .join("resources")
+            .join("nova-core")
+            .join(&binary_name),
+        resource_dir.join("nova-core").join(&binary_name),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file())
+    .ok_or_else(|| {
+        format!(
+            "Packaged Nova Core is missing below {}",
+            resource_dir.display()
+        )
+    })?;
+
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Cannot locate Nova data directory: {error}"))?;
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("Cannot create Nova data directory: {error}"))?;
+
+    let mut command = Command::new(executable);
+    command.current_dir(data_dir);
+    Ok(command)
 }
 
 fn core_binary_name() -> PathBuf {
