@@ -460,6 +460,179 @@ class ProactiveSuggestionEngine:
         self._last_emitted[kind] = now
         return [suggestion]
 
+    def observe_system_health(
+        self,
+        snapshot: Mapping[str, Any],
+        *,
+        cpu_percent_threshold: float = 90.0,
+        memory_percent_threshold: float = 88.0,
+        consecutive_samples: int = 4,
+        max_sample_gap_seconds: float = 60.0,
+    ) -> list[ProactiveSuggestion]:
+        """Alerts only after sustained pressure and names the likely culprit."""
+        if self._is_quiet_time():
+            return []
+
+        kind = "system_resource_pressure"
+        if not self._kind_enabled(kind):
+            return []
+
+        cpu_percent = max(
+            0.0,
+            float(snapshot.get("cpu_percent") or 0.0),
+        )
+        memory_percent = max(
+            0.0,
+            float(snapshot.get("memory_percent") or 0.0),
+        )
+        sampled_at = float(
+            snapshot.get("sampled_at") or self.clock()
+        )
+        cpu_limit = max(1.0, cpu_percent_threshold)
+        memory_limit = max(
+            1.0,
+            memory_percent_threshold,
+        )
+        is_high = (
+            cpu_percent >= cpu_limit
+            or memory_percent >= memory_limit
+        )
+
+        state_key = "system_health:resource_pressure"
+        previous = self._get_state(state_key)
+        cycle = int(previous.get("cycle", 0))
+        streak = int(previous.get("streak", 0))
+        active = bool(previous.get("active", False))
+        previous_sampled_at = float(
+            previous.get("sampled_at", 0.0)
+        )
+
+        if (
+            previous_sampled_at
+            and sampled_at - previous_sampled_at
+            > max(1.0, max_sample_gap_seconds)
+        ):
+            streak = 0
+
+        recovered = (
+            cpu_percent < max(0.0, cpu_limit - 15.0)
+            and memory_percent
+            < max(0.0, memory_limit - 10.0)
+        )
+        if not is_high:
+            if recovered and (active or streak):
+                self._set_state(
+                    state_key,
+                    {
+                        "active": False,
+                        "streak": 0,
+                        "cycle": cycle,
+                        "sampled_at": sampled_at,
+                    },
+                )
+            return []
+
+        if active:
+            return []
+
+        streak += 1
+        state = {
+            "active": active,
+            "streak": streak,
+            "cycle": cycle,
+            "sampled_at": sampled_at,
+        }
+        if active or streak < max(1, consecutive_samples):
+            self._set_state(state_key, state)
+            return []
+
+        now = self.clock()
+        if (
+            now - self._last_emitted.get(kind, 0.0)
+            < self.cooldown_seconds
+        ):
+            self._set_state(state_key, state)
+            return []
+
+        cycle += 1
+        source_key = f"system:resource-pressure:{cycle}"
+        if self._was_emitted(source_key):
+            state.update({"active": True, "cycle": cycle})
+            self._set_state(state_key, state)
+            return []
+
+        high_resources: list[str] = []
+        if cpu_percent >= cpu_limit:
+            high_resources.append(
+                f"CPU {cpu_percent:.0f}%"
+            )
+        if memory_percent >= memory_limit:
+            high_resources.append(
+                f"RAM {memory_percent:.0f}%"
+            )
+
+        top_processes = snapshot.get(
+            "top_processes",
+            [],
+        )
+        culprit = None
+        if isinstance(top_processes, list):
+            candidates = [
+                item
+                for item in top_processes
+                if isinstance(item, Mapping)
+            ]
+            if candidates:
+                prefer_memory = (
+                    memory_percent >= memory_limit
+                    and cpu_percent < cpu_limit
+                )
+                culprit = max(
+                    candidates,
+                    key=lambda item: float(
+                        item.get(
+                            "memory_percent"
+                            if prefer_memory
+                            else "cpu_percent",
+                            0.0,
+                        )
+                        or 0.0
+                    ),
+                )
+
+        culprit_text = ""
+        if culprit is not None:
+            culprit_text = (
+                " Больше всего ресурсов использует "
+                f"{str(culprit.get('name') or 'процесс')} "
+                f"(PID {int(culprit.get('pid') or 0)}, "
+                f"CPU {float(culprit.get('cpu_percent') or 0):.0f}%, "
+                f"RAM {float(culprit.get('memory_percent') or 0):.1f}%)."
+            )
+
+        suggestion = ProactiveSuggestion(
+            event_id=f"proactive_{uuid.uuid4().hex}",
+            kind=kind,
+            title="Система долго работает под высокой нагрузкой",
+            message=(
+                f"{' и '.join(high_resources)} держатся выше порога."
+                f"{culprit_text}"
+            ),
+            reason=(
+                "Высокая нагрузка подтверждена "
+                f"{streak} последовательными измерениями; "
+                f"пороги CPU={cpu_limit:.0f}% и "
+                f"RAM={memory_limit:.0f}%."
+            ),
+            source_key=source_key,
+            importance="high",
+        )
+        self._store(suggestion)
+        self._last_emitted[kind] = now
+        state.update({"active": True, "cycle": cycle})
+        self._set_state(state_key, state)
+        return [suggestion]
+
     def observe_stale_processes(
         self,
         processes: Iterable[Mapping[str, Any]],

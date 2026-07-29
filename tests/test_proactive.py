@@ -9,6 +9,7 @@ from modules.agent.background_plans import (
     BackgroundPlanStatus,
 )
 from modules.agent.proactive import ProactiveSuggestionEngine
+from modules.agent.system_health import SystemHealthSampler
 from modules.storage.database import Database
 
 
@@ -267,6 +268,186 @@ def test_disk_space_state_survives_engine_restart() -> None:
             free_bytes_threshold=0,
             usage=usage,
         ) == []
+        database.close()
+
+
+def test_system_pressure_requires_sustained_samples_and_names_culprit() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = [100.0]
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now[0],
+            local_hour=lambda: 12,
+        )
+        snapshot = {
+            "cpu_percent": 96.0,
+            "memory_percent": 72.0,
+            "sampled_at": now[0],
+            "top_processes": [
+                {
+                    "pid": 4242,
+                    "name": "render.exe",
+                    "cpu_percent": 91.0,
+                    "memory_percent": 4.5,
+                },
+                {
+                    "pid": 7,
+                    "name": "other.exe",
+                    "cpu_percent": 12.0,
+                    "memory_percent": 2.0,
+                },
+            ],
+        }
+
+        assert engine.observe_system_health(
+            snapshot,
+            consecutive_samples=3,
+        ) == []
+        now[0] += 15
+        snapshot["sampled_at"] = now[0]
+        assert engine.observe_system_health(
+            snapshot,
+            consecutive_samples=3,
+        ) == []
+        now[0] += 15
+        snapshot["sampled_at"] = now[0]
+        suggestions = engine.observe_system_health(
+            snapshot,
+            consecutive_samples=3,
+        )
+
+        assert len(suggestions) == 1
+        assert (
+            suggestions[0].kind
+            == "system_resource_pressure"
+        )
+        assert suggestions[0].importance == "high"
+        assert "render.exe" in suggestions[0].message
+        assert "PID 4242" in suggestions[0].message
+        assert "3 последовательными" in suggestions[0].reason
+        assert engine.observe_system_health(
+            snapshot,
+            consecutive_samples=3,
+        ) == []
+        database.close()
+
+
+def test_system_pressure_resets_after_stale_sample_gap() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+        snapshot = {
+            "cpu_percent": 95.0,
+            "memory_percent": 50.0,
+            "sampled_at": 100.0,
+            "top_processes": [],
+        }
+
+        assert engine.observe_system_health(
+            snapshot,
+            consecutive_samples=2,
+            max_sample_gap_seconds=30,
+        ) == []
+        snapshot["sampled_at"] = 200.0
+        assert engine.observe_system_health(
+            snapshot,
+            consecutive_samples=2,
+            max_sample_gap_seconds=30,
+        ) == []
+        snapshot["sampled_at"] = 210.0
+        assert len(
+            engine.observe_system_health(
+                snapshot,
+                consecutive_samples=2,
+                max_sample_gap_seconds=30,
+            )
+        ) == 1
+        database.close()
+
+
+def test_system_pressure_can_alert_again_after_recovery() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+        high = {
+            "cpu_percent": 40.0,
+            "memory_percent": 94.0,
+            "sampled_at": 100.0,
+            "top_processes": [],
+        }
+
+        first = engine.observe_system_health(
+            high,
+            consecutive_samples=1,
+        )
+        normal = dict(
+            high,
+            cpu_percent=20.0,
+            memory_percent=40.0,
+            sampled_at=110.0,
+        )
+        assert engine.observe_system_health(
+            normal,
+            consecutive_samples=1,
+        ) == []
+        high["sampled_at"] = 120.0
+        second = engine.observe_system_health(
+            high,
+            consecutive_samples=1,
+        )
+
+        assert len(first) == 1
+        assert len(second) == 1
+        assert first[0].source_key != second[0].source_key
+        database.close()
+
+
+def test_system_health_sampler_returns_bounded_snapshot() -> None:
+    snapshot = SystemHealthSampler().sample()
+
+    assert 0.0 <= snapshot.cpu_percent <= 100.0
+    assert 0.0 <= snapshot.memory_percent <= 100.0
+    assert snapshot.available_memory_bytes >= 0
+    assert len(snapshot.top_processes) <= 5
+
+
+def test_normal_system_samples_do_not_churn_persistent_state() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+
+        for sampled_at in (100.0, 115.0, 130.0):
+            assert engine.observe_system_health(
+                {
+                    "cpu_percent": 20.0,
+                    "memory_percent": 35.0,
+                    "sampled_at": sampled_at,
+                    "top_processes": [],
+                }
+            ) == []
+
+        row = database.fetchone(
+            """
+            SELECT value FROM proactive_state
+            WHERE state_key = ?
+            """,
+            ("system_health:resource_pressure",),
+        )
+        assert row is None
         database.close()
 
 

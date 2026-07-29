@@ -50,6 +50,10 @@ from core.config import (
     NOVA_PROACTIVE_DISK_CHECK_SECONDS,
     NOVA_PROACTIVE_DISK_FREE_GB,
     NOVA_PROACTIVE_DISK_FREE_PERCENT,
+    NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS,
+    NOVA_PROACTIVE_CPU_PERCENT,
+    NOVA_PROACTIVE_MEMORY_PERCENT,
+    NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES,
     NOVA_PROACTIVE_ENABLED,
     NOVA_PROACTIVE_QUIET_END,
     NOVA_PROACTIVE_QUIET_START,
@@ -88,6 +92,9 @@ from modules.agent.proactive import (
 from modules.agent.website_watches import WebsiteWatchManager
 from modules.agent.backup_watches import BackupWatchManager
 from modules.agent.package_updates import PackageUpdateManager
+from modules.agent.system_health import (
+    SystemHealthSampler,
+)
 from modules.storage.artifacts import (
     ArtifactStore,
 )
@@ -822,6 +829,7 @@ async def async_main() -> None:
     website_watch_manager = WebsiteWatchManager(database)
     backup_watch_manager = BackupWatchManager(database)
     package_update_manager = PackageUpdateManager(database)
+    system_health_sampler = SystemHealthSampler()
 
     def handle_tool_event(
         event_type: str,
@@ -841,6 +849,7 @@ async def async_main() -> None:
 
     async def proactive_worker() -> None:
         next_disk_check = 0.0
+        next_system_check = 0.0
         next_repository_check = 0.0
         next_workflow_check = 0.0
         next_website_check = 0.0
@@ -886,6 +895,36 @@ async def async_main() -> None:
                     )
                 )
                 loop_now = asyncio.get_running_loop().time()
+                if loop_now >= next_system_check:
+                    health_snapshot = await asyncio.to_thread(
+                        system_health_sampler.sample
+                    )
+                    suggestions.extend(
+                        proactive_engine.observe_system_health(
+                            health_snapshot.to_dict(),
+                            cpu_percent_threshold=(
+                                NOVA_PROACTIVE_CPU_PERCENT
+                            ),
+                            memory_percent_threshold=(
+                                NOVA_PROACTIVE_MEMORY_PERCENT
+                            ),
+                            consecutive_samples=(
+                                NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES
+                            ),
+                            max_sample_gap_seconds=max(
+                                5.0,
+                                NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS
+                                * 2.5,
+                            ),
+                        )
+                    )
+                    next_system_check = (
+                        loop_now
+                        + max(
+                            5.0,
+                            NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS,
+                        )
+                    )
                 if loop_now >= next_disk_check:
                     suggestions.extend(
                         proactive_engine.observe_disk_space(

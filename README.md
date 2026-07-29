@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-700%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-705%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -115,6 +115,7 @@ Nova сообщает, когда:
 
 - завершился фоновый план или тесты;
 - упал управляемый сервер;
+- CPU или RAM остаются перегруженными несколько измерений подряд — с указанием процесса-виновника;
 - на диске заканчивается место;
 - одноразовый процесс подозрительно долго остаётся запущенным;
 - в Git появился конфликт или изменения давно не закоммичены;
@@ -288,6 +289,10 @@ NOVA_PROACTIVE_QUIET_START=22
 NOVA_PROACTIVE_QUIET_END=8
 NOVA_PROACTIVE_DISK_FREE_PERCENT=10
 NOVA_PROACTIVE_DISK_FREE_GB=5
+NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS=15
+NOVA_PROACTIVE_CPU_PERCENT=90
+NOVA_PROACTIVE_MEMORY_PERCENT=88
+NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES=4
 NOVA_PROACTIVE_STALE_PROCESS_HOURS=4
 NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS=60
 NOVA_PROACTIVE_UNCOMMITTED_MINUTES=30
@@ -340,7 +345,7 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **700 тестов**.
+Текущий regression suite: **705 тестов**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 
