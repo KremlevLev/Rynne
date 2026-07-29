@@ -31,10 +31,12 @@ def test_default_preferences() -> None:
     )
     assert snapshot.cloud_enabled
     assert snapshot.history_enabled
+    assert not snapshot.proactive_vision_enabled
 
 
 def test_privacy_mode_disables_cloud_and_history() -> None:
     manager = PreferencesManager()
+    manager.set_proactive_vision_enabled(True)
 
     snapshot = manager.set_input_mode(
         InputMode.PRIVACY
@@ -42,6 +44,28 @@ def test_privacy_mode_disables_cloud_and_history() -> None:
 
     assert not snapshot.cloud_enabled
     assert not snapshot.history_enabled
+    assert not snapshot.proactive_vision_enabled
+
+
+def test_proactive_vision_requires_cloud_and_is_opt_in() -> None:
+    manager = PreferencesManager()
+
+    enabled = manager.set_proactive_vision_enabled(
+        True
+    )
+    assert enabled.proactive_vision_enabled
+
+    disabled_cloud = manager.set_cloud_enabled(False)
+    assert not disabled_cloud.proactive_vision_enabled
+
+    try:
+        manager.set_proactive_vision_enabled(True)
+    except ValueError as exc:
+        assert "vision" in str(exc)
+    else:
+        raise AssertionError(
+            "Proactive vision was enabled without cloud."
+        )
 
 
 def test_private_profile_uses_local_model() -> None:

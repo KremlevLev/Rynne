@@ -27,9 +27,11 @@ class ProactiveSuggestion:
     reason: str
     source_key: str
     importance: str = "normal"
+    suggested_request: str | None = None
+    action_label: str | None = None
 
     def to_dict(self) -> dict[str, str]:
-        return {
+        payload = {
             "event_id": self.event_id,
             "kind": self.kind,
             "title": self.title,
@@ -38,6 +40,13 @@ class ProactiveSuggestion:
             "source_key": self.source_key,
             "importance": self.importance,
         }
+        if self.suggested_request:
+            payload["suggested_request"] = (
+                self.suggested_request
+            )
+        if self.action_label:
+            payload["action_label"] = self.action_label
+        return payload
 
 
 class ProactiveSuggestionEngine:
@@ -66,6 +75,13 @@ class ProactiveSuggestionEngine:
 
     def _kind_enabled(self, kind: str) -> bool:
         return kind not in self.disabled_kinds
+
+    def can_observe(self, kind: str) -> bool:
+        """Whether an expensive observer may run right now."""
+        return (
+            self._kind_enabled(kind)
+            and not self._is_quiet_time()
+        )
 
     def _is_quiet_time(self) -> bool:
         start, end = self.quiet_hours
@@ -631,6 +647,54 @@ class ProactiveSuggestionEngine:
         self._last_emitted[kind] = now
         state.update({"active": True, "cycle": cycle})
         self._set_state(state_key, state)
+        return [suggestion]
+
+    def observe_visual_insight(
+        self,
+        insight: Any,
+    ) -> list[ProactiveSuggestion]:
+        """Persists a safe vision insight without storing its screenshot."""
+        if self._is_quiet_time():
+            return []
+        kind = "proactive_visual_help"
+        if not self._kind_enabled(kind):
+            return []
+        if not bool(
+            getattr(insight, "should_interrupt", False)
+        ):
+            return []
+
+        fingerprint = str(
+            getattr(insight, "visual_fingerprint", "")
+        ).strip()
+        if not fingerprint:
+            return []
+        source_key = f"visual:{fingerprint}"
+        if self._was_emitted(source_key):
+            return []
+
+        now = self.clock()
+        if (
+            now - self._last_emitted.get(kind, 0.0)
+            < self.cooldown_seconds
+        ):
+            return []
+
+        suggestion = ProactiveSuggestion(
+            event_id=f"proactive_{uuid.uuid4().hex}",
+            kind=kind,
+            title=str(insight.title),
+            message=str(insight.message),
+            reason=str(insight.reason),
+            source_key=source_key,
+            importance="normal",
+            suggested_request=str(
+                insight.suggested_request
+            ),
+            action_label=str(insight.action_label),
+        )
+        self._store(suggestion)
+        self._last_emitted[kind] = now
         return [suggestion]
 
     def observe_stale_processes(

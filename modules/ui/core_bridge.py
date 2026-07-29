@@ -59,6 +59,7 @@ class CoreDesktopBridge:
         plan_service=None,
         background_plan_manager=None,
         mcp_gateway=None,
+        proactive_context_store=None,
     ) -> None:
         self.desktop = desktop
         self.process_manager = (
@@ -84,6 +85,9 @@ class CoreDesktopBridge:
             background_plan_manager
         )
         self.mcp_gateway = mcp_gateway
+        self.proactive_context_store = (
+            proactive_context_store
+        )
         self._last_submission: dict[str, Any] | None = None
         self._reported_plan_ids: set[str] = set()
         self._reported_bg_ids: set[str] = set()
@@ -475,6 +479,13 @@ class CoreDesktopBridge:
                     snapshot = self.preferences.set_cloud_enabled(bool(value))
                 elif key == "history_enabled":
                     snapshot = self.preferences.set_history_enabled(bool(value))
+                elif key == "proactive_vision_enabled":
+                    snapshot = (
+                        self.preferences
+                        .set_proactive_vision_enabled(
+                            bool(value)
+                        )
+                    )
                 else:
                     raise ValueError(
                         f"Неизвестная настройка: {key}"
@@ -687,6 +698,7 @@ class CoreDesktopBridge:
                     )
 
                 attachments: list[Attachment] = []
+                proactive_context_path: str | None = None
                 raw_attachments = payload.get(
                     "attachments",
                     [],
@@ -720,6 +732,45 @@ class CoreDesktopBridge:
                             )
                         )
 
+                proactive_source_key = str(
+                    payload.get(
+                        "proactive_context_key",
+                        "",
+                    )
+                )
+                if (
+                    proactive_source_key.startswith(
+                        "visual:"
+                    )
+                    and self.proactive_context_store
+                    is not None
+                ):
+                    context_path = (
+                        self.proactive_context_store
+                        .materialize_once(
+                            proactive_source_key
+                        )
+                    )
+                    if context_path:
+                        proactive_context_path = (
+                            context_path
+                        )
+                        attachments.append(
+                            Attachment(
+                                attachment_type=(
+                                    AttachmentType.SCREENSHOT
+                                ),
+                                path=context_path,
+                                display_name=(
+                                    "Контекст активного окна"
+                                ),
+                                metadata={
+                                    "proactive_context": True,
+                                    "delete_after_read": True,
+                                },
+                            )
+                        )
+
                 request = (
                     await self.input_coordinator
                     .submit_text(
@@ -735,10 +786,31 @@ class CoreDesktopBridge:
                             )
                         ),
                         attachments=attachments,
+                        metadata=(
+                            {
+                                "proactive_suggestion_accepted": True,
+                                "proactive_event_id": str(
+                                    payload.get(
+                                        "proactive_event_id"
+                                    )
+                                ),
+                            }
+                            if str(
+                                payload.get(
+                                    "proactive_event_id",
+                                    "",
+                                )
+                            ).startswith("proactive_")
+                            else None
+                        ),
                     )
                 )
                 if request is not None:
                     self._last_submission = dict(payload)
+                elif proactive_context_path:
+                    Path(
+                        proactive_context_path
+                    ).unlink(missing_ok=True)
 
                 self._publish_command_result(
                     command_id,

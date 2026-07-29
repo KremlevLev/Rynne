@@ -794,6 +794,34 @@ def run_desktop(
                         ),
                     )
 
+                elif event_type == "proactive_suggestion":
+                    title = str(
+                        payload.get("title", "")
+                    ).strip()
+                    message = str(
+                        payload.get("message", "")
+                    ).strip()
+                    reason = str(
+                        payload.get("reason", "")
+                    ).strip()
+                    combined = "\n\n".join(
+                        part
+                        for part in (
+                            title,
+                            message,
+                            (
+                                f"Почему: {reason}"
+                                if reason
+                                else ""
+                            ),
+                        )
+                        if part
+                    )
+                    self._append_chat_message(
+                        "Nova",
+                        combined,
+                    )
+
                 elif event_type == "preferences":
                     self._update_preferences(
                         payload

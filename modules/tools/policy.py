@@ -123,6 +123,19 @@ def evaluate_policy(
     if policy_context.tool_name in ALWAYS_ALLOWED:
         return PolicyDecision.ALLOW
 
+    if policy_context.metadata.get(
+        "proactive_suggestion_accepted"
+    ):
+        if policy_context.risk == RiskLevel.DESTRUCTIVE:
+            return (
+                PolicyDecision.REQUIRE_STRONG_CONFIRMATION
+            )
+        if policy_context.risk in {
+            RiskLevel.WRITE,
+            RiskLevel.EXECUTE,
+        }:
+            return PolicyDecision.REQUIRE_CONFIRMATION
+
     if policy_context.tool_name in ALWAYS_CONFIRMED:
         return PolicyDecision.REQUIRE_CONFIRMATION
 

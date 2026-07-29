@@ -14,6 +14,8 @@ from modules.domain.results import (
     ToolResult,
 )
 from modules.input_hub.models import (
+    Attachment,
+    AttachmentType,
     UserRequest,
 )
 from modules.routing.direct_executor import (
@@ -107,6 +109,35 @@ def test_direct_request_does_not_call_agent() -> None:
             "model_calls"
         ] == 0
         assert agent.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_image_context_never_uses_direct_bypass(
+    tmp_path,
+) -> None:
+    async def scenario() -> None:
+        dispatcher, agent = create_dispatcher()
+        image = tmp_path / "context.png"
+        image.write_bytes(b"image")
+
+        response = await dispatcher.dispatch(
+            UserRequest.from_text(
+                "Который час?",
+                attachments=[
+                    Attachment(
+                        attachment_type=(
+                            AttachmentType.SCREENSHOT
+                        ),
+                        path=str(image),
+                    )
+                ],
+            )
+        )
+
+        assert response.success
+        assert len(agent.calls) == 1
+        assert agent.calls[0]["has_image"] is True
 
     asyncio.run(scenario())
 

@@ -54,6 +54,8 @@ from core.config import (
     NOVA_PROACTIVE_CPU_PERCENT,
     NOVA_PROACTIVE_MEMORY_PERCENT,
     NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES,
+    NOVA_PROACTIVE_VISION_CHECK_SECONDS,
+    NOVA_PROACTIVE_VISION_MIN_CONFIDENCE,
     NOVA_PROACTIVE_ENABLED,
     NOVA_PROACTIVE_QUIET_END,
     NOVA_PROACTIVE_QUIET_START,
@@ -94,6 +96,9 @@ from modules.agent.backup_watches import BackupWatchManager
 from modules.agent.package_updates import PackageUpdateManager
 from modules.agent.system_health import (
     SystemHealthSampler,
+)
+from modules.agent.proactive_vision import (
+    ProactiveVisionObserver,
 )
 from modules.storage.artifacts import (
     ArtifactStore,
@@ -1249,6 +1254,70 @@ async def async_main() -> None:
     )
 
     input_coordinator = InputCoordinator()
+    proactive_vision_observer = (
+        ProactiveVisionObserver(
+            llm,
+            window_title_provider=(
+                get_active_window_title
+            ),
+            min_confidence=(
+                NOVA_PROACTIVE_VISION_MIN_CONFIDENCE
+            ),
+        )
+    )
+
+    async def proactive_vision_worker() -> None:
+        while not runtime.shutdown_event.is_set():
+            preference_snapshot = (
+                preferences.snapshot()
+            )
+            enabled = (
+                NOVA_PROACTIVE_ENABLED
+                and preference_snapshot
+                .proactive_vision_enabled
+                and preference_snapshot.cloud_enabled
+                and runtime.state
+                == AssistantState.SLEEPING
+                and proactive_engine.can_observe(
+                    "proactive_visual_help"
+                )
+            )
+            delay = 2.0
+            if enabled:
+                try:
+                    insight = (
+                        await proactive_vision_observer
+                        .inspect()
+                    )
+                    if insight is not None:
+                        for suggestion in (
+                            proactive_engine
+                            .observe_visual_insight(
+                                insight
+                            )
+                        ):
+                            desktop_service.publish(
+                                "proactive_suggestion",
+                                suggestion.to_dict(),
+                            )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception(
+                        "Сбой opt-in режима «Nova рядом»."
+                    )
+                delay = max(
+                    30.0,
+                    NOVA_PROACTIVE_VISION_CHECK_SECONDS,
+                )
+
+            try:
+                await asyncio.wait_for(
+                    runtime.shutdown_event.wait(),
+                    timeout=delay,
+                )
+            except asyncio.TimeoutError:
+                pass
 
     direct_executor = DirectRequestExecutor(
         runner=runner,
@@ -1403,6 +1472,9 @@ async def async_main() -> None:
             background_plan_manager
         ),
         mcp_gateway=mcp_gateway,
+        proactive_context_store=(
+            proactive_vision_observer.context_store
+        ),
 
     )
 
@@ -1524,6 +1596,10 @@ async def async_main() -> None:
         ),
         name="nova-workspace-context",
     )
+    proactive_vision_task = asyncio.create_task(
+        proactive_vision_worker(),
+        name="nova-proactive-vision",
+    )
 
 
     try:
@@ -1548,6 +1624,7 @@ async def async_main() -> None:
         wake_runtime_task.cancel()
         proactive_task.cancel()
         workspace_context_task.cancel()
+        proactive_vision_task.cancel()
         await asyncio.gather(
             reminder_task,
             voice_task,
@@ -1556,6 +1633,7 @@ async def async_main() -> None:
             desktop_bridge_task,
             proactive_task,
             workspace_context_task,
+            proactive_vision_task,
             return_exceptions=True,
         )
 

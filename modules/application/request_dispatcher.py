@@ -103,6 +103,7 @@ class RequestDispatcher:
         if (
             decision.strategy
             == ExecutionStrategy.DIRECT
+            and not request.has_image
         ):
             response = (
                 await self.direct_executor.execute(

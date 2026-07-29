@@ -77,6 +77,22 @@ def test_write_risk_has_warning() -> None:
     )
 
 
+def test_proactive_suggestion_write_requires_confirmation() -> None:
+    context = create_policy_context(
+        "browser_fill",
+        risk=RiskLevel.WRITE,
+        category=ToolCategory.GUI_WRITE,
+    )
+    context.metadata[
+        "proactive_suggestion_accepted"
+    ] = True
+
+    assert (
+        evaluate_policy(context)
+        == PolicyDecision.REQUIRE_CONFIRMATION
+    )
+
+
 def test_execute_risk_requires_confirmation() -> None:
     context = create_policy_context(
         "run_terminal_command",

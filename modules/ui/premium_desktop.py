@@ -589,19 +589,52 @@ def _handle_event(
         return
 
     if event_type == "proactive_suggestion":
+        title = str(payload.get("title", "")).strip()
         message_text = str(payload.get("message", "")).strip()
         reason = str(payload.get("reason", "")).strip()
+        if title:
+            message_text = f"{title}\n\n{message_text}"
         if reason:
             message_text = f"{message_text}\n\nПочему: {reason}"
-        chat_view.add_message(
-            ChatMessage(
-                author="Nova",
-                text=message_text,
-                is_user=False,
-                timestamp=_format_time(payload),
-                status="предложение",
-            )
+        proactive_message = ChatMessage(
+            author="Nova",
+            text=message_text,
+            is_user=False,
+            timestamp=_format_time(payload),
+            status="предложение",
         )
+        suggested_request = str(
+            payload.get("suggested_request", "")
+        ).strip()
+        if suggested_request and command_queue is not None:
+            proactive_event_id = str(
+                payload.get("event_id", "")
+            ).strip()
+            proactive_context_key = str(
+                payload.get("source_key", "")
+            ).strip()
+            proactive_message.add_action(
+                str(
+                    payload.get("action_label")
+                    or "Помочь"
+                ),
+                lambda request=suggested_request: (
+                    _send_command(
+                        command_queue,
+                        "submit_user_request",
+                        {
+                            "text": request,
+                            "proactive_event_id": (
+                                proactive_event_id
+                            ),
+                            "proactive_context_key": (
+                                proactive_context_key
+                            ),
+                        },
+                    )
+                ),
+            )
+        chat_view.add_message(proactive_message)
         if hasattr(shell, "show_screen"):
             shell.show_screen("chat")
         return

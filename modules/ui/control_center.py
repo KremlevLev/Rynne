@@ -367,6 +367,19 @@ class SettingsPage(ControlPage):
             "Хранить контекст сессий локально.",
             lambda checked: self._emit("history_enabled", checked),
         )
+        self._proactive_vision = self._toggle_row(
+            form,
+            "Nova рядом",
+            (
+                "Иногда отправлять снимок только активного окна "
+                "в облачную vision-модель, чтобы Nova могла заметить проблему "
+                "и предложить помощь. Выключено по умолчанию."
+            ),
+            lambda checked: self._emit(
+                "proactive_vision_enabled",
+                checked,
+            ),
+        )
         card.setStyleSheet(
             f"""
             QFrame#settingsCard {{
@@ -464,6 +477,14 @@ class SettingsPage(ControlPage):
             self._tts.setChecked(bool(preferences.get("tts_enabled", True)))
             self._cloud.setChecked(bool(preferences.get("cloud_enabled", True)))
             self._history.setChecked(bool(preferences.get("history_enabled", True)))
+            self._proactive_vision.setChecked(
+                bool(
+                    preferences.get(
+                        "proactive_vision_enabled",
+                        False,
+                    )
+                )
+            )
         finally:
             self._updating = False
 
@@ -472,4 +493,3 @@ class SettingsPage(ControlPage):
         index = combo.findData(value)
         if index >= 0:
             combo.setCurrentIndex(index)
-

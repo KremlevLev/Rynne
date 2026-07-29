@@ -295,6 +295,59 @@ class TestStateToUIMapping:
         msg = chat.messages[0]
         assert msg._text == "Ошибка"
 
+    def test_proactive_suggestion_requires_action_click(
+        self,
+    ) -> None:
+        shell = _FakeShell()
+        chat = _FakeChatView()
+        composer = _FakeComposer()
+        task = _FakeTaskView()
+        commands: queue.Queue = queue.Queue()
+
+        _handle_event(
+            self._make_event(
+                "proactive_suggestion",
+                {
+                    "event_id": "proactive_demo",
+                    "source_key": "visual:fingerprint",
+                    "title": "Похоже, сборка упала",
+                    "message": "Вижу ошибку в терминале.",
+                    "reason": "На экране есть failed state.",
+                    "suggested_request": (
+                        "Разбери ошибку и предложи исправление"
+                    ),
+                    "action_label": "Разобраться",
+                },
+            ),
+            shell=shell,
+            chat_view=chat,
+            composer=composer,
+            task_view=task,
+            palette=_FakePalette(),
+            voice_overlay=_FakeVoiceOverlay(),
+            command_queue=commands,
+        )
+
+        assert commands.empty()
+        assert len(chat.messages) == 1
+        message = chat.messages[0]
+        assert message._actions[0][0] == "Разобраться"
+
+        message._actions[0][1]()
+        command = commands.get_nowait()
+        assert command["action"] == "submit_user_request"
+        assert command["payload"]["text"].startswith(
+            "Разбери ошибку"
+        )
+        assert (
+            command["payload"]["proactive_event_id"]
+            == "proactive_demo"
+        )
+        assert (
+            command["payload"]["proactive_context_key"]
+            == "visual:fingerprint"
+        )
+
     def test_task_started(self) -> None:
         shell = _FakeShell()
         chat = _FakeChatView()

@@ -8,7 +8,7 @@
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-705%20passing-22C55E?style=for-the-badge)](#проверка)
+[![Tests](https://img.shields.io/badge/tests-719%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
 </div>
@@ -111,8 +111,19 @@ Nova: понимает цель
 
 ### Быть проактивной, но не самовольной
 
+В настройках есть opt-in режим **«Nova рядом»**. Когда он включён, Nova
+изредка анализирует только активное окно и может сама спросить:
+
+> «Похоже, сборка упала. Разобраться с ошибкой?»
+
+Кнопка под предложением превращает его в обычный пользовательский запрос.
+Регистрация на сайте, ответ в мессенджере, публикация или другое внешнее
+действие проходят через стандартный orchestrator, preview и permission policy.
+Само наблюдение никогда не получает инструменты.
+
 Nova сообщает, когда:
 
+- в активном окне появилась явная ошибка, блокер или полезный момент для помощи;
 - завершился фоновый план или тесты;
 - упал управляемый сервер;
 - CPU или RAM остаются перегруженными несколько измерений подряд — с указанием процесса-виновника;
@@ -279,6 +290,10 @@ OS-агент не должен быть «магией», которой при
 - Запись в системные каталоги ограничена.
 - Fallback не повторяет уже выполненный side effect.
 - Фоновые действия и причины proactive-предложений журналируются.
+- «Nova рядом» выключена по умолчанию: при наблюдении кадр остаётся в RAM и в vision-модель уходит только активное окно.
+- После клика «Помочь» визуальный контекст создаётся как одноразовый attachment и удаляется сразу после чтения агентом.
+- Окна password manager, банков, оплаты и private browsing автоматически пропускаются.
+- Содержимое экрана считается недоверенным и проверяется на prompt injection.
 - MCP auto-discovery выключен по умолчанию.
 - Секреты остаются в `.env` и environment variables.
 
@@ -293,6 +308,8 @@ NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS=15
 NOVA_PROACTIVE_CPU_PERCENT=90
 NOVA_PROACTIVE_MEMORY_PERCENT=88
 NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES=4
+NOVA_PROACTIVE_VISION_CHECK_SECONDS=180
+NOVA_PROACTIVE_VISION_MIN_CONFIDENCE=0.78
 NOVA_PROACTIVE_STALE_PROCESS_HOURS=4
 NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS=60
 NOVA_PROACTIVE_UNCOMMITTED_MINUTES=30
@@ -345,7 +362,7 @@ nova/
 python -m pytest -q
 ```
 
-Текущий regression suite: **705 тестов**.
+Текущий regression suite: **719 тестов**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

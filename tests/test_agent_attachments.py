@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 
 from modules.application.agent import AgentService
+from modules.application.agent import (
+    build_request_model_content,
+)
 from modules.brain.model_gateway import ModelResponse
 from modules.input_hub.models import (
     Attachment,
@@ -72,3 +75,28 @@ def test_user_request_image_is_sent_to_vision_model(
     )
     assert "base64," not in str(llm.history)
     assert "[ИЗОБРАЖЕНИЕ]" in str(llm.history)
+
+
+def test_ephemeral_proactive_image_is_deleted_after_read(
+    tmp_path,
+) -> None:
+    image_path = tmp_path / "proactive.jpg"
+    image_path.write_bytes(b"temporary-image")
+    request = UserRequest.from_text(
+        "Разбери проблему на экране",
+        attachments=[
+            Attachment(
+                attachment_type=AttachmentType.SCREENSHOT,
+                path=str(image_path),
+                mime_type="image/jpeg",
+                metadata={
+                    "delete_after_read": True,
+                },
+            )
+        ],
+    )
+
+    content = build_request_model_content(request)
+
+    assert isinstance(content, list)
+    assert not image_path.exists()

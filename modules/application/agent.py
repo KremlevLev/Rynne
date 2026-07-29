@@ -159,6 +159,11 @@ def build_request_model_content(
             })
             continue
 
+        delete_after_read = bool(
+            attachment.metadata.get(
+                "delete_after_read"
+            )
+        )
         try:
             if (
                 not attachment_path.is_file()
@@ -185,6 +190,17 @@ def build_request_model_content(
                 ),
             })
             continue
+        finally:
+            if delete_after_read:
+                try:
+                    attachment_path.unlink(
+                        missing_ok=True
+                    )
+                except OSError:
+                    logger.warning(
+                        "Не удалось удалить временный proactive context: %s",
+                        attachment_path,
+                    )
 
         mime_type = (
             attachment.mime_type
@@ -1121,6 +1137,15 @@ class AgentService:
                         )
                         if request_object is not None
                         else None
+                    ),
+                    "proactive_suggestion_accepted": (
+                        bool(
+                            request_object.metadata.get(
+                                "proactive_suggestion_accepted"
+                            )
+                        )
+                        if request_object is not None
+                        else False
                     ),
                 },
             )

@@ -269,6 +269,8 @@ class FakeInputCoordinator:
                     "profile",
                     "model_mode",
                     "selected_model",
+                    "metadata",
+                    "attachments",
                 }
             },
         )
@@ -376,5 +378,118 @@ def test_set_input_mode_command() -> None:
             == "preferences"
             for event in desktop.events
         )
+
+    asyncio.run(scenario())
+
+
+def test_proactive_acceptance_is_marked_on_request() -> None:
+    async def scenario() -> None:
+        bridge, _, _, _ = create_bridge()
+        coordinator = FakeInputCoordinator()
+        bridge.input_coordinator = coordinator
+
+        await bridge.handle_command(
+            make_command(
+                "submit_user_request",
+                {
+                    "text": "Помоги заполнить форму",
+                    "proactive_event_id": (
+                        "proactive_visual_demo"
+                    ),
+                },
+            )
+        )
+
+        metadata = coordinator.requests[0].metadata
+        assert metadata[
+            "proactive_suggestion_accepted"
+        ] is True
+        assert (
+            metadata["proactive_event_id"]
+            == "proactive_visual_demo"
+        )
+
+    asyncio.run(scenario())
+
+
+def test_proactive_visual_context_becomes_ephemeral_attachment(
+    tmp_path,
+) -> None:
+    class FakeContextStore:
+        def __init__(self) -> None:
+            self.keys = []
+
+        def materialize_once(self, source_key):
+            self.keys.append(source_key)
+            path = tmp_path / "context.jpg"
+            path.write_bytes(b"jpeg")
+            return str(path)
+
+    async def scenario() -> None:
+        bridge, _, _, _ = create_bridge()
+        coordinator = FakeInputCoordinator()
+        context_store = FakeContextStore()
+        bridge.input_coordinator = coordinator
+        bridge.proactive_context_store = context_store
+
+        await bridge.handle_command(
+            make_command(
+                "submit_user_request",
+                {
+                    "text": "Разбери ошибку",
+                    "proactive_event_id": (
+                        "proactive_visual_demo"
+                    ),
+                    "proactive_context_key": (
+                        "visual:fingerprint"
+                    ),
+                },
+            )
+        )
+
+        request = coordinator.requests[0]
+        assert context_store.keys == [
+            "visual:fingerprint"
+        ]
+        assert request.has_image
+        assert request.attachments[0].metadata[
+            "delete_after_read"
+        ] is True
+
+    asyncio.run(scenario())
+
+
+def test_enable_proactive_vision_command() -> None:
+    async def scenario() -> None:
+        from modules.application.preferences import (
+            PreferencesManager,
+        )
+
+        bridge, desktop, _, _ = create_bridge()
+        preferences = PreferencesManager()
+        bridge.preferences = preferences
+
+        await bridge.handle_command(
+            make_command(
+                "set_preference",
+                {
+                    "key": "proactive_vision_enabled",
+                    "value": True,
+                },
+            )
+        )
+
+        assert (
+            preferences.snapshot()
+            .proactive_vision_enabled
+        )
+        preference_events = [
+            event
+            for event in desktop.events
+            if event["event_type"] == "preferences"
+        ]
+        assert preference_events[-1]["payload"][
+            "proactive_vision_enabled"
+        ] is True
 
     asyncio.run(scenario())

@@ -161,6 +161,13 @@ class DirectRequestExecutor:
                     request.request_id
                 ),
                 "direct_execution": True,
+                "proactive_suggestion_accepted": (
+                    bool(
+                        request.metadata.get(
+                            "proactive_suggestion_accepted"
+                        )
+                    )
+                ),
             },
         )
 

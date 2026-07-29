@@ -27,6 +27,7 @@ class PreferencesSnapshot:
     tts_enabled: bool
     cloud_enabled: bool
     history_enabled: bool
+    proactive_vision_enabled: bool
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -39,6 +40,9 @@ class PreferencesSnapshot:
             "tts_enabled": self.tts_enabled,
             "cloud_enabled": self.cloud_enabled,
             "history_enabled": self.history_enabled,
+            "proactive_vision_enabled": (
+                self.proactive_vision_enabled
+            ),
         }
 
 
@@ -91,6 +95,15 @@ class PreferencesManager:
         self._tts_enabled = True
         self._cloud_enabled = True
         self._history_enabled = True
+        self._proactive_vision_enabled = os.getenv(
+            "NOVA_PROACTIVE_VISION_ENABLED",
+            "false",
+        ).lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
     def snapshot(self) -> PreferencesSnapshot:
         with self._lock:
@@ -108,6 +121,9 @@ class PreferencesManager:
                 history_enabled=(
                     self._history_enabled
                 ),
+                proactive_vision_enabled=(
+                    self._proactive_vision_enabled
+                ),
             )
 
     def set_input_mode(
@@ -120,6 +136,7 @@ class PreferencesManager:
             if mode == InputMode.PRIVACY:
                 self._cloud_enabled = False
                 self._history_enabled = False
+                self._proactive_vision_enabled = False
 
             logger.info(
                 "Режим ввода изменён: %s",
@@ -141,6 +158,7 @@ class PreferencesManager:
             ):
                 self._cloud_enabled = False
                 self._history_enabled = False
+                self._proactive_vision_enabled = False
                 self._model_mode = (
                     ModelSelectionMode.LOCAL_ONLY
                 )
@@ -178,6 +196,7 @@ class PreferencesManager:
                 == ModelSelectionMode.LOCAL_ONLY
             ):
                 self._cloud_enabled = False
+                self._proactive_vision_enabled = False
             elif self._input_mode != InputMode.PRIVACY:
                 self._cloud_enabled = True
 
@@ -216,7 +235,27 @@ class PreferencesManager:
         with self._lock:
             if self._input_mode == InputMode.PRIVACY:
                 self._cloud_enabled = False
+                self._proactive_vision_enabled = False
             else:
                 self._cloud_enabled = bool(enabled)
+                if not self._cloud_enabled:
+                    self._proactive_vision_enabled = False
 
+            return self.snapshot()
+
+    def set_proactive_vision_enabled(
+        self,
+        enabled: bool,
+    ) -> PreferencesSnapshot:
+        with self._lock:
+            requested = bool(enabled)
+            if requested and (
+                self._input_mode == InputMode.PRIVACY
+                or not self._cloud_enabled
+            ):
+                raise ValueError(
+                    "Режим «Nova рядом» требует разрешённых "
+                    "облачных vision-моделей."
+                )
+            self._proactive_vision_enabled = requested
             return self.snapshot()

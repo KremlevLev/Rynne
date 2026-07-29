@@ -88,12 +88,19 @@ def test_settings_snapshot_does_not_echo_commands() -> None:
             "tts_enabled": False,
             "cloud_enabled": True,
             "history_enabled": True,
+            "proactive_vision_enabled": False,
         }
     )
     assert changes == []
 
     page._tts.click()
     assert changes == [("tts_enabled", True)]
+
+    page._proactive_vision.click()
+    assert changes[-1] == (
+        "proactive_vision_enabled",
+        True,
+    )
 
 
 def test_approval_reject_is_routed_to_backend_callback() -> None:
