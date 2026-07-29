@@ -263,7 +263,18 @@ npm run dev
 
 Без `?demo=1` браузерный preview честно показывает отсутствие Tauri Core.
 JSONL bridge и supervisor уже реализованы, но полноценный desktop-запуск
-потребует Rust toolchain, а release-сборка — упакованный `nova-core.exe`.
+проверяется отдельной командой:
+
+```powershell
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+cd C:\Users\Utest\Desktop\nova\apps\desktop
+npm run desktop
+```
+
+Эта команда сама запускает Vite, собирает/открывает нативное окно Tauri и
+поднимает Python Core. Не запускайте `npm run dev` одновременно: оба процесса
+попытаются занять порт `1420`. Release-сборка потребует упакованный
+`nova-core.exe`.
 Подробнее: [`docs/desktop_architecture.md`](docs/desktop_architecture.md).
 
 ## MCP: подключите рабочие сервисы

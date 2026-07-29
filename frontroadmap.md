@@ -22,8 +22,10 @@ Nova должна выглядеть как дорогой, быстрый и у
   dependency; updater останется выключенным до настройки подписей.
 - ✅ Добавлен JSONL transport к реальному Python Core и отдельный sidecar
   entry point без смешивания protocol frames с логами.
-- 🟡 Tauri supervisor запускает Core, передаёт команды, события и завершает
-  дочерний процесс; version handshake и проверка Rust build впереди.
+- 🟡 Tauri supervisor скомпилирован и запускает настоящий Core, передаёт
+  команды/события; version handshake и restart policy впереди.
+- ✅ Dev server и Tauri используют единый `http://127.0.0.1:1420`; updater не
+  инициализируется до появления подписанного release manifest и public key.
 - ⬜ Затем: перенос task/activity, approvals, settings и voice overlay.
 
 Архитектурное решение и критерии для возможных Go-workers:

@@ -18,8 +18,10 @@ cd apps/desktop && npm test  # 4 tests passed
 - ✅ Добавлены contract tests, production build и ручной click-through.
 - ✅ Реализован Python JSONL adapter через общий `DesktopTransport`: framing,
   bounded queue, malformed/oversized frame protection и stdout isolation.
-- 🟡 Подключён Tauri sidecar supervisor: запуск Core, event relay, команды и
-  shutdown готовы; version handshake, restart policy и Rust build впереди.
+- 🟡 Подключён и проверен Tauri sidecar supervisor: Rust build, запуск Core,
+  event relay и команды работают; version handshake и restart policy впереди.
+- ✅ Dev URL унифицирован на `http://127.0.0.1:1420`; устранено зависание Tauri
+  на HTTPS и runtime crash updater без ключа подписи.
 - ⬜ Перенести реальные task/process/settings экраны на React.
 - ⬜ Собрать `nova-core.exe`, включить подписанный updater и release pipeline.
 

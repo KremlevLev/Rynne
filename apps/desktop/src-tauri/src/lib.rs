@@ -48,10 +48,7 @@ fn nova_connect(state: State<'_, Arc<CoreState>>) -> bool {
 }
 
 #[tauri::command]
-fn nova_send_command(
-    command: Value,
-    state: State<'_, Arc<CoreState>>,
-) -> Result<(), String> {
+fn nova_send_command(command: Value, state: State<'_, Arc<CoreState>>) -> Result<(), String> {
     if !state.connected.load(Ordering::Acquire) {
         return Err("Nova Core is not connected.".to_owned());
     }
@@ -109,10 +106,7 @@ fn core_binary_name() -> PathBuf {
     }
 }
 
-fn spawn_core(
-    app: AppHandle,
-    state: Arc<CoreState>,
-) -> Result<(), String> {
+fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
     let mut command = build_core_command(&app)?;
     command
         .stdin(Stdio::piped())
@@ -157,10 +151,7 @@ fn spawn_core(
             let Ok(event) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
-            let is_event = event
-                .get("event_type")
-                .and_then(Value::as_str)
-                .is_some()
+            let is_event = event.get("event_type").and_then(Value::as_str).is_some()
                 && event.get("payload").is_some();
             if is_event {
                 let _ = event_app.emit("nova:event", event);
@@ -198,17 +189,10 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(core_state.clone())
-        .invoke_handler(tauri::generate_handler![
-            nova_connect,
-            nova_send_command
-        ])
+        .invoke_handler(tauri::generate_handler![nova_connect, nova_send_command])
         .setup(move |app| {
-            if let Err(error) = spawn_core(
-                app.handle().clone(),
-                state_for_setup.clone(),
-            ) {
+            if let Err(error) = spawn_core(app.handle().clone(), state_for_setup.clone()) {
                 eprintln!("[Nova Desktop] {error}");
             }
             Ok(())
