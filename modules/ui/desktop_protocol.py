@@ -6,7 +6,37 @@ import time
 import uuid
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
+
+
+class DesktopTransport(Protocol):
+    @property
+    def is_running(self) -> bool:
+        ...
+
+    def start(
+        self,
+        *,
+        premium: bool = False,
+    ) -> bool:
+        ...
+
+    def publish(
+        self,
+        event_type: str,
+        payload: dict[str, Any] | None = None,
+    ) -> bool:
+        ...
+
+    def get_commands(
+        self,
+        *,
+        max_count: int = 50,
+    ) -> list[dict[str, Any]]:
+        ...
+
+    def stop(self) -> None:
+        ...
 
 
 def make_event(

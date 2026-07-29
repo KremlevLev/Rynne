@@ -42,6 +42,7 @@ from modules.input_hub.models import (
 
 from core.config import (
     NOVA_DESKTOP_UI,
+    NOVA_DESKTOP_TRANSPORT,
     NOVA_PREMIUM_UI,
     NOVA_PROACTIVE_COOLDOWN_SECONDS,
     NOVA_PROACTIVE_BACKUP_CHECK_SECONDS,
@@ -71,6 +72,9 @@ from core.config import (
 
 from modules.ui.desktop_service import (
     DesktopService,
+)
+from modules.ui.stdio_desktop_service import (
+    StdioDesktopService,
 )
 from modules.ui.core_bridge import (
     CoreDesktopBridge,
@@ -720,7 +724,11 @@ async def async_main() -> None:
     await asyncio.to_thread(
         workspace_context.observe_foreground
     )
-    desktop_service = DesktopService()
+    desktop_service = (
+        StdioDesktopService()
+        if NOVA_DESKTOP_TRANSPORT == "stdio"
+        else DesktopService()
+    )
 
     if NOVA_DESKTOP_UI:
         try:

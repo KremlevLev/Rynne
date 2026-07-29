@@ -56,8 +56,10 @@ Tauri запускает упакованный Python Core как sidecar. Ме
 - [x] Типизированные event/command envelopes.
 - [x] Кликабельный dialog shell и dev-only transport.
 - [x] Tauri container, который до подключения Core честно показывает offline.
-- [ ] Python stdio adapter для существующего `DesktopService`.
-- [ ] Tauri sidecar supervisor и handshake.
+- [x] Python stdio adapter с тем же `DesktopTransport` protocol.
+- [x] Sidecar entry point с изоляцией protocol stdout и application stderr.
+- [x] Tauri supervisor: запуск Core, relay событий, команды и shutdown.
+- [ ] Version handshake и проверка совместимости Core/shell.
 - [ ] Перенос реальных chat/task/process/settings экранов.
 - [ ] PyInstaller onedir bundle для `nova-core.exe`.
 - [ ] Подписанные NSIS/MSI releases и Tauri updater.

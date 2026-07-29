@@ -20,7 +20,10 @@ Nova должна выглядеть как дорогой, быстрый и у
 - ✅ Demo transport доступен только в Vite dev-режиме через `?demo=1`.
 - ✅ Добавлены Tauri shell, Windows bundle configuration, иконки и updater
   dependency; updater останется выключенным до настройки подписей.
-- ⬜ Следующий этап: JSONL sidecar bridge к реальному `DesktopService`.
+- ✅ Добавлен JSONL transport к реальному Python Core и отдельный sidecar
+  entry point без смешивания protocol frames с логами.
+- 🟡 Tauri supervisor запускает Core, передаёт команды, события и завершает
+  дочерний процесс; version handshake и проверка Rust build впереди.
 - ⬜ Затем: перенос task/activity, approvals, settings и voice overlay.
 
 Архитектурное решение и критерии для возможных Go-workers:

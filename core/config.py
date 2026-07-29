@@ -387,6 +387,20 @@ NOVA_PREMIUM_UI = os.getenv(
     "on",
 }
 
+_NOVA_DESKTOP_TRANSPORT = os.getenv(
+    "NOVA_DESKTOP_TRANSPORT",
+    "pyside",
+).strip().lower()
+
+NOVA_DESKTOP_TRANSPORT: Final[str] = (
+    _NOVA_DESKTOP_TRANSPORT
+    if _NOVA_DESKTOP_TRANSPORT in {
+        "pyside",
+        "stdio",
+    }
+    else "pyside"
+)
+
 NOVA_PROACTIVE_ENABLED: Final[bool] = os.getenv(
     "NOVA_PROACTIVE_ENABLED",
     "true",

@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 719 tests passed
+python -m pytest tests/ -q  # 724 tests passed
 cd apps/desktop && npm test  # 4 tests passed
 ```
 
@@ -16,9 +16,10 @@ cd apps/desktop && npm test  # 4 tests passed
 - ✅ Dev-only demo transport изолирован от production transport.
 - ✅ Добавлен Tauri 2 container и Windows NSIS/MSI bundle configuration.
 - ✅ Добавлены contract tests, production build и ручной click-through.
-- ⬜ Реализовать Python JSONL stdio adapter поверх существующего
-  `DesktopService`.
-- ⬜ Подключить Tauri sidecar supervisor, protocol handshake и restart policy.
+- ✅ Реализован Python JSONL adapter через общий `DesktopTransport`: framing,
+  bounded queue, malformed/oversized frame protection и stdout isolation.
+- 🟡 Подключён Tauri sidecar supervisor: запуск Core, event relay, команды и
+  shutdown готовы; version handshake, restart policy и Rust build впереди.
 - ⬜ Перенести реальные task/process/settings экраны на React.
 - ⬜ Собрать `nova-core.exe`, включить подписанный updater и release pipeline.
 

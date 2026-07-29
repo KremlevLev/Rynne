@@ -25,14 +25,15 @@ export class TauriNovaTransport implements NovaTransport {
     onConnection("connecting");
     let unlisten: UnlistenFn;
     try {
-      const ready = await invoke<boolean>("nova_connect");
-      if (!ready) {
-        onConnection("disconnected");
-        return () => undefined;
-      }
       unlisten = await listen<unknown>("nova:event", ({ payload }) => {
         if (isNovaEvent(payload)) onEvent(payload);
       });
+      const ready = await invoke<boolean>("nova_connect");
+      if (!ready) {
+        unlisten();
+        onConnection("disconnected");
+        return () => undefined;
+      }
       onConnection("connected");
     } catch {
       onConnection("disconnected");

@@ -11,10 +11,8 @@ from modules.tools.permissions import (
     PermissionManager,
 )
 from modules.ui.desktop_protocol import (
+    DesktopTransport,
     validate_command,
-)
-from modules.ui.desktop_service import (
-    DesktopService,
 )
 from modules.application.preferences import (
     PreferencesManager,
@@ -42,7 +40,7 @@ class CoreDesktopBridge:
     def __init__(
         self,
         *,
-        desktop: DesktopService,
+        desktop: DesktopTransport,
         process_manager,
         memory_store,
         mode_manager=None,

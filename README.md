@@ -261,8 +261,9 @@ npm run dev
 # открыть http://127.0.0.1:1420/?demo=1
 ```
 
-Без `?demo=1` интерфейс честно показывает отсутствие связи, пока не завершён
-следующий этап — JSONL sidecar bridge к существующему `DesktopService`.
+Без `?demo=1` браузерный preview честно показывает отсутствие Tauri Core.
+JSONL bridge и supervisor уже реализованы, но полноценный desktop-запуск
+потребует Rust toolchain, а release-сборка — упакованный `nova-core.exe`.
 Подробнее: [`docs/desktop_architecture.md`](docs/desktop_architecture.md).
 
 ## MCP: подключите рабочие сервисы
@@ -383,7 +384,7 @@ npm test
 npm run build
 ```
 
-Текущий regression suite: **719 Python-тестов + 4 desktop contract tests**.
+Текущий regression suite: **724 Python-теста + 4 desktop contract tests**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 
