@@ -234,7 +234,8 @@ python -m main
 
 ## Desktop UI
 
-PySide6-интерфейс запускается вместе с Nova и даёт один центр управления:
+Текущий PySide6-интерфейс запускается вместе с Nova и остаётся рабочим
+fallback на время миграции. Он даёт один центр управления:
 
 - диалог и история выполнения;
 - фоновые процессы и их логи;
@@ -248,6 +249,21 @@ PySide6-интерфейс запускается вместе с Nova и даё
 ```env
 NOVA_DESKTOP_UI=false
 ```
+
+Новый desktop-клиент развивается в `apps/desktop`: React + TypeScript отвечают
+за presentation layer, Tauri — за окно, установщик и обновления, а всё AI-ядро
+остаётся в Python. Для локального просмотра кликабельного dev-сценария:
+
+```powershell
+cd apps\desktop
+npm install
+npm run dev
+# открыть http://127.0.0.1:1420/?demo=1
+```
+
+Без `?demo=1` интерфейс честно показывает отсутствие связи, пока не завершён
+следующий этап — JSONL sidecar bridge к существующему `DesktopService`.
+Подробнее: [`docs/desktop_architecture.md`](docs/desktop_architecture.md).
 
 ## MCP: подключите рабочие сервисы
 
@@ -340,6 +356,8 @@ flowchart LR
 
 ```text
 nova/
+├── apps/
+│   └── desktop/       React/TypeScript UI и Tauri Windows shell
 ├── core/              конфигурация и системные правила
 ├── modules/
 │   ├── agent/         планы, background tasks, proactive engine
@@ -360,9 +378,12 @@ nova/
 
 ```powershell
 python -m pytest -q
+cd apps\desktop
+npm test
+npm run build
 ```
 
-Текущий regression suite: **719 тестов**.
+Текущий regression suite: **719 Python-тестов + 4 desktop contract tests**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

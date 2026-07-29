@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(190 145) rotate(51) scale(430)">
+      <stop stop-color="#8172FF"/>
+      <stop offset="0.5" stop-color="#372E7A"/>
+      <stop offset="1" stop-color="#10131D"/>
+    </radialGradient>
+    <filter id="glow" x="80" y="80" width="352" height="352" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="126" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="128" stroke="#B8ADFF" stroke-opacity=".28" stroke-width="3"/>
+  <path d="M256 126C270 203 309 242 386 256C309 270 270 309 256 386C242 309 203 270 126 256C203 242 242 203 256 126Z" fill="#DAD5FF" opacity=".25" filter="url(#glow)"/>
+  <path d="M256 142C268 210 302 244 370 256C302 268 268 302 256 370C244 302 210 268 142 256C210 244 244 210 256 142Z" stroke="#F1EFFF" stroke-width="16" stroke-linejoin="round"/>
+  <circle cx="350" cy="168" r="17" fill="#5BE0EF"/>
+</svg>

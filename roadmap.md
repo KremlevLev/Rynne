@@ -1,6 +1,26 @@
 ## Тесты
 ```bash
 python -m pytest tests/ -q  # 719 tests passed
+cd apps/desktop && npm test  # 4 tests passed
+```
+
+## Desktop migration: React + Tauri
+
+- ✅ Зафиксированы языковые границы: React/TypeScript presentation layer,
+  Tauri shell, Python Agent Core; Go допускается только для подтверждённых
+  профилированием hot workers.
+- ✅ Создан изолированный `apps/desktop` без изменения работающего PySide UI.
+- ✅ Созданы общие TypeScript envelopes для реальных Nova events/commands.
+- ✅ Реализован кликабельный dialog shell: navigation, composer, activity,
+  proactive toggle и честное offline-состояние без подключённого Core.
+- ✅ Dev-only demo transport изолирован от production transport.
+- ✅ Добавлен Tauri 2 container и Windows NSIS/MSI bundle configuration.
+- ✅ Добавлены contract tests, production build и ручной click-through.
+- ⬜ Реализовать Python JSONL stdio adapter поверх существующего
+  `DesktopService`.
+- ⬜ Подключить Tauri sidecar supervisor, protocol handshake и restart policy.
+- ⬜ Перенести реальные task/process/settings экраны на React.
+- ⬜ Собрать `nova-core.exe`, включить подписанный updater и release pipeline.
 
 # КОНТЕКСТ ПРОЕКТА
 - Ты помогаешь мне развивать моего кастомного ИИ-агента.

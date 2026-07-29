@@ -6,3 +6,7 @@ __pycache__/
 .vscode
 .clinerules
 .VSCodeCounter
+apps/desktop/node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/target/
+apps/desktop/*.tsbuildinfo

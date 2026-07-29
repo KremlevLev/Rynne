@@ -8,6 +8,26 @@ Nova должна выглядеть как дорогой, быстрый и у
 
 ---
 
+## Статус миграции на React/Tauri
+
+- ✅ Создан отдельный React 19 + TypeScript + Vite presentation layer.
+- ✅ Вынесены единые design tokens и адаптивный трёхзонный desktop layout.
+- ✅ Реализованы кликабельные sidebar, proactive toggle, chat composer,
+  timeline и context/activity panel.
+- ✅ UI использует типизированные envelopes существующего Python-протокола.
+- ✅ Production transport fail-closed: без handshake с Nova Core показывает
+  offline, а не фейковую активность.
+- ✅ Demo transport доступен только в Vite dev-режиме через `?demo=1`.
+- ✅ Добавлены Tauri shell, Windows bundle configuration, иконки и updater
+  dependency; updater останется выключенным до настройки подписей.
+- ⬜ Следующий этап: JSONL sidecar bridge к реальному `DesktopService`.
+- ⬜ Затем: перенос task/activity, approvals, settings и voice overlay.
+
+Архитектурное решение и критерии для возможных Go-workers:
+[`docs/desktop_architecture.md`](docs/desktop_architecture.md).
+
+---
+
 ## 0. Жёсткие правила
 
 1. **Сначала изучи текущий UI и точки интеграции.**  
