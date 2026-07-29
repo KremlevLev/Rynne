@@ -14,6 +14,11 @@ _overlay_thread: threading.Thread | None = None
 _ready_event = threading.Event()
 
 
+def should_start_legacy_overlay(desktop_transport: str) -> bool:
+    """The Tk overlay only belongs to the legacy PySide desktop."""
+    return desktop_transport.strip().lower() != "stdio"
+
+
 class NovaOverlay:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root

@@ -26,7 +26,9 @@ Nova должна выглядеть как дорогой, быстрый и у
   команды/события; version handshake и restart policy впереди.
 - ✅ Dev server и Tauri используют единый `http://127.0.0.1:1420`; updater не
   инициализируется до появления подписанного release manifest и public key.
-- ⬜ Затем: перенос task/activity, approvals, settings и voice overlay.
+- ✅ Старый непрерывный Tk overlay отключён для Tauri; runtime-состояния
+  «слушает / думает / выполняет / отвечает» встроены в React activity panel.
+- ⬜ Затем: перенос task/activity, approvals и settings.
 
 Архитектурное решение и критерии для возможных Go-workers:
 [`docs/desktop_architecture.md`](docs/desktop_architecture.md).

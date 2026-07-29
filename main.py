@@ -202,6 +202,7 @@ from modules.tools.tasks import (
     reminder_checker_worker,
 )
 from modules.ui.overlay import (
+    should_start_legacy_overlay,
     start_overlay,
     stop_overlay,
     update_status,
@@ -740,8 +741,16 @@ async def async_main() -> None:
 
 
     windows_context = WindowsContext()
-    start_overlay()
-    runtime = RuntimeState(update_status)
+    legacy_overlay_enabled = should_start_legacy_overlay(
+        NOVA_DESKTOP_TRANSPORT
+    )
+    if legacy_overlay_enabled:
+        start_overlay()
+    runtime = RuntimeState(
+        update_status
+        if legacy_overlay_enabled
+        else None
+    )
     speech = SpeechService(runtime)
     browser_manager = BrowserManager(
     headless=False
@@ -1658,7 +1667,8 @@ async def async_main() -> None:
         database.close()
 
         desktop_service.stop()
-        stop_overlay()
+        if legacy_overlay_enabled:
+            stop_overlay()
         instance_lock.close()
 
 

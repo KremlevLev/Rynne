@@ -35,6 +35,29 @@ type TimelineItem = {
   action?: string;
 };
 
+const runtimeLabels: Record<string, string> = {
+  "СПИТ": "Nova готова",
+  "СЛУШАЕТ": "Nova слушает",
+  "РАСПОЗНАЕТ": "Распознаю речь",
+  "ДУМАЕТ": "Nova думает",
+  "ЖДЕТ РАЗРЕШЕНИЕ": "Нужно подтверждение",
+  "ВЫПОЛНЯЕТ": "Nova выполняет",
+  "ГОВОРИТ": "Nova отвечает",
+  "ОШИБКА": "Нужна проверка",
+  "ЗАВЕРШАЕТ РАБОТУ": "Nova завершает работу",
+};
+
+export function runtimePresentation(state: unknown): {
+  label: string;
+  working: boolean;
+} {
+  const value = typeof state === "string" ? state : "СПИТ";
+  return {
+    label: runtimeLabels[value] ?? "Nova готова",
+    working: !["СПИТ", "ОШИБКА", "ЗАВЕРШАЕТ РАБОТУ"].includes(value),
+  };
+}
+
 const nav = [
   { key: "dialog" as const, label: "Диалог", icon: MessageSquare },
   { key: "tasks" as const, label: "Задачи", icon: Activity },
@@ -110,7 +133,9 @@ export function App() {
   const [proactive, setProactive] = useState(false);
   const [activeTool, setActiveTool] = useState("Ожидаю задачу");
   const [taskProgress, setTaskProgress] = useState(0);
+  const [runtimeState, setRuntimeState] = useState("СПИТ");
   const endRef = useRef<HTMLDivElement>(null);
+  const runtime = runtimePresentation(runtimeState);
 
   useEffect(() => {
     let dispose: () => void = () => undefined;
@@ -122,6 +147,10 @@ export function App() {
           const item = eventToItem(event);
           if (item) setTimeline((current) => [...current, item]);
           if (event.event_type === "request_started") setBusy(true);
+          if (event.event_type === "runtime") {
+            const state = event.payload.state;
+            if (typeof state === "string") setRuntimeState(state);
+          }
           if (event.event_type === "assistant_message" || event.event_type === "request_failed") {
             setBusy(false);
             setActiveTool("Ожидаю задачу");
@@ -298,11 +327,11 @@ export function App() {
         </div>
 
         <section className="agent-state">
-          <div className={busy ? "large-orb working" : "large-orb"}>
+          <div className={busy || runtime.working ? "large-orb working" : "large-orb"}>
             <span />
             <Sparkles size={23} />
           </div>
-          <strong>{busy ? "Nova работает" : "Nova готова"}</strong>
+          <strong>{busy ? "Nova работает" : runtime.label}</strong>
           <p>{activeTool}</p>
         </section>
 

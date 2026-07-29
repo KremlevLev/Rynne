@@ -5,6 +5,7 @@ import {
   NOVA_COMMAND_ACTIONS,
   NOVA_EVENT_TYPES,
 } from "./protocol";
+import { runtimePresentation } from "./App";
 
 describe("Nova desktop protocol", () => {
   it("accepts the same JSON event envelope as Python", () => {
@@ -37,5 +38,16 @@ describe("Nova desktop protocol", () => {
   it("keeps the initial contract explicit", () => {
     expect(NOVA_EVENT_TYPES).toContain("proactive_suggestion");
     expect(NOVA_COMMAND_ACTIONS).toContain("set_preference");
+  });
+
+  it("maps Core runtime state into the integrated desktop indicator", () => {
+    expect(runtimePresentation("ГОВОРИТ")).toEqual({
+      label: "Nova отвечает",
+      working: true,
+    });
+    expect(runtimePresentation("СПИТ")).toEqual({
+      label: "Nova готова",
+      working: false,
+    });
   });
 });

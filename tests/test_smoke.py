@@ -312,12 +312,15 @@ def test_memories_import() -> None:
 def test_overlay_import() -> None:
     """Проверяет импорт overlay."""
     from modules.ui.overlay import (
+        should_start_legacy_overlay,
         start_overlay,
         update_status,
     )
 
     assert start_overlay is not None
     assert update_status is not None
+    assert should_start_legacy_overlay("pyside") is True
+    assert should_start_legacy_overlay("stdio") is False
 
 
 def test_windows_context_import() -> None:

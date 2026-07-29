@@ -22,6 +22,8 @@ cd apps/desktop && npm test  # 4 tests passed
   event relay и команды работают; version handshake и restart policy впереди.
 - ✅ Dev URL унифицирован на `http://127.0.0.1:1420`; устранено зависание Tauri
   на HTTPS и runtime crash updater без ключа подписи.
+- ✅ Legacy Tk overlay «СПИТ / ГОВОРИТ» отключён в Tauri-режиме; реальные
+  состояния Core теперь отображаются внутри React activity panel.
 - ⬜ Перенести реальные task/process/settings экраны на React.
 - ⬜ Собрать `nova-core.exe`, включить подписанный updater и release pipeline.
 
