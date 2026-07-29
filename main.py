@@ -226,14 +226,21 @@ logging.basicConfig(
 logger = logging.getLogger("Nova")
 
 
-def acquire_instance_lock() -> socket.socket:
+def instance_lock_port(desktop_transport: str) -> int:
+    # Tauri owns its Core lifecycle through the single-instance plugin. Using
+    # an ephemeral port for its stdio sidecar avoids stale/elevated legacy
+    # processes blocking a newly installed desktop update.
+    return 0 if desktop_transport.strip().lower() == "stdio" else 29485
+
+
+def acquire_instance_lock(port: int = 29485) -> socket.socket:
     instance_lock = socket.socket(
         socket.AF_INET,
         socket.SOCK_STREAM,
     )
 
     try:
-        instance_lock.bind(("127.0.0.1", 29485))
+        instance_lock.bind(("127.0.0.1", port))
     except OSError as exc:
         instance_lock.close()
         raise RuntimeError(
@@ -720,7 +727,9 @@ async def run_voice_loop(
 
 
 async def async_main() -> None:
-    instance_lock = acquire_instance_lock()
+    instance_lock = acquire_instance_lock(
+        instance_lock_port(NOVA_DESKTOP_TRANSPORT)
+    )
     workspace_context = WorkspaceContextResolver()
     await asyncio.to_thread(
         workspace_context.observe_foreground

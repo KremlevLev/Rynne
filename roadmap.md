@@ -1,7 +1,7 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 725 tests passed
-cd apps/desktop && npm test  # 4 tests passed
+python -m pytest tests/ -q  # 726 tests passed
+cd apps/desktop && npm test  # 5 tests passed
 ```
 
 ## Desktop migration: React + Tauri
@@ -31,6 +31,13 @@ cd apps/desktop && npm test  # 4 tests passed
   (`resources/nova-core`) и хранит runtime data вне каталога установки.
 - ✅ NSIS проверен end-to-end: тихая current-user установка, запуск окна и
   packaged Core, создание app-data и совместное завершение процессов.
+- ✅ Исправлен installed startup: Tauri Core использует lifecycle desktop shell
+  без конфликтующего TCP-lock, UI ждёт первый JSONL event перед статусом «На связи»,
+  повторный запуск фокусирует существующее окно, release не открывает консоль.
+- ✅ Core в installer хранится в versioned resource-каталоге: обновление ставит
+  новый sidecar даже если Windows всё ещё удерживает бинарник предыдущей версии.
+- ✅ Settings принимает ключ Groq/OpenRouter/Gemini, сохраняет его только в
+  user app-data и перезапускает Core без ручного редактирования `.env`.
 - ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;
   provider помечается `unconfigured`, чтобы UI мог провести onboarding.
 - ⬜ Перенести реальные task/process/settings экраны на React.

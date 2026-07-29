@@ -259,7 +259,7 @@ NOVA_DESKTOP_UI=false
 Пользователю нужен только один файл:
 
 ```text
-Nova_0.1.0_x64-setup.exe
+Nova_0.1.3_x64-setup.exe
 ```
 
 Запустите installer обычным двойным кликом. Nova установится для текущего
@@ -267,15 +267,9 @@ Nova_0.1.0_x64-setup.exe
 установленных программ. Python, Node.js и Rust на пользовательском компьютере
 не требуются.
 
-При первом старте без API-ключа приложение не падает: Core запускается в
-состоянии `unconfigured`. До появления onboarding-экрана ключ можно сохранить
-в `%APPDATA%\ai.nova.desktop\.env`:
-
-```env
-GROQ_API_KEY=gsk_...
-```
-
-После изменения `.env` перезапустите Nova.
+При первом старте без API-ключа приложение не падает: откройте «Настройки»,
+выберите Groq/OpenRouter/Gemini и вставьте ключ. Nova сохранит его в
+пользовательских данных приложения и сама переподключит Core.
 
 ### Запуск для разработки
 
@@ -323,7 +317,7 @@ npm run installer
 собирает Tauri release и создаёт:
 
 ```text
-apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.0_x64-setup.exe
+apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.3_x64-setup.exe
 ```
 
 Core использует source fingerprint: повторная сборка пропускает PyInstaller,

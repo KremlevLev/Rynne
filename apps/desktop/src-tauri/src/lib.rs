@@ -70,6 +70,51 @@ fn nova_send_command(command: Value, state: State<'_, Arc<CoreState>>) -> Result
         .map_err(|error| format!("Cannot send command to Nova Core: {error}"))
 }
 
+#[tauri::command]
+fn nova_configure_provider(
+    provider: String,
+    api_key: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    let variable = match provider.trim().to_lowercase().as_str() {
+        "groq" => "GROQ_API_KEY",
+        "openrouter" => "OPENROUTER_API_KEY",
+        "gemini" => "GEMINI_API_KEY",
+        _ => return Err("Unsupported model provider.".to_owned()),
+    };
+    let key = api_key.trim();
+    if key.len() < 12
+        || key.len() > 512
+        || !key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "_-.".contains(character))
+    {
+        return Err("API key has an invalid format.".to_owned());
+    }
+
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Cannot locate Nova data directory: {error}"))?;
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("Cannot create Nova data directory: {error}"))?;
+    let env_path = data_dir.join(".env");
+    let current = std::fs::read_to_string(&env_path).unwrap_or_default();
+    let mut lines: Vec<String> = current
+        .lines()
+        .filter(|line| !line.trim_start().starts_with(&format!("{variable}=")))
+        .map(str::to_owned)
+        .collect();
+    lines.push(format!("{variable}={key}"));
+    std::fs::write(&env_path, format!("{}\n", lines.join("\n")))
+        .map_err(|error| format!("Cannot save Nova provider settings: {error}"))?;
+
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)
+}
+
 fn build_core_command(app: &AppHandle) -> Result<Command, String> {
     if let Some(executable) = std::env::var_os("NOVA_CORE_SIDECAR") {
         return Ok(Command::new(executable));
@@ -93,6 +138,9 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
         .map_err(|error| format!("Cannot locate Nova resources: {error}"))?;
     let binary_name = core_binary_name();
     let executable = [
+        resource_dir
+            .join(format!("nova-core-{}", env!("CARGO_PKG_VERSION")))
+            .join(&binary_name),
         resource_dir
             .join("resources")
             .join("nova-core")
@@ -164,7 +212,7 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
             .map_err(|_| "Nova Core process lock is poisoned.".to_owned())?;
         *guard = Some(CoreProcess { child, stdin });
     }
-    state.connected.store(true, Ordering::Release);
+    state.connected.store(false, Ordering::Release);
 
     let event_app = app.clone();
     let event_state = state.clone();
@@ -179,6 +227,9 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
             let is_event = event.get("event_type").and_then(Value::as_str).is_some()
                 && event.get("payload").is_some();
             if is_event {
+                if !event_state.connected.swap(true, Ordering::AcqRel) {
+                    let _ = event_app.emit("nova:connection", true);
+                }
                 let _ = event_app.emit("nova:event", event);
             }
         }
@@ -213,9 +264,20 @@ pub fn run() {
     let state_for_setup = core_state.clone();
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .manage(core_state.clone())
-        .invoke_handler(tauri::generate_handler![nova_connect, nova_send_command])
+        .invoke_handler(tauri::generate_handler![
+            nova_connect,
+            nova_send_command,
+            nova_configure_provider
+        ])
         .setup(move |app| {
             if let Err(error) = spawn_core(app.handle().clone(), state_for_setup.clone()) {
                 eprintln!("[Nova Desktop] {error}");

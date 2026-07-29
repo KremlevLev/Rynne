@@ -15,6 +15,7 @@ export type ConnectionListener = (state: ConnectionState) => void;
 export interface NovaTransport {
   connect(onEvent: EventListener, onConnection: ConnectionListener): Promise<() => void>;
   send(action: NovaCommandAction, payload?: JsonObject): Promise<void>;
+  configureProvider(provider: string, apiKey: string): Promise<void>;
 }
 
 export class TauriNovaTransport implements NovaTransport {
@@ -24,13 +25,23 @@ export class TauriNovaTransport implements NovaTransport {
   ): Promise<() => void> {
     onConnection("connecting");
     let unlisten: UnlistenFn;
+    let unlistenConnection: UnlistenFn;
     try {
       unlisten = await listen<unknown>("nova:event", ({ payload }) => {
         if (isNovaEvent(payload)) onEvent(payload);
       });
-      const ready = await invoke<boolean>("nova_connect");
+      unlistenConnection = await listen<boolean>("nova:connection", ({ payload }) => {
+        onConnection(payload ? "connected" : "connecting");
+      });
+      let ready = false;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        ready = await invoke<boolean>("nova_connect");
+        if (ready) break;
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+      }
       if (!ready) {
         unlisten();
+        unlistenConnection();
         onConnection("disconnected");
         return () => undefined;
       }
@@ -42,6 +53,7 @@ export class TauriNovaTransport implements NovaTransport {
 
     return () => {
       unlisten();
+      unlistenConnection();
       onConnection("disconnected");
     };
   }
@@ -49,6 +61,13 @@ export class TauriNovaTransport implements NovaTransport {
   async send(action: NovaCommandAction, payload: JsonObject = {}): Promise<void> {
     await invoke("nova_send_command", {
       command: makeCommand(action, payload),
+    });
+  }
+
+  async configureProvider(provider: string, apiKey: string): Promise<void> {
+    await invoke("nova_configure_provider", {
+      provider,
+      apiKey,
     });
   }
 }
@@ -121,6 +140,10 @@ class DemoNovaTransport implements NovaTransport {
     if (action === "new_task") {
       this.push("runtime", { status: "idle", voice_enabled: true });
     }
+  }
+
+  async configureProvider(): Promise<void> {
+    return Promise.resolve();
   }
 
   private push(event_type: NovaEvent["event_type"], payload: JsonObject): void {

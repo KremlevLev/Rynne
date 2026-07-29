@@ -134,6 +134,9 @@ export function App() {
   const [activeTool, setActiveTool] = useState("Ожидаю задачу");
   const [taskProgress, setTaskProgress] = useState(0);
   const [runtimeState, setRuntimeState] = useState("СПИТ");
+  const [provider, setProvider] = useState("groq");
+  const [apiKey, setApiKey] = useState("");
+  const [settingsStatus, setSettingsStatus] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const runtime = runtimePresentation(runtimeState);
 
@@ -196,6 +199,20 @@ export function App() {
       key: "proactive_vision_enabled",
       value: next,
     });
+  }
+
+  async function saveProvider() {
+    if (apiKey.trim().length < 12) return;
+    setSettingsStatus("Сохраняю и перезапускаю Nova Core…");
+    try {
+      await transport.configureProvider(provider, apiKey.trim());
+      setApiKey("");
+      setSettingsStatus("Ключ сохранён. Nova Core переподключается.");
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось сохранить API-ключ.",
+      );
+    }
   }
 
   return (
@@ -310,6 +327,46 @@ export function App() {
               <p>Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием</p>
             </div>
           </>
+        ) : view === "settings" ? (
+          <div className="settings-view">
+            <div className="settings-card">
+              <span className="settings-icon"><Settings size={22} /></span>
+              <div>
+                <span className="eyebrow">МОДЕЛЬНЫЙ ПРОВАЙДЕР</span>
+                <h2>Подключить Nova</h2>
+                <p>Ключ хранится только в пользовательских данных Nova на этом компьютере и не попадает в чат.</p>
+              </div>
+              <label>
+                Провайдер
+                <select value={provider} onChange={(event) => setProvider(event.target.value)}>
+                  <option value="groq">Groq · GPT OSS 120B</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </label>
+              <label>
+                API-ключ
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveProvider();
+                  }}
+                  placeholder={provider === "groq" ? "gsk_…" : "Вставьте API-ключ"}
+                  autoComplete="off"
+                />
+              </label>
+              <button
+                className="save-settings"
+                onClick={() => void saveProvider()}
+                disabled={apiKey.trim().length < 12}
+              >
+                Сохранить и подключить
+              </button>
+              {settingsStatus && <p className="settings-status">{settingsStatus}</p>}
+            </div>
+          </div>
         ) : (
           <div className="view-placeholder">
             <span><History size={26} /></span>

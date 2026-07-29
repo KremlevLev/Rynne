@@ -323,6 +323,13 @@ def test_overlay_import() -> None:
     assert should_start_legacy_overlay("stdio") is False
 
 
+def test_desktop_core_uses_separate_instance_lock() -> None:
+    from main import instance_lock_port
+
+    assert instance_lock_port("pyside") == 29485
+    assert instance_lock_port("stdio") == 0
+
+
 def test_windows_context_import() -> None:
     """Проверяет импорт WindowsContext."""
     from modules.domain.windows_context import (
