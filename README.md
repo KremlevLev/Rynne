@@ -259,7 +259,7 @@ NOVA_DESKTOP_UI=false
 Пользователю нужен только один файл:
 
 ```text
-Nova_0.1.4_x64-setup.exe
+Nova_0.1.5_x64-setup.exe
 ```
 
 Запустите installer обычным двойным кликом. Nova установится для текущего
@@ -317,7 +317,7 @@ npm run installer
 собирает Tauri release и создаёт:
 
 ```text
-apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.4_x64-setup.exe
+apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.5_x64-setup.exe
 ```
 
 Core использует source fingerprint: повторная сборка пропускает PyInstaller,

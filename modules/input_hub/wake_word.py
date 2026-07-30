@@ -254,6 +254,7 @@ class WakeWordDetector:
 
         self._model = None
         self._model_lock = threading.RLock()
+        self._initialization_error: str | None = None
 
         self._stop_event = threading.Event()
 
@@ -338,6 +339,11 @@ class WakeWordDetector:
                     "Vosk-модель не настроена."
                 ),
             )
+        if self._initialization_error is not None:
+            return WakeCapture(
+                detected=False,
+                error=self._initialization_error,
+            )
 
         self.reset()
 
@@ -351,6 +357,7 @@ class WakeWordDetector:
             model = self._load_model()
 
         except Exception as exc:
+            self._initialization_error = str(exc)
             logger.exception(
                 "Не удалось подготовить wake word."
             )

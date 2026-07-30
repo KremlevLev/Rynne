@@ -134,6 +134,10 @@ class WakeWordRuntime:
                         capture.error,
                     )
 
+                await self._sleep_or_shutdown(
+                    shutdown_event,
+                    2.0,
+                )
                 continue
 
             assert capture.audio_path is not None

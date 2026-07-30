@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 726 tests passed
+python -m pytest tests/ -q  # 727 tests passed
 cd apps/desktop && npm test  # 5 tests passed
 ```
 
@@ -41,6 +41,12 @@ cd apps/desktop && npm test  # 5 tests passed
   продолжает переподключение после 30 секунд вместо удаления event-listener.
 - ✅ Release shell сохраняет последний stderr Core в пользовательский
   `logs/nova-core.log`, чтобы startup-сбои диагностировались без консоли.
+- ✅ JSONL sidecar принудительно пишет UTF-8, а Rust bridge читает строки
+  tolerant-декодером: кириллица больше не закрывает stdout pipe.
+- ✅ Supervisor автоматически перезапускает упавший/зависший Core с cooldown,
+  а generation guard не позволяет старому reader отключить новый процесс.
+- ✅ Ошибка инициализации Vosk кешируется на сессию, wake-loop использует
+  backoff и больше не раздувает Windows `PATH` повторными DLL-import.
 - ✅ Settings принимает ключ Groq/OpenRouter/Gemini, сохраняет его только в
   user app-data и перезапускает Core без ручного редактирования `.env`.
 - ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;

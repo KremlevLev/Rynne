@@ -15,15 +15,19 @@ import traceback
 
 def run() -> int:
     protocol_stdout = sys.stdout
+    if hasattr(protocol_stdout, "reconfigure"):
+        protocol_stdout.reconfigure(
+            encoding="utf-8",
+            errors="replace",
+            newline="\n",
+            write_through=True,
+        )
     sys.stdout = sys.stderr
+    sys.__stdout__ = protocol_stdout
 
     os.environ["NOVA_DESKTOP_UI"] = "true"
     os.environ["NOVA_DESKTOP_TRANSPORT"] = "stdio"
     os.environ["NOVA_PREMIUM_UI"] = "false"
-
-    # Some embedded Python launchers do not populate __stdout__.
-    if sys.__stdout__ is None:
-        sys.__stdout__ = protocol_stdout
 
     try:
         from main import async_main

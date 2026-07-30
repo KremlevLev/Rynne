@@ -1,6 +1,7 @@
 # tests/test_wake_word.py
 from __future__ import annotations
 
+import builtins
 from pathlib import Path
 
 from modules.input_hub.wake_word import (
@@ -111,3 +112,41 @@ def test_detector_available_with_model_directory(
     detector = WakeWordDetector(config)
 
     assert detector.available
+
+
+def test_detector_caches_fatal_vosk_initialization_error(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    model_directory = tmp_path / "vosk-model"
+    model_directory.mkdir()
+    detector = WakeWordDetector(
+        WakeWordConfig(
+            enabled=True,
+            wake_word="нова",
+            model_path=model_directory,
+            model_configured=True,
+        )
+    )
+    original_import = builtins.__import__
+    attempts = 0
+
+    def fail_vosk_import(name, *args, **kwargs):
+        nonlocal attempts
+        if name == "vosk":
+            attempts += 1
+            raise ImportError("broken vosk runtime")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(
+        builtins,
+        "__import__",
+        fail_vosk_import,
+    )
+
+    first = detector.wait_for_command()
+    second = detector.wait_for_command()
+
+    assert not first.success
+    assert not second.success
+    assert attempts == 1

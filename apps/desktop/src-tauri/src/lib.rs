@@ -1,13 +1,14 @@
 use serde_json::Value;
 use std::{
-    fs::{create_dir_all, File},
+    fs::{create_dir_all, File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -16,36 +17,73 @@ use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const CORE_STARTUP_TIMEOUT: Duration = Duration::from_secs(45);
+const CORE_RESTART_COOLDOWN: Duration = Duration::from_secs(5);
 
 struct CoreProcess {
     child: Child,
     stdin: ChildStdin,
+    started_at: Instant,
 }
 
 #[derive(Default)]
 struct CoreState {
     process: Mutex<Option<CoreProcess>>,
     connected: AtomicBool,
+    generation: AtomicU64,
+    last_spawn_attempt: Mutex<Option<Instant>>,
+    shutting_down: AtomicBool,
 }
 
 #[tauri::command]
-fn nova_connect(state: State<'_, Arc<CoreState>>) -> bool {
-    let mut guard = match state.process.lock() {
+fn nova_connect(app: AppHandle, state: State<'_, Arc<CoreState>>) -> bool {
+    ensure_core_running(&app, state.inner())
+}
+
+fn ensure_core_running(app: &AppHandle, core_state: &Arc<CoreState>) -> bool {
+    if core_state.shutting_down.load(Ordering::Acquire) {
+        return false;
+    }
+
+    let mut guard = match core_state.process.lock() {
         Ok(guard) => guard,
         Err(_) => return false,
     };
-    let Some(process) = guard.as_mut() else {
-        return false;
+    let connected = core_state.connected.load(Ordering::Acquire);
+    let restart_needed = match guard.as_mut() {
+        Some(process) => match process.child.try_wait() {
+            Ok(None) => !connected && process.started_at.elapsed() >= CORE_STARTUP_TIMEOUT,
+            Ok(Some(status)) => {
+                append_supervisor_log(app, &format!("Core exited with status {status}."));
+                true
+            }
+            Err(error) => {
+                append_supervisor_log(app, &format!("Cannot inspect Core process: {error}"));
+                true
+            }
+        },
+        None => true,
     };
 
-    match process.child.try_wait() {
-        Ok(None) => state.connected.load(Ordering::Acquire),
-        Ok(Some(_)) | Err(_) => {
-            state.connected.store(false, Ordering::Release);
-            *guard = None;
-            false
+    if !restart_needed {
+        return connected;
+    }
+
+    core_state.connected.store(false, Ordering::Release);
+    if let Some(mut process) = guard.take() {
+        let _ = process.child.kill();
+        let _ = process.child.wait();
+    }
+    drop(guard);
+
+    if claim_restart(core_state) {
+        append_supervisor_log(app, "Restarting Nova Core.");
+        if let Err(error) = spawn_core(app.clone(), core_state.clone()) {
+            append_supervisor_log(app, &format!("Core restart failed: {error}"));
         }
     }
+
+    false
 }
 
 #[tauri::command]
@@ -181,6 +219,9 @@ fn core_binary_name() -> PathBuf {
 }
 
 fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
+    if let Ok(mut last_spawn_attempt) = state.last_spawn_attempt.lock() {
+        *last_spawn_attempt = Some(Instant::now());
+    }
     let mut command = build_core_command(&app)?;
     command
         .stdin(Stdio::piped())
@@ -210,46 +251,78 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
         File::create(directory.join("nova-core.log")).ok()
     });
 
+    let process_id = child.id();
+    let generation = state.generation.fetch_add(1, Ordering::AcqRel) + 1;
     {
         let mut guard = state
             .process
             .lock()
             .map_err(|_| "Nova Core process lock is poisoned.".to_owned())?;
-        *guard = Some(CoreProcess { child, stdin });
+        *guard = Some(CoreProcess {
+            child,
+            stdin,
+            started_at: Instant::now(),
+        });
     }
     state.connected.store(false, Ordering::Release);
+    append_supervisor_log(
+        &app,
+        &format!("Spawned Nova Core pid={process_id}, generation={generation}."),
+    );
 
     let event_app = app.clone();
     let event_state = state.clone();
     std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines() {
-            let Ok(line) = line else {
-                break;
-            };
+        let mut reader = BufReader::new(stdout);
+        let mut bytes = Vec::new();
+        loop {
+            bytes.clear();
+            match reader.read_until(b'\n', &mut bytes) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let line = String::from_utf8_lossy(&bytes);
             let Ok(event) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
             let is_event = event.get("event_type").and_then(Value::as_str).is_some()
                 && event.get("payload").is_some();
-            if is_event {
+            if is_event && event_state.generation.load(Ordering::Acquire) == generation {
                 if !event_state.connected.swap(true, Ordering::AcqRel) {
+                    append_supervisor_log(
+                        &event_app,
+                        &format!("Core connected, generation={generation}."),
+                    );
                     let _ = event_app.emit("nova:connection", true);
                 }
                 let _ = event_app.emit("nova:event", event);
             }
         }
-        event_state.connected.store(false, Ordering::Release);
-        let _ = event_app.emit("nova:connection", false);
+        if event_state.generation.load(Ordering::Acquire) == generation {
+            event_state.connected.store(false, Ordering::Release);
+            append_supervisor_log(
+                &event_app,
+                &format!("Core output closed, generation={generation}."),
+            );
+            let _ = event_app.emit("nova:connection", false);
+        }
     });
 
     std::thread::spawn(move || {
         let mut core_log = core_log;
-        for line in BufReader::new(stderr).lines() {
-            if let Ok(line) = line {
-                eprintln!("[Nova Core] {line}");
-                if let Some(log) = core_log.as_mut() {
-                    let _ = writeln!(log, "{line}");
-                }
+        let mut reader = BufReader::new(stderr);
+        let mut bytes = Vec::new();
+        loop {
+            bytes.clear();
+            match reader.read_until(b'\n', &mut bytes) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+            let line = String::from_utf8_lossy(&bytes);
+            let line = line.trim_end_matches(['\r', '\n']);
+            eprintln!("[Nova Core] {line}");
+            if let Some(log) = core_log.as_mut() {
+                let _ = writeln!(log, "{line}");
             }
         }
     });
@@ -257,8 +330,40 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
     Ok(())
 }
 
+fn claim_restart(state: &Arc<CoreState>) -> bool {
+    let Ok(mut last_attempt) = state.last_spawn_attempt.lock() else {
+        return false;
+    };
+    if last_attempt
+        .map(|attempt| attempt.elapsed() < CORE_RESTART_COOLDOWN)
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    *last_attempt = Some(Instant::now());
+    true
+}
+
+fn append_supervisor_log(app: &AppHandle, message: &str) {
+    let Ok(directory) = app.path().app_log_dir() else {
+        return;
+    };
+    if create_dir_all(&directory).is_err() {
+        return;
+    }
+    let Ok(mut log) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(directory.join("nova-desktop.log"))
+    else {
+        return;
+    };
+    let _ = writeln!(log, "{message}");
+}
+
 fn stop_core(state: &Arc<CoreState>) {
     state.connected.store(false, Ordering::Release);
+    state.generation.fetch_add(1, Ordering::AcqRel);
     if let Ok(mut guard) = state.process.lock() {
         if let Some(mut process) = guard.take() {
             let _ = process.child.kill();
@@ -288,9 +393,17 @@ pub fn run() {
             nova_configure_provider
         ])
         .setup(move |app| {
-            if let Err(error) = spawn_core(app.handle().clone(), state_for_setup.clone()) {
+            let app_handle = app.handle().clone();
+            if let Err(error) = spawn_core(app_handle.clone(), state_for_setup.clone()) {
                 eprintln!("[Nova Desktop] {error}");
             }
+            let watchdog_state = state_for_setup.clone();
+            std::thread::spawn(move || {
+                while !watchdog_state.shutting_down.load(Ordering::Acquire) {
+                    std::thread::sleep(Duration::from_secs(2));
+                    ensure_core_running(&app_handle, &watchdog_state);
+                }
+            });
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -301,6 +414,7 @@ pub fn run() {
             event,
             tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
         ) {
+            core_state.shutting_down.store(true, Ordering::Release);
             stop_core(&core_state);
         }
     });

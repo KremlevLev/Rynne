@@ -32,24 +32,29 @@ export class TauriNovaTransport implements NovaTransport {
     const wait = (delay: number) =>
       new Promise((resolve) => window.setTimeout(resolve, delay));
 
-    const pollUntilReady = async () => {
+    const pollConnection = async () => {
       if (polling || disposed) return;
       polling = true;
-      let attempt = 0;
+      let failedAttempts = 0;
 
       while (!disposed) {
+        let ready = false;
         try {
-          if (await invoke<boolean>("nova_connect")) {
-            onConnection("connected");
-            break;
-          }
+          ready = await invoke<boolean>("nova_connect");
         } catch {
-          onConnection("disconnected");
+          ready = false;
         }
 
-        attempt += 1;
-        if (attempt === 120) onConnection("disconnected");
-        await wait(attempt < 120 ? 250 : 2_000);
+        if (ready) {
+          failedAttempts = 0;
+          onConnection("connected");
+          await wait(2_000);
+          continue;
+        }
+
+        failedAttempts += 1;
+        onConnection(failedAttempts < 120 ? "connecting" : "disconnected");
+        await wait(failedAttempts < 120 ? 250 : 2_000);
       }
 
       polling = false;
@@ -64,10 +69,9 @@ export class TauriNovaTransport implements NovaTransport {
           onConnection("connected");
         } else {
           onConnection("connecting");
-          void pollUntilReady();
         }
       });
-      void pollUntilReady();
+      void pollConnection();
     } catch {
       onConnection("disconnected");
       return () => undefined;
