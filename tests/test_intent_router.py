@@ -286,6 +286,29 @@ def test_open_browser_is_application_open() -> None:
     ] == "браузер"
 
 
+def test_openrouter_goal_is_web_not_application_launch() -> None:
+    decision = create_router().route(
+        "Включи OpenRouter и посмотри там мою активность"
+    )
+
+    assert decision.intent == IntentKind.WEB
+    assert decision.strategy == ExecutionStrategy.SKILL
+    assert "browser_open_url" in decision.required_tools
+
+
+def test_browser_with_follow_up_goal_is_not_direct() -> None:
+    decision = create_router().route(
+        (
+            "Включи браузер а в нём OpenRouter "
+            "там чекни мою активность"
+        )
+    )
+
+    assert decision.intent == IntentKind.WEB
+    assert decision.strategy == ExecutionStrategy.SKILL
+    assert decision.needs_tools
+
+
 def test_open_project_is_development_not_app() -> None:
     decision = create_router().route(
         "Открой проект и запусти тесты"

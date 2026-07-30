@@ -227,6 +227,35 @@ class OrchestratorAcceptanceHarness:
 
 GOLDEN_SCENARIOS = (
     AcceptanceScenario(
+        name="openrouter-activity",
+        request=(
+            "Включи браузер а в нём OpenRouter "
+            "и проверь мою активность"
+        ),
+        expected_tools=frozenset(
+            {
+                "browser_open_url",
+                "browser_get_page_text",
+            }
+        ),
+        calls=(
+            ReplayCall(
+                "browser_open_url",
+                {
+                    "url": (
+                        "https://openrouter.ai/activity"
+                    )
+                },
+                PolicyDecision.ALLOW,
+            ),
+            ReplayCall(
+                "browser_get_page_text",
+                {},
+                PolicyDecision.ALLOW,
+            ),
+        ),
+    ),
+    AcceptanceScenario(
         name="batch-app-launch",
         request="Запусти пять приложений на моём компьютере",
         expected_tools=frozenset({"open_application_batch"}),

@@ -24,6 +24,20 @@ all_verbs = (
     }
 )
 
+FOLLOW_UP_ACTION_VERBS = (
+    "посмотри",
+    "проверь",
+    "чекни",
+    "найди",
+    "поищи",
+    "прочитай",
+    "перейди",
+    "нажми",
+    "заполни",
+    "напиши",
+    "отправь",
+)
+
 # Быстрый Regex Bypass (время, системная громкость, окна)
 FAST_COMMAND_PATTERNS = [
     (
@@ -94,31 +108,76 @@ def check_instant_app_launch(user_text: str, app_launcher) -> tuple[bool, str]:
     """Мгновенно находит и запускает ярлык в обход нейросети"""
     if is_complex_request(user_text):
         return False, ""
-    text_clean = user_text.lower().strip()
-    for verb in LAUNCH_VERBS:
-        pattern = rf'\b{verb}\s+(.+)'
-        match = re.search(pattern, text_clean)
-        if match:
-            extracted_app_name = match.group(1).strip().rstrip(".!?")
-            success, message = app_launcher.launch_by_name(extracted_app_name)
-            if success:
-                return True, message
+
+    extracted_app_name = _extract_atomic_application_target(
+        user_text,
+        LAUNCH_VERBS,
+    )
+    if extracted_app_name:
+        success, message = app_launcher.launch_by_name(
+            extracted_app_name
+        )
+        if success:
+            return True, message
+
     return False, ""
 
 def check_instant_app_close(user_text: str) -> tuple[bool, str]:
     """Мгновенно находит процесс программы и завершает его локально за 5 мс"""
     if is_complex_request(user_text):
         return False, ""
-    text_clean = user_text.lower().strip()
-    for verb in CLOSE_VERBS:
-        pattern = rf'\b{verb}\s+(.+)'
-        match = re.search(pattern, text_clean)
-        if match:
-            extracted_app_name = match.group(1).strip().rstrip(".!?")
-            message = close_application(extracted_app_name)
-            if "не найдено" not in message:
-                return True, message
+
+    extracted_app_name = _extract_atomic_application_target(
+        user_text,
+        CLOSE_VERBS,
+    )
+    if extracted_app_name:
+        message = close_application(extracted_app_name)
+        if "не найдено" not in message:
+            return True, message
+
     return False, ""
+
+
+def _extract_atomic_application_target(
+    user_text: str,
+    verbs: list[str],
+) -> str | None:
+    """
+    Возвращает приложение только для полностью атомарной команды.
+
+    Instant-path не должен отрезать хвост цели: «открой браузер и проверь
+    сайт» обязан попасть в агентный tool loop целиком.
+    """
+    text = user_text.lower().strip().rstrip(".!?")
+    verb_pattern = "|".join(
+        re.escape(verb)
+        for verb in sorted(
+            verbs,
+            key=len,
+            reverse=True,
+        )
+    )
+    match = re.fullmatch(
+        rf"(?:{verb_pattern})\s+"
+        r"(?:(?:приложение|программу)\s+)?"
+        r"(?P<target>[^,;]{1,80})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    target = match.group("target").strip()
+    if re.search(
+        rf"\b(?:и|а)\s+(?:{'|'.join(FOLLOW_UP_ACTION_VERBS)})\b",
+        target,
+        flags=re.IGNORECASE,
+    ):
+        return None
+
+    return target or None
+
 
 def check_fast_commands(
     user_text: str,
@@ -143,13 +202,51 @@ def is_complex_request(user_text: str) -> bool:
     """
     text = user_text.lower().strip()
     # Если в запросе есть связующие союзы или знаки препинания
-    complex_markers = [",", " и потом", " а потом", " затем", " после чего", " а также"]
+    complex_markers = [
+        ",",
+        ";",
+        " и потом",
+        " а потом",
+        " затем",
+        " после этого",
+        " после чего",
+        " а также",
+        " в нем ",
+        " в нём ",
+    ]
     if any(marker in text for marker in complex_markers):
+        return True
+
+    follow_up_pattern = (
+        rf"\b(?:и|а)\s+(?:{'|'.join(FOLLOW_UP_ACTION_VERBS)})\b"
+    )
+    if re.search(
+        follow_up_pattern,
+        text,
+        flags=re.IGNORECASE,
+    ):
         return True
         
     # Считаем количество глаголов действий во фразе
-    all_verbs = LAUNCH_VERBS + CLOSE_VERBS + ["сделай", "поставь", "установи", "сверни", "закрой"]
-    verb_count = sum(1 for verb in all_verbs if f" {verb} " in f" {text} ")
+    action_verbs = (
+        LAUNCH_VERBS
+        + CLOSE_VERBS
+        + [
+            "сделай",
+            "поставь",
+            "установи",
+            "сверни",
+            *FOLLOW_UP_ACTION_VERBS,
+        ]
+    )
+    verb_count = sum(
+        1
+        for verb in action_verbs
+        if re.search(
+            rf"\b{re.escape(verb)}\b",
+            text,
+        )
+    )
     if verb_count > 1:
         return True
         

@@ -97,6 +97,11 @@ COMPLEX_MARKERS = (
     "затем",
     "после этого",
     "после чего",
+    "и посмотри",
+    "и проверь",
+    "и чекни",
+    "а в нем",
+    "а в нём",
     "если успешно",
     "проверь результат",
     "выполни план",
@@ -152,6 +157,11 @@ WEB_MARKERS = (
     "перейди на сайт",
 )
 
+WEB_SERVICE_MARKERS = (
+    "openrouter",
+    "open router",
+)
+
 GENERAL_ACTION_MARKERS = (
     "сделай",
     "создай",
@@ -169,6 +179,9 @@ GENERAL_ACTION_MARKERS = (
     "найди",
     "поищи",
     "прочитай",
+    "посмотри",
+    "чекни",
+    "перейди",
     "проверь",
     "проанализируй",
     "отправь",
@@ -312,6 +325,67 @@ def _has_content_or_topic(
     return _contains_any(
         f" {text} ",
         TOPIC_MARKERS,
+    )
+
+
+def _is_atomic_application_command(
+    text: str,
+    *,
+    verbs: tuple[str, ...],
+    application_name: str | None,
+) -> bool:
+    """
+    Instant/direct допустим только когда вся фраза — одно действие.
+
+    Иначе «открой браузер, а там проверь активность» преждевременно
+    завершалось сразу после запуска Chrome.
+    """
+    if not application_name:
+        return False
+
+    verb_pattern = "|".join(
+        re.escape(verb)
+        for verb in sorted(
+            verbs,
+            key=len,
+            reverse=True,
+        )
+    )
+    match = re.fullmatch(
+        rf"(?:{verb_pattern})\s+"
+        r"(?:(?:приложение|программу)\s+)?"
+        r"(?P<target>[^,;]{1,80})",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return False
+
+    target = match.group("target").strip()
+    if re.search(
+        (
+            r"\b(?:и|а)\s+(?:посмотри|проверь|чекни|найди|"
+            r"поищи|прочитай|перейди|нажми|заполни|напиши|"
+            r"отправь)\b|"
+            r"\b(?:а\s+)?в\s+н[её]м\b|"
+            r"\bтам\b"
+        ),
+        target,
+        flags=re.IGNORECASE,
+    ):
+        return False
+
+    if target == application_name:
+        return True
+
+    return (
+        application_name in KNOWN_APPLICATIONS
+        and re.search(
+            rf"\b{re.escape(application_name)}\b",
+            target,
+            flags=re.IGNORECASE,
+        )
+        is not None
     )
 
 
@@ -544,9 +618,29 @@ class DeterministicIntentRouter:
         # с именем «сайт».
         # -----------------------------------------------------
 
-        if _contains_any(
-            text,
-            WEB_MARKERS,
+        browser_is_part_of_larger_goal = (
+            "браузер" in text
+            and not _is_atomic_application_command(
+                text,
+                verbs=(
+                    "открой",
+                    "запусти",
+                    "включи",
+                ),
+                application_name="браузер",
+            )
+        )
+
+        if (
+            _contains_any(
+                text,
+                WEB_MARKERS,
+            )
+            or _contains_any(
+                text,
+                WEB_SERVICE_MARKERS,
+            )
+            or browser_is_part_of_larger_goal
         ):
             return ExecutionDecision(
                 strategy=ExecutionStrategy.SKILL,
@@ -697,9 +791,14 @@ class DeterministicIntentRouter:
 
         if (
             application_name
-            and re.search(
-                r"\b(?:открой|запусти|включи)\b",
+            and _is_atomic_application_command(
                 text,
+                verbs=(
+                    "открой",
+                    "запусти",
+                    "включи",
+                ),
+                application_name=application_name,
             )
         ):
             return ExecutionDecision(
@@ -724,9 +823,14 @@ class DeterministicIntentRouter:
 
         if (
             application_name
-            and re.search(
-                r"\b(?:закрой|выключи|заверши)\b",
+            and _is_atomic_application_command(
                 text,
+                verbs=(
+                    "закрой",
+                    "выключи",
+                    "заверши",
+                ),
+                application_name=application_name,
             )
         ):
             return ExecutionDecision(

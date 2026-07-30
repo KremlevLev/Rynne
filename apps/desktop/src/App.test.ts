@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { eventToItem } from "./App";
+import { describe, expect, it, vi } from "vitest";
+import {
+  eventToItem,
+  scrollConversationToBottom,
+} from "./App";
 
 describe("eventToItem", () => {
   it("renders the Core assistant display_text payload", () => {
@@ -28,5 +31,19 @@ describe("eventToItem", () => {
 
     expect(item?.body).toBe("Провайдер временно недоступен.");
     expect(item?.status).toBe("error");
+  });
+
+  it("scrolls only the conversation container", () => {
+    const scrollTo = vi.fn();
+
+    scrollConversationToBottom({
+      scrollHeight: 2048,
+      scrollTo,
+    });
+
+    expect(scrollTo).toHaveBeenCalledWith({
+      top: 2048,
+      behavior: "smooth",
+    });
   });
 });

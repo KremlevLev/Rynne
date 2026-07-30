@@ -1,7 +1,8 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 727 tests passed
-cd apps/desktop && npm test  # 7 tests passed
+python -m pytest tests/ -q  # 732 tests passed
+cd apps/desktop && npm test  # 8 tests passed
+python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
 
 ## Desktop migration: React + Tauri
@@ -46,6 +47,13 @@ cd apps/desktop && npm test  # 7 tests passed
 - ✅ Весь двунаправленный desktop-протокол использует UTF-8 для stdin/stdout/stderr;
   React отображает реальный `display_text` Core и показывает `request_failed`
   вместо пустых карточек Nova.
+- ✅ Instant/direct запускает приложение только для атомарной команды; составные
+  цели не обрываются после первого глагола, а direct-ходы сохраняются в истории.
+- ✅ Agent tool loop продолжает задачу по фактическим результатам до четырёх
+  модельных шагов, пробует расширенный набор возможностей и не заменяет
+  найденные инструменты шаблонным ответом «не могу».
+- ✅ Длинная лента React прокручивает только область диалога: header, sidebar,
+  context panel и composer остаются закреплены внутри окна.
 - ✅ Supervisor автоматически перезапускает упавший/зависший Core с cooldown,
   а generation guard не позволяет старому reader отключить новый процесс.
 - ✅ Ошибка инициализации Vosk кешируется на сессию, wake-loop использует

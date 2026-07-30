@@ -35,6 +35,16 @@ from modules.tools.runtime import (
 class FakeAgent:
     def __init__(self) -> None:
         self.calls = []
+        self.external_turns = []
+
+    def record_external_turn(
+        self,
+        user_text,
+        assistant_text,
+    ):
+        self.external_turns.append(
+            (user_text, assistant_text)
+        )
 
     async def run(
         self,
@@ -109,6 +119,12 @@ def test_direct_request_does_not_call_agent() -> None:
             "model_calls"
         ] == 0
         assert agent.calls == []
+        assert agent.external_turns == [
+            (
+                "Который час?",
+                response.display_text,
+            )
+        ]
 
     asyncio.run(scenario())
 

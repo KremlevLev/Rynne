@@ -95,6 +95,18 @@ CAPABILITY RECOVERY:
 короткий уточняющий вопрос. Не имитируй успешное выполнение без tool result.
 """.strip()
 
+TOOL_CONTINUATION_PROMPT = """
+TOOL CONTINUATION:
+Проверь результаты уже выполненных инструментов относительно всей исходной
+цели пользователя. Если цель ещё не достигнута, вызови следующий подходящий
+инструмент. При ошибке предпочитаемого инструмента попробуй безопасную
+альтернативу. Завершай без tool call только когда задача действительно
+выполнена, требуется один критичный ответ пользователя или все подходящие
+возможности дали конкретный blocker. Не считай запуск приложения или браузера
+завершением многошаговой задачи, если пользователь просил также перейти,
+прочитать, проверить, заполнить или отправить.
+""".strip()
+
 MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
 
 
@@ -358,6 +370,33 @@ class AgentService:
         )
         self.intent_router = (
             DeterministicIntentRouter()
+        )
+
+    def record_external_turn(
+        self,
+        user_text: str,
+        assistant_text: str,
+    ) -> None:
+        """
+        Сохраняет direct/clarify ход, выполненный вне AgentService.
+
+        Без этого follow-up вроде «я про сайт» не видел предыдущую команду,
+        если её перехватил deterministic/instant executor.
+        """
+        self.history.extend(
+            [
+                {
+                    "role": "user",
+                    "content": str(user_text),
+                },
+                {
+                    "role": "assistant",
+                    "content": str(assistant_text),
+                },
+            ]
+        )
+        self.history[:] = trim_history(
+            self.history
         )
 
 
@@ -1009,17 +1048,55 @@ class AgentService:
                 use_tools
                 and action_was_requested
             ):
+                refusal_markers = (
+                    "не могу",
+                    "не умею",
+                    "невозможно",
+                    "нет возможности",
+                    "cannot",
+                    "can't",
+                    "unable to",
+                )
+                if (
+                    final_text
+                    and not any(
+                        marker in final_text.lower()
+                        for marker in refusal_markers
+                    )
+                ):
+                    return AssistantResponse(
+                        display_text=final_text,
+                        speech_text=final_text,
+                        success=False,
+                        error_code=(
+                            "CLARIFICATION_REQUIRED"
+                            if "?" in final_text
+                            else "ACTION_NOT_CONFIRMED"
+                        ),
+                    )
+
+                visible_tools = ", ".join(
+                    sorted(selected_tool_names)[:6]
+                )
                 return AssistantResponse(
                     display_text=(
-                        "Действие не было подтверждено ни одним "
-                        "инструментом."
+                        "Подходящие инструменты найдены"
+                        + (
+                            f": {visible_tools}. "
+                            if visible_tools
+                            else ", но "
+                        )
+                        + "Безопасный вызов пока не сформирован. "
+                        "Уточни один критичный параметр задачи, "
+                        "и я продолжу."
                     ),
                     speech_text=(
-                        "Сэр, действие не было подтверждено "
-                        "системой."
+                        "Я нашла подходящие инструменты. "
+                        "Уточните критичный параметр, "
+                        "и я продолжу."
                     ),
                     success=False,
-                    error_code="ACTION_NOT_CONFIRMED",
+                    error_code="TOOL_CALL_NEEDS_CONTEXT",
                 )
 
             if not final_text:
@@ -1040,54 +1117,122 @@ class AgentService:
                 success=True,
             )
 
-        # Выполняем все tool calls.
+        # Выполняем tool calls итеративно. После каждого пакета модель видит
+        # структурированные результаты и может выбрать следующий инструмент.
         executed_signatures: set[str] = set()
         executed_tool_results: list[dict[str, Any]] = []
-
         total_tool_calls = 0
+        pending_tool_calls = tool_calls
+        budget_exhausted = False
 
-        for tool_call in tool_calls:
-            if total_tool_calls >= MAX_TOOL_CALLS:
-                break
-
-            signature = canonical_tool_signature(
-                tool_call
-            )
-
-            # Проверка повтора через бюджет.
-            if self.budget_manager.is_tool_repeated(
-                turn_id,
-                signature,
-            ):
-                result_content = (
-                    self._duplicate_result_content(
-                        signature
+        while pending_tool_calls:
+            executed_this_round = 0
+            round_had_failure = False
+            for tool_call in pending_tool_calls:
+                if (
+                    total_tool_calls
+                    >= min(
+                        MAX_TOOL_CALLS,
+                        self.default_budget.max_tool_calls,
                     )
+                ):
+                    budget_exhausted = True
+                    break
+
+                signature = canonical_tool_signature(
+                    tool_call
                 )
-                self.history.append(
-                    {
-                        "role": "tool",
+
+                if (
+                    self.budget_manager.is_tool_repeated(
+                        turn_id,
+                        signature,
+                    )
+                    or signature in executed_signatures
+                ):
+                    self.history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call["id"],
+                            "name": (
+                                tool_call["function"]["name"]
+                            ),
+                            "content": (
+                                self._duplicate_result_content(
+                                    signature
+                                )
+                            ),
+                        }
+                    )
+                    continue
+
+                executed_signatures.add(signature)
+                self.budget_manager.record_tool_call(
+                    turn_id,
+                    signature,
+                )
+
+                logger.info(
+                    "Выполняется инструмент %s.",
+                    tool_call["function"]["name"],
+                )
+
+                tool_context = ToolContext.create(
+                    session_id=self.session_id,
+                    turn_id=turn_id,
+                    working_directory=(
+                        request_object.metadata.get(
+                            "workspace_path"
+                        )
+                        if request_object is not None
+                        else None
+                    ),
+                    source="assistant",
+                    metadata={
+                        "user_request": user_text,
+                        "has_image": has_image,
+                        "agent_complexity": (
+                            complexity.value
+                        ),
                         "tool_call_id": (
-                            tool_call["id"]
+                            tool_call.get("id")
                         ),
-                        "name": (
-                            tool_call[
-                                "function"
-                            ]["name"]
+                        "workspace_path": (
+                            request_object.metadata.get(
+                                "workspace_path"
+                            )
+                            if request_object is not None
+                            else None
                         ),
-                        "content": result_content,
-                    }
+                        "proactive_suggestion_accepted": (
+                            bool(
+                                request_object.metadata.get(
+                                    "proactive_suggestion_accepted"
+                                )
+                            )
+                            if request_object is not None
+                            else False
+                        ),
+                    },
                 )
-                continue
 
-            # Проверка локального дедупликатора (после проверки бюджета).
-            if signature in executed_signatures:
-                result_content = (
-                    self._duplicate_result_content(
-                        signature
+                result = await self.runner.execute(
+                    tool_call,
+                    context=tool_context,
+                )
+                total_tool_calls += 1
+                executed_this_round += 1
+                round_had_failure = (
+                    round_had_failure
+                    or not result.success
+                )
+
+                executed_tool_results.append(
+                    self._tool_result_record(
+                        tool_call,
+                        result,
                     )
                 )
-
                 self.history.append(
                     {
                         "role": "tool",
@@ -1095,94 +1240,107 @@ class AgentService:
                         "name": (
                             tool_call["function"]["name"]
                         ),
-                        "content": result_content,
+                        "content": result.to_model_content(),
                     }
                 )
-                continue
 
-            executed_signatures.add(signature)
-            self.budget_manager.record_tool_call(
-                turn_id,
-                signature,
-            )
+            if budget_exhausted:
+                break
 
-            logger.info(
-                "Выполняется инструмент %s.",
-                tool_call["function"]["name"],
-            )
+            if executed_this_round == 0:
+                logger.info(
+                    "Tool loop остановлен: модель предложила "
+                    "только уже выполненные вызовы."
+                )
+                break
 
-            tool_context = ToolContext.create(
-                session_id=self.session_id,
-                turn_id=turn_id,
-                working_directory=(
-                    request_object.metadata.get(
-                        "workspace_path"
+            if round_had_failure:
+                recovery_tool_names = (
+                    get_selected_tool_names(
+                        user_text,
+                        self.registry.names,
+                        has_image=has_image,
+                        max_tools=32,
+                        tool_schemas=all_tool_schemas,
+                        broaden=True,
                     )
-                    if request_object is not None
-                    else None
-                ),
-                source="assistant",
-                metadata={
-                    "user_request": user_text,
-                    "has_image": has_image,
-                    "agent_complexity": (
-                        complexity.value
-                    ),
-                    "tool_call_id": (
-                        tool_call.get("id")
-                    ),
-                    "workspace_path": (
-                        request_object.metadata.get(
-                            "workspace_path"
-                        )
-                        if request_object is not None
-                        else None
-                    ),
-                    "proactive_suggestion_accepted": (
-                        bool(
-                            request_object.metadata.get(
-                                "proactive_suggestion_accepted"
-                            )
-                        )
-                        if request_object is not None
-                        else False
-                    ),
-                },
-            )
+                )
+                recovery_tool_names.update(
+                    selected_tool_names
+                )
+                selected_tool_names = (
+                    recovery_tool_names
+                )
+                tool_schemas = self.registry.schemas(
+                    recovery_tool_names
+                )
 
-            result = await self.runner.execute(
-                tool_call,
-                context=tool_context,
-            )
-            total_tool_calls += 1
-
-            executed_tool_results.append(
-                self._tool_result_record(
-                    tool_call,
-                    result,
+            exhausted, exhaustion_reason = (
+                self.budget_manager.is_exhausted(
+                    turn_id
                 )
             )
+            if exhausted:
+                logger.warning(
+                    "Агентный цикл остановлен: %s",
+                    exhaustion_reason,
+                )
+                budget_exhausted = True
+                break
 
-            self.history.append(
+            self.budget_manager.record_model_call(
+                turn_id
+            )
+            continuation_messages = [
                 {
-                    "role": "tool",
-                    "tool_call_id": tool_call["id"],
-                    "name": (
-                        tool_call["function"]["name"]
+                    "role": "system",
+                    "content": (
+                        SYSTEM_PROMPT
+                        + "\n\n"
+                        + TOOL_CONTINUATION_PROMPT
                     ),
-                    "content": result.to_model_content(),
-                }
+                },
+                *trim_history(self.history),
+            ]
+
+            try:
+                generated = await self._request_model(
+                    complexity=complexity,
+                    messages=continuation_messages,
+                    tools=tool_schemas,
+                    allow_tools=True,
+                    has_image=False,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Продолжение tool loop завершилось ошибкой: %s",
+                    exc,
+                )
+                break
+
+            pending_tool_calls = collect_tool_calls(
+                generated
+            )
+            continuation_message: dict[str, Any] = {
+                "role": "assistant",
+                "content": generated.text,
+            }
+            if pending_tool_calls:
+                continuation_message[
+                    "tool_calls"
+                ] = pending_tool_calls
+            self.history.append(
+                continuation_message
             )
 
-        if total_tool_calls >= MAX_TOOL_CALLS:
+        if budget_exhausted:
             logger.warning(
-                "Достигнут лимит инструментов: %s.",
-                MAX_TOOL_CALLS,
+                "Достигнут лимит агентного цикла."
             )
 
         return await self._create_final_report(
             user_text=user_text,
             tool_results=executed_tool_results,
             original_complexity=complexity,
-            budget_exhausted=False,
+            budget_exhausted=budget_exhausted,
         )

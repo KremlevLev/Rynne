@@ -62,6 +62,22 @@ class RequestDispatcher:
             or DeterministicIntentRouter()
         )
 
+    def _remember_non_agent_turn(
+        self,
+        request: UserRequest,
+        response: AssistantResponse,
+    ) -> None:
+        recorder = getattr(
+            self.agent,
+            "record_external_turn",
+            None,
+        )
+        if callable(recorder):
+            recorder(
+                request.text,
+                response.display_text,
+            )
+
     async def dispatch(
         self,
         request: UserRequest,
@@ -125,6 +141,10 @@ class RequestDispatcher:
                 0,
             )
 
+            self._remember_non_agent_turn(
+                request,
+                response,
+            )
             return response
 
         if (
@@ -136,7 +156,7 @@ class RequestDispatcher:
                 or "Уточните запрос."
             )
 
-            return AssistantResponse(
+            response = AssistantResponse(
                 display_text=question,
                 speech_text=question,
                 success=False,
@@ -153,6 +173,11 @@ class RequestDispatcher:
                     "model_calls": 0,
                 },
             )
+            self._remember_non_agent_turn(
+                request,
+                response,
+            )
+            return response
 
         if (
             decision.strategy
@@ -163,7 +188,7 @@ class RequestDispatcher:
                 or "Запрос запрещён."
             )
 
-            return AssistantResponse(
+            response = AssistantResponse(
                 display_text=reason,
                 speech_text=reason,
                 success=False,
@@ -178,6 +203,11 @@ class RequestDispatcher:
                     "model_calls": 0,
                 },
             )
+            self._remember_non_agent_turn(
+                request,
+                response,
+            )
+            return response
 
         try:
             response = await self.agent.run(

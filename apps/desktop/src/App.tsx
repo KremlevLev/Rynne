@@ -58,6 +58,16 @@ export function runtimePresentation(state: unknown): {
   };
 }
 
+export function scrollConversationToBottom(
+  element: Pick<HTMLElement, "scrollTo" | "scrollHeight"> | null,
+): void {
+  if (!element) return;
+  element.scrollTo({
+    top: element.scrollHeight,
+    behavior: "smooth",
+  });
+}
+
 const nav = [
   { key: "dialog" as const, label: "Диалог", icon: MessageSquare },
   { key: "tasks" as const, label: "Задачи", icon: Activity },
@@ -149,7 +159,7 @@ export function App() {
   const [provider, setProvider] = useState("groq");
   const [apiKey, setApiKey] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
   const runtime = runtimePresentation(runtimeState);
 
   useEffect(() => {
@@ -194,7 +204,7 @@ export function App() {
   }, [transport]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollConversationToBottom(conversationRef.current);
   }, [timeline]);
 
   async function send(request = composer) {
@@ -291,7 +301,7 @@ export function App() {
 
         {view === "dialog" ? (
           <>
-            <div className="conversation">
+            <div className="conversation" ref={conversationRef}>
               <div className="date-divider"><span>Сегодня</span></div>
               {timeline.map((item) => (
                 <article key={item.id} className={`timeline ${item.kind}`}>
@@ -316,7 +326,6 @@ export function App() {
                   </div>
                 </article>
               ))}
-              <div ref={endRef} />
             </div>
 
             <div className="composer-wrap">
