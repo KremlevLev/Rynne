@@ -26,32 +26,55 @@ export class TauriNovaTransport implements NovaTransport {
     onConnection("connecting");
     let unlisten: UnlistenFn;
     let unlistenConnection: UnlistenFn;
+    let disposed = false;
+    let polling = false;
+
+    const wait = (delay: number) =>
+      new Promise((resolve) => window.setTimeout(resolve, delay));
+
+    const pollUntilReady = async () => {
+      if (polling || disposed) return;
+      polling = true;
+      let attempt = 0;
+
+      while (!disposed) {
+        try {
+          if (await invoke<boolean>("nova_connect")) {
+            onConnection("connected");
+            break;
+          }
+        } catch {
+          onConnection("disconnected");
+        }
+
+        attempt += 1;
+        if (attempt === 120) onConnection("disconnected");
+        await wait(attempt < 120 ? 250 : 2_000);
+      }
+
+      polling = false;
+    };
+
     try {
       unlisten = await listen<unknown>("nova:event", ({ payload }) => {
         if (isNovaEvent(payload)) onEvent(payload);
       });
       unlistenConnection = await listen<boolean>("nova:connection", ({ payload }) => {
-        onConnection(payload ? "connected" : "connecting");
+        if (payload) {
+          onConnection("connected");
+        } else {
+          onConnection("connecting");
+          void pollUntilReady();
+        }
       });
-      let ready = false;
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        ready = await invoke<boolean>("nova_connect");
-        if (ready) break;
-        await new Promise((resolve) => window.setTimeout(resolve, 250));
-      }
-      if (!ready) {
-        unlisten();
-        unlistenConnection();
-        onConnection("disconnected");
-        return () => undefined;
-      }
-      onConnection("connected");
+      void pollUntilReady();
     } catch {
       onConnection("disconnected");
       return () => undefined;
     }
 
     return () => {
+      disposed = true;
       unlisten();
       unlistenConnection();
       onConnection("disconnected");

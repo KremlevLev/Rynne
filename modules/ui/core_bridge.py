@@ -98,6 +98,10 @@ class CoreDesktopBridge:
         self,
         shutdown_event: asyncio.Event,
     ) -> None:
+        # The desktop shell must receive a handshake before optional snapshots
+        # touch process enumeration, memory storage, models or integrations.
+        self._publish_runtime()
+
         while not shutdown_event.is_set():
             try:
                 await self.publish_snapshots()
@@ -158,16 +162,7 @@ class CoreDesktopBridge:
 
         model_data = self.llm.provider_health()
 
-        self.desktop.publish(
-            "runtime",
-            {
-                "state": self.runtime.state.value,
-                "active": self.runtime.is_active,
-                "shutting_down": (
-                    self.runtime.is_shutting_down
-                ),
-            },
-        )
+        self._publish_runtime()
 
         self.desktop.publish(
             "processes",
@@ -317,6 +312,16 @@ class CoreDesktopBridge:
                             "error": str(bg_plan.error or ""),
                         },
                     )
+
+    def _publish_runtime(self) -> None:
+        self.desktop.publish(
+            "runtime",
+            {
+                "state": self.runtime.state.value,
+                "active": self.runtime.is_active,
+                "shutting_down": self.runtime.is_shutting_down,
+            },
+        )
 
     def _integration_snapshot(
         self,

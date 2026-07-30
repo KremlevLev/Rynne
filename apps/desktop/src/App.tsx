@@ -222,7 +222,14 @@ export function App() {
           <div className="brand-orb"><Sparkles size={17} /></div>
           <div>
             <strong>Nova</strong>
-            <span><i className={`status-dot ${connection}`} />{connection === "connected" ? "На связи" : "Нет связи с Core"}</span>
+            <span>
+              <i className={`status-dot ${connection}`} />
+              {connection === "connected"
+                ? "На связи"
+                : connection === "connecting"
+                  ? "Core запускается…"
+                  : "Core не отвечает"}
+            </span>
           </div>
         </div>
 
@@ -311,7 +318,13 @@ export function App() {
                       void send();
                     }
                   }}
-                  placeholder={connection === "connected" ? "Попроси Nova или поставь задачу…" : "Подключение к Nova Core…"}
+                  placeholder={
+                    connection === "connected"
+                      ? "Попроси Nova или поставь задачу…"
+                      : connection === "connecting"
+                        ? "Nova Core запускается…"
+                        : "Core не отвечает — Nova продолжает переподключение…"
+                  }
                   disabled={connection !== "connected"}
                   rows={1}
                 />

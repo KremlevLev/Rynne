@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::{
+    fs::{create_dir_all, File},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -204,6 +205,10 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
         .stderr
         .take()
         .ok_or_else(|| "Nova Core stderr is unavailable.".to_owned())?;
+    let core_log = app.path().app_log_dir().ok().and_then(|directory| {
+        create_dir_all(&directory).ok()?;
+        File::create(directory.join("nova-core.log")).ok()
+    });
 
     {
         let mut guard = state
@@ -238,9 +243,13 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
     });
 
     std::thread::spawn(move || {
+        let mut core_log = core_log;
         for line in BufReader::new(stderr).lines() {
             if let Ok(line) = line {
                 eprintln!("[Nova Core] {line}");
+                if let Some(log) = core_log.as_mut() {
+                    let _ = writeln!(log, "{line}");
+                }
             }
         }
     });

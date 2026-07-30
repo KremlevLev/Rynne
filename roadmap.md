@@ -36,6 +36,11 @@ cd apps/desktop && npm test  # 5 tests passed
   повторный запуск фокусирует существующее окно, release не открывает консоль.
 - ✅ Core в installer хранится в versioned resource-каталоге: обновление ставит
   новый sidecar даже если Windows всё ещё удерживает бинарник предыдущей версии.
+- ✅ Cold start больше не блокируется Silero/Torch: TTS runtime загружается
+  лениво, stdio Core отправляет runtime handshake до тяжёлых snapshots, а React
+  продолжает переподключение после 30 секунд вместо удаления event-listener.
+- ✅ Release shell сохраняет последний stderr Core в пользовательский
+  `logs/nova-core.log`, чтобы startup-сбои диагностировались без консоли.
 - ✅ Settings принимает ключ Groq/OpenRouter/Gemini, сохраняет его только в
   user app-data и перезапускает Core без ручного редактирования `.env`.
 - ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;

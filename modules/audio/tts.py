@@ -5,7 +5,6 @@ import threading
 import sounddevice as sd
 import re
 import asyncio
-import torch
 from modules.ui.overlay import update_status
 logger = logging.getLogger("TTS")
 
@@ -26,12 +25,20 @@ def is_tts_playing() -> bool:
 # Путь для хранения JIT-модели Silero v5
 MODEL_PATH = "data/v5_ru.pt"
 _silero_model = None
-_device = torch.device('cpu')
+_torch_module = None
 
 def _get_silero_engine():
     """Ленивая инициализация Silero TTS v5 на CPU"""
-    global _silero_model
+    global _silero_model, _torch_module
     if _silero_model is None:
+        if _torch_module is None:
+            logger.info("Загрузка локального TTS runtime...")
+            import torch
+
+            _torch_module = torch
+
+        torch = _torch_module
+        device = torch.device("cpu")
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         
         # Автоматическое скачивание модели при первом запуске
@@ -48,7 +55,7 @@ def _get_silero_engine():
             logger.info("Загрузка Silero v5 в оперативную память...")
             torch.set_num_threads(4)  # Ограничение потоков для предотвращения перегрузки CPU
             _silero_model = torch.package.PackageImporter(MODEL_PATH).load_pickle("tts_models", "model")
-            _silero_model.to(_device)
+            _silero_model.to(device)
             logger.info("Модель Silero v5 готова к синтезу речи.")
         except Exception as e:
             logger.error(f"Ошибка при инициализации Silero v5: {e}")

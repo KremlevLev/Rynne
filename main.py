@@ -1629,13 +1629,14 @@ async def async_main() -> None:
 
 
     try:
-        await speech.say(
-            (
-                "Скажите Нова или нажмите "
-                "контрол шифт спейс."
-            ),
-            priority=0,
-        )
+        if NOVA_DESKTOP_TRANSPORT != "stdio":
+            await speech.say(
+                (
+                    "Скажите Нова или нажмите "
+                    "контрол шифт спейс."
+                ),
+                priority=0,
+            )
 
         await runtime.shutdown_event.wait()
 
