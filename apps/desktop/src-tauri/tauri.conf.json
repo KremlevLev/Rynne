@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nova",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "identifier": "ai.nova.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -33,7 +33,7 @@
     "shortDescription": "Персональный AI-агент для Windows",
     "longDescription": "Nova выполняет задачи в Windows, работает с файлами, браузером, приложениями и подключёнными инструментами.",
     "resources": {
-      "resources/nova-core/": "nova-core-0.1.5"
+      "resources/nova-core/": "nova-core-0.1.6"
     },
     "icon": [
       "icons/32x32.png",

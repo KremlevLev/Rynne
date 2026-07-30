@@ -15,8 +15,14 @@ import traceback
 
 def run() -> int:
     protocol_stdout = sys.stdout
-    if hasattr(protocol_stdout, "reconfigure"):
-        protocol_stdout.reconfigure(
+    for stream in (
+        protocol_stdout,
+        sys.stdin,
+        sys.stderr,
+    ):
+        if not hasattr(stream, "reconfigure"):
+            continue
+        stream.reconfigure(
             encoding="utf-8",
             errors="replace",
             newline="\n",

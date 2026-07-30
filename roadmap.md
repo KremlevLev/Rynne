@@ -1,7 +1,7 @@
 ## Тесты
 ```bash
 python -m pytest tests/ -q  # 727 tests passed
-cd apps/desktop && npm test  # 5 tests passed
+cd apps/desktop && npm test  # 7 tests passed
 ```
 
 ## Desktop migration: React + Tauri
@@ -43,6 +43,9 @@ cd apps/desktop && npm test  # 5 tests passed
   `logs/nova-core.log`, чтобы startup-сбои диагностировались без консоли.
 - ✅ JSONL sidecar принудительно пишет UTF-8, а Rust bridge читает строки
   tolerant-декодером: кириллица больше не закрывает stdout pipe.
+- ✅ Весь двунаправленный desktop-протокол использует UTF-8 для stdin/stdout/stderr;
+  React отображает реальный `display_text` Core и показывает `request_failed`
+  вместо пустых карточек Nova.
 - ✅ Supervisor автоматически перезапускает упавший/зависший Core с cooldown,
   а generation guard не позволяет старому reader отключить новый процесс.
 - ✅ Ошибка инициализации Vosk кешируется на сессию, wake-loop использует

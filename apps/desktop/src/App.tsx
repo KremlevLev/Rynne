@@ -80,7 +80,7 @@ function text(payload: JsonObject, key: string, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
-function eventToItem(event: NovaEvent): TimelineItem | null {
+export function eventToItem(event: NovaEvent): TimelineItem | null {
   const id = `${event.event_type}_${event.created_at}_${Math.random()}`;
   const payload = event.payload;
   switch (event.event_type) {
@@ -91,8 +91,20 @@ function eventToItem(event: NovaEvent): TimelineItem | null {
         id,
         kind: "assistant",
         title: "Nova",
-        body: text(payload, "text", text(payload, "message")),
+        body: text(
+          payload,
+          "display_text",
+          text(payload, "text", text(payload, "message")),
+        ),
         status: payload.success === false ? "error" : "success",
+      };
+    case "request_failed":
+      return {
+        id,
+        kind: "assistant",
+        title: "Nova",
+        body: text(payload, "error", "Не удалось выполнить запрос."),
+        status: "error",
       };
     case "tool_started":
       return {
