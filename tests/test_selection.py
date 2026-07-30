@@ -7,6 +7,7 @@ from modules.tools.selection import (
     get_tool_schemas_for_request,
     get_selected_tool_names,
     KEYWORDS_BY_TOOL,
+    request_prefers_interactive_browser,
 )
 from modules.tools.tool_visibility import (
     filter_tools_for_model,
@@ -337,3 +338,28 @@ def test_semantic_ranking_wins_before_limit() -> None:
     )
 
     assert result == {"browser_open_url"}
+
+
+def test_interactive_account_navigation_excludes_search_substitute() -> None:
+    available = {
+        "browser_open_url",
+        "browser_get_page_text",
+        "browser_click",
+        "search_web_tavily",
+        "scrape_webpage",
+        "open_website",
+    }
+    request = "Открой OpenRouter и там мою активность"
+
+    result = select_tools_for_request(
+        request,
+        available,
+        broaden=True,
+    )
+
+    assert request_prefers_interactive_browser(request)
+    assert "browser_open_url" in result
+    assert "browser_get_page_text" in result
+    assert "search_web_tavily" not in result
+    assert "scrape_webpage" not in result
+    assert "open_website" not in result

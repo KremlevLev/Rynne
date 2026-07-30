@@ -4,6 +4,7 @@ import re
 import asyncio
 import ipaddress
 import logging
+import os
 import socket
 import uuid
 from pathlib import Path
@@ -26,6 +27,25 @@ SCREENSHOTS_DIRECTORY = Path(
 MAX_EXTRACTED_TEXT_LENGTH = 50_000
 MAX_SELECTOR_LENGTH = 500
 MAX_INPUT_TEXT_LENGTH = 100_000
+SYSTEM_BROWSER_CHANNELS = ("chrome", "msedge")
+
+
+def default_browser_profile_directory() -> Path:
+    """Return a Nova-owned browser profile that survives Core restarts."""
+    configured = os.getenv("NOVA_BROWSER_PROFILE_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+
+    if os.name == "nt":
+        local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+        if local_app_data:
+            return Path(local_app_data) / "Nova" / "browser-profile"
+
+    cache_home = os.getenv("XDG_CACHE_HOME", "").strip()
+    if cache_home:
+        return Path(cache_home) / "nova" / "browser-profile"
+
+    return Path.home() / ".nova" / "browser-profile"
 
 
 def validate_browser_url(
@@ -282,31 +302,40 @@ def validate_selector(
 
 class BrowserManager:
     """
-    Изолированный Browser Agent на Playwright.
+    Browser Agent на Playwright с отдельным профилем Nova.
 
     Браузер загружается лениво при первом использовании.
-    Используется отдельный временный контекст без личных cookies.
+    Сначала используется системный Chrome или Edge, поэтому installer не обязан
+    поставлять тяжёлый Chromium. Cookies сохраняются только в профиле Nova, а не
+    читаются из личного профиля браузера пользователя.
     """
 
     def __init__(
         self,
         *,
         headless: bool = False,
+        profile_directory: str | Path | None = None,
     ) -> None:
         self.headless = headless
+        self.profile_directory = (
+            Path(profile_directory).expanduser()
+            if profile_directory is not None
+            else default_browser_profile_directory()
+        )
 
         self._playwright = None
         self._browser = None
         self._context = None
         self._page = None
+        self._runtime: str | None = None
+        self._persistent_context = False
 
         self._lock = asyncio.Lock()
 
     @property
     def is_started(self) -> bool:
         return (
-            self._browser is not None
-            and self._context is not None
+            self._context is not None
             and self._page is not None
         )
 
@@ -337,36 +366,90 @@ class BrowserManager:
                 self._playwright = (
                     await async_playwright().start()
                 )
-
-                self._browser = (
-                    await self._playwright.chromium.launch(
-                        headless=self.headless,
-                    )
+                self.profile_directory.mkdir(
+                    parents=True,
+                    exist_ok=True,
                 )
 
-                self._context = (
-                    await self._browser.new_context(
-                        accept_downloads=True,
-                        viewport={
-                            "width": 1440,
-                            "height": 900,
-                        },
-                    )
-                )
+                launch_errors: dict[str, str] = {}
+                for channel in SYSTEM_BROWSER_CHANNELS:
+                    try:
+                        self._context = await (
+                            self._playwright.chromium
+                            .launch_persistent_context(
+                                user_data_dir=str(
+                                    self.profile_directory
+                                ),
+                                channel=channel,
+                                headless=self.headless,
+                                accept_downloads=True,
+                                viewport={
+                                    "width": 1440,
+                                    "height": 900,
+                                },
+                            )
+                        )
+                        self._browser = self._context.browser
+                        self._runtime = channel
+                        self._persistent_context = True
+                        break
+                    except Exception as channel_error:
+                        launch_errors[channel] = str(
+                            channel_error
+                        ).splitlines()[0]
 
+                if self._context is None:
+                    try:
+                        self._browser = await (
+                            self._playwright.chromium.launch(
+                                headless=self.headless,
+                            )
+                        )
+                        self._context = (
+                            await self._browser.new_context(
+                                accept_downloads=True,
+                                viewport={
+                                    "width": 1440,
+                                    "height": 900,
+                                },
+                            )
+                        )
+                        self._runtime = "playwright-chromium"
+                        self._persistent_context = False
+                    except Exception as bundled_error:
+                        launch_errors["playwright-chromium"] = str(
+                            bundled_error
+                        ).splitlines()[0]
+                        raise RuntimeError(
+                            "Chrome, Edge и встроенный Chromium "
+                            "недоступны."
+                        ) from bundled_error
+
+                pages = list(self._context.pages)
                 self._page = (
-                    await self._context.new_page()
+                    pages[0]
+                    if pages
+                    else await self._context.new_page()
                 )
 
                 logger.info(
-                    "Playwright Chromium запущен. headless=%s",
+                    "Playwright browser запущен. runtime=%s headless=%s",
+                    self._runtime,
                     self.headless,
                 )
 
                 return ToolResult.ok(
-                    "Изолированный браузер Nova запущен.",
+                    "Браузер Nova запущен. Авторизация сайтов "
+                    "сохраняется в отдельном профиле Nova.",
                     data={
                         "headless": self.headless,
+                        "runtime": self._runtime,
+                        "persistent_profile": (
+                            self._persistent_context
+                        ),
+                        "profile_directory": str(
+                            self.profile_directory
+                        ),
                     },
                     verification=VerificationResult(
                         verified=True,
@@ -385,11 +468,17 @@ class BrowserManager:
                 return ToolResult.failure(
                     "BROWSER_START_FAILED",
                     (
-                        "Не удалось запустить Chromium. "
-                        "Проверьте установку командой "
-                        "'py -m playwright install chromium'. "
-                        f"Ошибка: {exc}"
+                        "Не удалось запустить браузер Nova. "
+                        "Установите Google Chrome или Microsoft Edge "
+                        "и повторите команду."
                     ),
+                    data={
+                        "technical_error": str(exc).splitlines()[0],
+                        "attempts": locals().get(
+                            "launch_errors",
+                            {},
+                        ),
+                    },
                 )
 
     async def _ensure_started(self) -> ToolResult | None:
@@ -824,6 +913,10 @@ class BrowserManager:
             ),
             data={
                 "started": self.is_started,
+                "runtime": self._runtime,
+                "persistent_profile": (
+                    self._persistent_context
+                ),
                 "url": (
                     self._page.url
                     if self._page is not None
@@ -841,6 +934,8 @@ class BrowserManager:
         )
 
     async def _close_without_lock(self) -> None:
+        persistent_context = self._persistent_context
+
         if self._context is not None:
             try:
                 await self._context.close()
@@ -849,7 +944,10 @@ class BrowserManager:
                     "Ошибка закрытия browser context."
                 )
 
-        if self._browser is not None:
+        if (
+            self._browser is not None
+            and not persistent_context
+        ):
             try:
                 await self._browser.close()
             except Exception:
@@ -869,3 +967,5 @@ class BrowserManager:
         self._context = None
         self._browser = None
         self._playwright = None
+        self._runtime = None
+        self._persistent_context = False

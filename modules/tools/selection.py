@@ -52,6 +52,8 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "перейти по ссылке",
         "открыть сайт",
         "openrouter",
+        "опенроутер",
+        "опен роутер",
     },
     "browser_click": {"клик", "кликни", "нажать кнопку", "нажми кнопку"},
     "browser_fill": {"заполнить", "заполни", "form", "поле"},
@@ -135,6 +137,22 @@ ACTION_MARKERS = (
     "find ", "search ", "read ", "check ", "fix ", "update ", "send ",
 )
 
+INTERACTIVE_BROWSER_ACTION_MARKERS = (
+    "открой", "зайди", "перейди", "включи браузер",
+    "open ", "visit ", "go to ", "navigate ",
+)
+INTERACTIVE_BROWSER_CONTEXT_MARKERS = (
+    "сайт", "страниц", "браузер", "url", "ссылк",
+    "openrouter", "опенроутер", "опен роутер",
+    "активност", "аккаунт", "кабинет",
+)
+NON_INTERACTIVE_WEB_TOOLS = {
+    "search_web_tavily",
+    "scrape_webpage",
+    "open_website",
+    "browser_research",
+}
+
 
 CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (
@@ -165,6 +183,8 @@ CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
             "интернет",
             "в сети",
             "openrouter",
+            "опенроутер",
+            "опен роутер",
             "активност",
         ),
         (
@@ -332,6 +352,15 @@ def _contains_any(text: str, markers: tuple[str, ...] | set[str]) -> bool:
     return any(marker in text for marker in markers)
 
 
+def request_prefers_interactive_browser(request_text: str) -> bool:
+    """True when navigation is requested, not a list of search results."""
+    lowered = _normalize(request_text)
+    return (
+        _contains_any(lowered, INTERACTIVE_BROWSER_ACTION_MARKERS)
+        and _contains_any(lowered, INTERACTIVE_BROWSER_CONTEXT_MARKERS)
+    )
+
+
 def _schema_descriptions(
     schemas: list[dict[str, Any]] | None,
 ) -> dict[str, str]:
@@ -360,6 +389,9 @@ def select_tools_for_request(
     available = set(available_tool_names)
     normally_visible = filter_tools_for_model(available)
     lowered = _normalize(request_text)
+    interactive_browser = request_prefers_interactive_browser(
+        request_text
+    )
     request_tokens = _tokens(lowered)
     scores: dict[str, int] = {}
     priority = {
@@ -418,6 +450,25 @@ def select_tools_for_request(
             if tool_name in available:
                 scores[tool_name] = max(scores.get(tool_name, 0), 85)
 
+    if interactive_browser:
+        for index, tool_name in enumerate(
+            (
+                "browser_open_url",
+                "browser_get_page_text",
+                "browser_click",
+                "browser_fill",
+                "browser_screenshot",
+                "browser_status",
+            )
+        ):
+            add(tool_name, 140 - index)
+
+        # A direct request to enter a site/account must not silently turn
+        # into a search-engine answer. Search can be retried in a later turn
+        # only if direct navigation produced a concrete blocker.
+        for tool_name in NON_INTERACTIVE_WEB_TOOLS:
+            scores.pop(tool_name, None)
+
     action_requested = _contains_any(f"{lowered} ", ACTION_MARKERS)
 
     if broaden or (action_requested and len(scores) < 6):
@@ -427,6 +478,10 @@ def select_tools_for_request(
     if not scores:
         for index, tool_name in enumerate(BASIC_TOOLS):
             add(tool_name, 20 - index)
+
+    if interactive_browser:
+        for tool_name in NON_INTERACTIVE_WEB_TOOLS:
+            scores.pop(tool_name, None)
 
     ranked = sorted(
         scores,

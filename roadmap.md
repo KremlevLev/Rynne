@@ -1,7 +1,7 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 732 tests passed
-cd apps/desktop && npm test  # 8 tests passed
+python -m pytest tests/ -q  # 736 tests passed
+cd apps/desktop && npm test  # 10 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
 
@@ -54,6 +54,14 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   найденные инструменты шаблонным ответом «не могу».
 - ✅ Длинная лента React прокручивает только область диалога: header, sidebar,
   context panel и composer остаются закреплены внутри окна.
+- ✅ Добавлены три сохраняемых режима React UI: атмосферный Aura, компактный
+  Focus и минимальный Console; все компоновки визуально проверены при 1440×900.
+- ✅ Browser Agent запускает установленный Chrome или Edge с отдельным
+  постоянным профилем Nova и больше не требует скачанного Playwright Chromium
+  внутри installer; локальный Chrome smoke-test пройден.
+- ✅ Явная команда открыть сайт/личный кабинет больше не подменяется поисковой
+  выдачей: selector оставляет интерактивные browser tools и агент продолжает
+  навигацию до страницы, входа или проверенного результата.
 - ✅ Supervisor автоматически перезапускает упавший/зависший Core с cooldown,
   а generation guard не позволяет старому reader отключить новый процесс.
 - ✅ Ошибка инициализации Vosk кешируется на сессию, wake-loop использует

@@ -160,6 +160,8 @@ WEB_MARKERS = (
 WEB_SERVICE_MARKERS = (
     "openrouter",
     "open router",
+    "опенроутер",
+    "опен роутер",
 )
 
 GENERAL_ACTION_MARKERS = (

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   eventToItem,
+  normalizeUiMode,
+  readUiMode,
   scrollConversationToBottom,
+  UI_MODE_OPTIONS,
+  writeUiMode,
 } from "./App";
 
 describe("eventToItem", () => {
@@ -45,5 +49,29 @@ describe("eventToItem", () => {
       top: 2048,
       behavior: "smooth",
     });
+  });
+});
+
+describe("UI modes", () => {
+  it("offers full, balanced and console layouts", () => {
+    expect(UI_MODE_OPTIONS.map((option) => option.key)).toEqual([
+      "aura",
+      "focus",
+      "console",
+    ]);
+    expect(normalizeUiMode("console")).toBe("console");
+    expect(normalizeUiMode("broken")).toBe("aura");
+  });
+
+  it("persists the selected presentation without involving Core", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    writeUiMode(storage, "focus");
+
+    expect(readUiMode(storage)).toBe("focus");
   });
 });

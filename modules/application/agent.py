@@ -47,6 +47,7 @@ from modules.domain.results import AssistantResponse
 from modules.tools.runtime import ToolRegistry, ToolRunner
 from modules.tools.selection import (
     get_selected_tool_names,
+    request_prefers_interactive_browser,
 )
 
 
@@ -105,6 +106,15 @@ TOOL CONTINUATION:
 возможности дали конкретный blocker. Не считай запуск приложения или браузера
 завершением многошаговой задачи, если пользователь просил также перейти,
 прочитать, проверить, заполнить или отправить.
+""".strip()
+
+INTERACTIVE_BROWSER_PROMPT = """
+INTERACTIVE BROWSER:
+Пользователь просит открыть сайт или личный кабинет напрямую. Не подменяй это
+поисковой выдачей. Сначала вызови browser_open_url с известным официальным URL,
+затем browser_get_page_text и продолжай кликами/заполнением до всей цели. Если
+страница требует входа, открой её и коротко попроси пользователя войти в
+появившемся окне; профиль Nova сохранит эту авторизацию для следующих задач.
 """.strip()
 
 MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
@@ -870,6 +880,13 @@ class AgentService:
             if use_tools
             else None
         )
+        interactive_browser_prompt = (
+            "\n\n" + INTERACTIVE_BROWSER_PROMPT
+            if request_prefers_interactive_browser(
+                user_text
+            )
+            else ""
+        )
 
         # Инициализация бюджета для этого запроса.
         budget_state = (
@@ -909,7 +926,10 @@ class AgentService:
         messages = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT,
+                "content": (
+                    SYSTEM_PROMPT
+                    + interactive_browser_prompt
+                ),
             },
             *previous_history,
             {
@@ -999,6 +1019,7 @@ class AgentService:
                             SYSTEM_PROMPT
                             + "\n\n"
                             + CAPABILITY_RECOVERY_PROMPT
+                            + interactive_browser_prompt
                         ),
                     },
                     *messages[1:],
@@ -1298,6 +1319,7 @@ class AgentService:
                         SYSTEM_PROMPT
                         + "\n\n"
                         + TOOL_CONTINUATION_PROMPT
+                        + interactive_browser_prompt
                     ),
                 },
                 *trim_history(self.history),

@@ -5,8 +5,10 @@ import {
   Command,
   Cpu,
   History,
+  LayoutDashboard,
   MessageSquare,
   Mic,
+  PanelLeftClose,
   Plus,
   Radio,
   Send,
@@ -14,6 +16,7 @@ import {
   ShieldCheck,
   Sparkles,
   Square,
+  Terminal,
   Workflow,
   Wrench,
 } from "lucide-react";
@@ -26,6 +29,7 @@ import {
 } from "./transport";
 
 type ViewKey = "dialog" | "tasks" | "automations" | "settings";
+export type UiMode = "aura" | "focus" | "console";
 type TimelineItem = {
   id: string;
   kind: "user" | "assistant" | "tool" | "suggestion";
@@ -34,6 +38,61 @@ type TimelineItem = {
   status?: "working" | "success" | "error";
   action?: string;
 };
+
+const UI_MODE_STORAGE_KEY = "nova.ui-mode";
+
+export const UI_MODE_OPTIONS: ReadonlyArray<{
+  key: UiMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+}> = [
+  {
+    key: "aura",
+    label: "Aura · максимум",
+    shortLabel: "Aura",
+    description: "Полный интерфейс с живой активностью, статусами и атмосферными эффектами.",
+  },
+  {
+    key: "focus",
+    label: "Focus · баланс",
+    shortLabel: "Focus",
+    description: "Компактная навигация и больше места для диалога без правой панели.",
+  },
+  {
+    key: "console",
+    label: "Console · минимум",
+    shortLabel: "Console",
+    description: "Чистая рабочая область в духе CLI: быстро, плотно и без визуального шума.",
+  },
+];
+
+export function normalizeUiMode(value: unknown): UiMode {
+  return UI_MODE_OPTIONS.some((option) => option.key === value)
+    ? value as UiMode
+    : "aura";
+}
+
+export function readUiMode(
+  storage: Pick<Storage, "getItem"> | null = null,
+): UiMode {
+  try {
+    return normalizeUiMode(storage?.getItem(UI_MODE_STORAGE_KEY));
+  } catch {
+    return "aura";
+  }
+}
+
+export function writeUiMode(
+  storage: Pick<Storage, "setItem"> | null,
+  mode: UiMode,
+): void {
+  try {
+    storage?.setItem(UI_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Presentation preference must never make the desktop UI unavailable.
+  }
+}
 
 const runtimeLabels: Record<string, string> = {
   "СПИТ": "Nova готова",
@@ -159,6 +218,9 @@ export function App() {
   const [provider, setProvider] = useState("groq");
   const [apiKey, setApiKey] = useState("");
   const [settingsStatus, setSettingsStatus] = useState("");
+  const [uiMode, setUiMode] = useState<UiMode>(() => (
+    readUiMode(typeof window === "undefined" ? null : window.localStorage)
+  ));
   const conversationRef = useRef<HTMLDivElement>(null);
   const runtime = runtimePresentation(runtimeState);
 
@@ -207,6 +269,13 @@ export function App() {
     scrollConversationToBottom(conversationRef.current);
   }, [timeline]);
 
+  useEffect(() => {
+    writeUiMode(
+      typeof window === "undefined" ? null : window.localStorage,
+      uiMode,
+    );
+  }, [uiMode]);
+
   async function send(request = composer) {
     const value = request.trim();
     if (!value || busy || connection !== "connected") return;
@@ -238,7 +307,7 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-orb"><Sparkles size={17} /></div>
@@ -290,6 +359,27 @@ export function App() {
             <h1>{nav.find((item) => item.key === view)?.label}</h1>
           </div>
           <div className="top-actions">
+            <div className="mode-switcher" aria-label="Режим интерфейса">
+              {UI_MODE_OPTIONS.map((option) => {
+                const Icon = option.key === "aura"
+                  ? LayoutDashboard
+                  : option.key === "focus"
+                    ? PanelLeftClose
+                    : Terminal;
+                return (
+                  <button
+                    key={option.key}
+                    className={uiMode === option.key ? "active" : ""}
+                    onClick={() => setUiMode(option.key)}
+                    aria-label={option.label}
+                    aria-pressed={uiMode === option.key}
+                    title={option.label}
+                  >
+                    <Icon size={14} />
+                  </button>
+                );
+              })}
+            </div>
             <button className={proactive ? "proactive active" : "proactive"} onClick={toggleProactive}>
               <Radio size={15} />
               Nova рядом
@@ -363,6 +453,32 @@ export function App() {
           </>
         ) : view === "settings" ? (
           <div className="settings-view">
+            <div className="settings-card appearance-card">
+              <span className="settings-icon"><LayoutDashboard size={22} /></span>
+              <div>
+                <span className="eyebrow">ВНЕШНИЙ ВИД</span>
+                <h2>Как Nova занимает экран</h2>
+                <p>Режим сохраняется на этом компьютере и переключается мгновенно, без перезапуска Core.</p>
+              </div>
+              <div className="appearance-options">
+                {UI_MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option.key}
+                    className={uiMode === option.key ? "appearance-option active" : "appearance-option"}
+                    onClick={() => setUiMode(option.key)}
+                    aria-pressed={uiMode === option.key}
+                  >
+                    <span className={`mode-preview ${option.key}`}>
+                      <i /><i /><i />
+                    </span>
+                    <span>
+                      <strong>{option.label}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="settings-card">
               <span className="settings-icon"><Settings size={22} /></span>
               <div>

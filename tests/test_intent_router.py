@@ -296,6 +296,16 @@ def test_openrouter_goal_is_web_not_application_launch() -> None:
     assert "browser_open_url" in decision.required_tools
 
 
+def test_cyrillic_openrouter_goal_is_web_navigation() -> None:
+    decision = create_router().route(
+        "Открой опенроутер, а там мою активность"
+    )
+
+    assert decision.intent == IntentKind.WEB
+    assert decision.strategy == ExecutionStrategy.SKILL
+    assert "browser_open_url" in decision.required_tools
+
+
 def test_browser_with_follow_up_goal_is_not_direct() -> None:
     decision = create_router().route(
         (
