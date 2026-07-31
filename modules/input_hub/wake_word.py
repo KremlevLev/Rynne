@@ -59,8 +59,8 @@ class WakeWordConfig:
     sample_rate: int = 16_000
     block_size: int = 1_024
 
-    silence_duration: float = 0.85
-    maximum_command_duration: float = 15.0
+    silence_duration: float = 1.5
+    maximum_command_duration: float = 20.0
     pre_roll_duration: float = 0.8
 
     minimum_rms_threshold: float = 0.003
@@ -469,6 +469,8 @@ class WakeWordDetector:
         )
 
         try:
+            from modules.audio.tts import is_tts_capture_blocked
+            tts_was_blocked = False
             with sd.RawInputStream(
                 **stream_arguments
             ) as stream:
@@ -508,6 +510,27 @@ class WakeWordDetector:
                         logger.debug(
                             "Wake-word audio overflow."
                         )
+
+                    if is_tts_capture_blocked():
+                        # Never feed Nova's own voice or its acoustic tail to
+                        # Vosk. Reset partial text so it cannot survive the
+                        # playback boundary and become a false wake word.
+                        if not tts_was_blocked:
+                            recognizer.Reset()
+                        tts_was_blocked = True
+                        pre_roll.clear()
+                        if wake_detected:
+                            return WakeCapture(
+                                detected=False,
+                                error="Wake capture отменён во время TTS.",
+                            )
+                        continue
+
+                    if tts_was_blocked:
+                        recognizer.Reset()
+                        pre_roll.clear()
+                        silence_blocks = 0
+                        tts_was_blocked = False
 
                     rms = _rms_from_bytes(
                         raw_bytes

@@ -2,6 +2,7 @@
 import os
 import logging
 import threading
+import time
 import sounddevice as sd
 import re
 import asyncio
@@ -15,12 +16,22 @@ logger = logging.getLogger("TTS")
 # ---------------------------------------------------------------------------
 _tts_playing = False
 _tts_playing_lock = threading.Lock()
+_tts_last_finished_at = float("-inf")
 
 
 def is_tts_playing() -> bool:
     """Thread-safe: воспроизводится ли сейчас аудио TTS."""
     with _tts_playing_lock:
         return _tts_playing
+
+
+def is_tts_capture_blocked(cooldown_seconds: float = 1.0) -> bool:
+    """Keep STT/wake detection closed while speakers and echo tail are audible."""
+    with _tts_playing_lock:
+        return _tts_playing or (
+            time.monotonic() - _tts_last_finished_at
+            < max(0.0, cooldown_seconds)
+        )
 
 # Путь для хранения JIT-модели Silero v5
 MODEL_PATH = "data/v5_ru.pt"
@@ -125,7 +136,7 @@ def speak(text: str, speaker: str = "baya") -> bool:
             return False
             
         audio_data = audio.numpy()
-        global _tts_playing
+        global _tts_playing, _tts_last_finished_at
         # Флаг сообщает VoiceListener (STT), что сейчас играет TTS,
         # чтобы микрофон не захватывал собственный голос Nova.
         with _tts_playing_lock:
@@ -136,6 +147,7 @@ def speak(text: str, speaker: str = "baya") -> bool:
         finally:
             with _tts_playing_lock:
                 _tts_playing = False
+                _tts_last_finished_at = time.monotonic()
         return True
         
     except Exception as e:

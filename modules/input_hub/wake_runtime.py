@@ -245,8 +245,10 @@ class WakeWordRuntime:
 
             else:
                 # Пользователь сказал только «Нова».
-                # Переходим в обычный активный режим и ждём
-                # следующую команду через VoiceListener.
+                # Захватываем ровно одну следующую фразу здесь. Раньше код
+                # выставлял runtime.active, но continuous loop отключён в
+                # режиме WAKE_WORD, поэтому UI говорил «слушаю» при фактически
+                # закрытом микрофоне.
                 logger.info(
                     (
                         "Обнаружено только wake word. "
@@ -254,10 +256,45 @@ class WakeWordRuntime:
                     )
                 )
 
-                await self.runtime.activate()
+                await self.runtime.set_state(
+                    AssistantState.LISTENING
+                )
                 self._publish_status(
                     "listening",
                     "Да? Слушаю следующую команду…",
+                )
+
+                follow_up = await asyncio.to_thread(
+                    self.listener.listen,
+                    lambda: (
+                        shutdown_event.is_set()
+                        or self._closed
+                        or self.preferences.snapshot().input_mode
+                        != InputMode.WAKE_WORD
+                    ),
+                )
+
+                if follow_up:
+                    await self.coordinator.submit_voice(
+                        follow_up,
+                        wake_word=True,
+                        metadata={
+                            "wake_detected_text": capture.detected_text,
+                            "follow_up_after_wake": True,
+                        },
+                    )
+                    self._publish_status(
+                        "command_recognized",
+                        f"Команда: {follow_up}",
+                    )
+                else:
+                    self._publish_status(
+                        "waiting_wake_word",
+                        f"Не расслышала команду. Жду «{self.detector.config.wake_word.title()}»…",
+                    )
+
+                await self.runtime.set_state(
+                    AssistantState.SLEEPING
                 )
 
     async def _sleep_or_shutdown(

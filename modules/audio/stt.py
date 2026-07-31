@@ -36,7 +36,34 @@ WHISPER_HALLUCINATIONS = {
     "просмотр",
     "субтитры",
     "продолжение",
+    "тревожная музыка",
+    "фоновая музыка",
+    "музыка",
+    "приятного просмотра",
 }
+
+WHISPER_HALLUCINATION_PATTERNS = (
+    r"^субтитры\s+(?:создавал|создала|сделал|сделала|подготовил|подготовила|редактор|автор).*$",
+    r"^(?:редактор|автор|переводчик)\s+субтитров.*$",
+    r"^(?:тревожная|фоновая|веселая|грустная|эпичная)\s+музыка$",
+    r"^\[?\s*музыка\s*\]?$",
+)
+
+
+def is_likely_whisper_hallucination(text: str) -> bool:
+    normalized = re.sub(
+        r"\s+",
+        " ",
+        str(text).lower().replace("ё", "е"),
+    ).strip(" \t\r\n.!?…,:;—–-()[]{}\"'«»")
+    if not normalized:
+        return True
+    if normalized in WHISPER_HALLUCINATIONS:
+        return True
+    return any(
+        re.fullmatch(pattern, normalized, flags=re.IGNORECASE)
+        for pattern in WHISPER_HALLUCINATION_PATTERNS
+    )
 
 KNOWN_APPLICATION_NAMES = (
     "obsidian",
@@ -121,11 +148,12 @@ class VoiceListener:
         self.sample_rate = 16000
         self.block_size = 1024
 
-        # После окончания речи ждем примерно 1,2 секунды тишины.
-        self.silence_duration = 1.2
+        # Короткая естественная пауза не должна обрывать команду пополам.
+        self.silence_duration = 1.5
 
-        # Речь короче 0,18 секунды считаем шумом.
-        self.minimum_speech_duration = 0.18
+        # Очень короткий всплеск чаще является щелчком/эхом и провоцирует
+        # Whisper на выдуманные подписи вроде «тревожная музыка».
+        self.minimum_speech_duration = 0.32
 
         # Одна запись не может продолжаться дольше 60 секунд.
         self.maximum_recording_duration = 60.0
@@ -215,14 +243,13 @@ class VoiceListener:
     ) -> bool:
         # Ждём завершения воспроизведения TTS, чтобы микрофон
         # не захватил собственный голос Nova.
-        from modules.audio.tts import is_tts_playing
-        while is_tts_playing():
+        from modules.audio.tts import is_tts_capture_blocked
+        while is_tts_capture_blocked():
             if should_abort and should_abort():
                 return False
-            time.sleep(0.05)
-
-        # Даем колонкам и звуковому драйверу затихнуть.
-        time.sleep(0.3)
+            # Drain the live input stream instead of letting PortAudio's
+            # buffer fill while Nova is speaking.
+            stream.read(self.block_size)
 
         print(
             "\n[🎤] Калибровка фона. "
@@ -303,7 +330,7 @@ class VoiceListener:
             stream_kwargs["device"] = self.input_device
 
         # Lazy import для избежания циклических зависимостей.
-        from modules.audio.tts import is_tts_playing
+        from modules.audio.tts import is_tts_capture_blocked
 
         with sd.InputStream(**stream_kwargs) as stream:
             if self.energy_threshold is None:
@@ -384,7 +411,11 @@ class VoiceListener:
 
                 # Пропускаем блоки, пока TTS воспроизводит аудио,
                 # чтобы избежать обратной связи микрофона.
-                if is_tts_playing():
+                if is_tts_capture_blocked():
+                    pre_roll.clear()
+                    if started_speaking:
+                        logger.info("Запись отменена: началось воспроизведение TTS.")
+                        return None
                     continue
 
                 rms = self._get_rms(data)
@@ -734,13 +765,7 @@ class VoiceListener:
             text
         )
 
-        normalized = (
-            text.lower()
-            .strip()
-            .rstrip(".!?")
-        )
-
-        if normalized in WHISPER_HALLUCINATIONS:
+        if is_likely_whisper_hallucination(text):
             logger.info(
                 "Отсечена галлюцинация Whisper: %r",
                 text,
@@ -829,9 +854,7 @@ class VoiceListener:
                 return ""
 
             text = normalize_voice_command(text)
-            normalized = text.lower().strip().rstrip(".!?")
-
-            if normalized in WHISPER_HALLUCINATIONS:
+            if is_likely_whisper_hallucination(text):
                 logger.info(
                     "Отсечена галлюцинация Whisper: %r",
                     text,

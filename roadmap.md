@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 753 tests passed
+python -m pytest tests/ -q  # 757 tests passed
 cd apps/desktop && npm test  # 12 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -109,6 +109,10 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - ✅ Повторные и неточные обращения «Нова / Nova / Наува / Новчик» отделяются от команды:
   wake-only фраза включает follow-up прослушивание и больше не отправляется в LLM как задача;
   режим микрофона доступен под composer, а чувствительность Vosk регулируется в Settings.
+- ✅ Wake-only follow-up теперь действительно захватывает следующую фразу в режиме wake word;
+  TTS и секундный акустический хвост исключены из Vosk/Whisper, естественная пауза больше
+  не обрывает команду, а типичные hallucinations «ТРЕВОЖНАЯ МУЗЫКА» и подписи субтитров
+  отбрасываются до отправки запроса агенту.
 - ✅ «Nova рядом» получила ручную кнопку «Проверить сейчас», live-статус прохода и понятное
   описание границ; восстановленные записи процессов сверяются по PID, команде и времени
   запуска, поэтому переиспользованный Windows PID не создаёт уведомления о тестах «за 67 ч».
