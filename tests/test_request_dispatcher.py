@@ -102,7 +102,7 @@ def create_dispatcher():
     return dispatcher, agent
 
 
-def test_direct_request_does_not_call_agent() -> None:
+def test_tool_backed_direct_request_always_calls_agent() -> None:
     async def scenario() -> None:
         dispatcher, agent = (
             create_dispatcher()
@@ -115,16 +115,9 @@ def test_direct_request_does_not_call_agent() -> None:
         )
 
         assert response.success
-        assert response.data[
-            "model_calls"
-        ] == 0
-        assert agent.calls == []
-        assert agent.external_turns == [
-            (
-                "Который час?",
-                response.display_text,
-            )
-        ]
+        assert len(agent.calls) == 1
+        assert agent.calls[0]["use_tools"] is True
+        assert agent.external_turns == []
 
     asyncio.run(scenario())
 

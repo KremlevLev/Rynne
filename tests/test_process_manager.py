@@ -1,11 +1,19 @@
 # tests/test_process_manager.py
 from __future__ import annotations
 
+import os
 import time
 
 from modules.windows.process_manager import (
     ProcessManager,
+    _process_exists,
 )
+
+
+def test_process_exists_never_signals_current_windows_process() -> None:
+    assert _process_exists(os.getpid())
+    assert not _process_exists(None)
+    assert not _process_exists(-1)
 
 
 def test_start_and_stop_process() -> None:

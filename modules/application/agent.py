@@ -49,6 +49,7 @@ from modules.tools.selection import (
     get_selected_tool_names,
     request_prefers_interactive_browser,
 )
+from modules.agent.execution_memory import ExecutionMemory
 
 
 logger = logging.getLogger("AgentService")
@@ -106,6 +107,18 @@ TOOL CONTINUATION:
 возможности дали конкретный blocker. Не считай запуск приложения или браузера
 завершением многошаговой задачи, если пользователь просил также перейти,
 прочитать, проверить, заполнить или отправить.
+""".strip()
+
+UNIVERSAL_EXECUTION_PROMPT = """
+UNIVERSAL EXECUTION CONTRACT:
+Любой пользовательский запрос на действие выполняй через единый agent loop.
+Сначала разложи полную цель на минимальные проверяемые шаги, затем вызывай
+подходящие tools в правильном порядке. Не считай один промежуточный вызов
+выполнением составной команды. После каждого результата сравни фактическое
+состояние с исходной целью, при ошибке попробуй безопасную альтернативу, а перед
+завершением выполни доступную проверку. Router hints — только подсказки о
+возможностях, они не заменяют понимание всей фразы. Не вызывай инструмент по
+случайному последнему слову и не заявляй успех без подтверждённого tool result.
 """.strip()
 
 INTERACTIVE_BROWSER_PROMPT = """
@@ -381,6 +394,7 @@ class AgentService:
         runner: ToolRunner,
         *,
         session_id: str | None = None,
+        execution_memory: ExecutionMemory | None = None,
     ) -> None:
         self.llm = llm
         self.registry = registry
@@ -397,6 +411,7 @@ class AgentService:
         self.intent_router = (
             DeterministicIntentRouter()
         )
+        self.execution_memory = execution_memory
 
     def record_external_turn(
         self,
@@ -875,11 +890,33 @@ class AgentService:
             use_tools = True
 
         all_tool_schemas = self.registry.schemas()
+        action_was_requested = (
+            request_requires_action(user_text)
+            or (
+                use_tools
+                and execution_decision.needs_tools
+                and not has_image
+            )
+        )
+        learned_execution_prompt = ""
+        if action_was_requested and self.execution_memory is not None:
+            try:
+                learned_execution_prompt = self.execution_memory.prompt_for(
+                    user_text,
+                    self.registry.names,
+                )
+            except Exception:
+                logger.warning(
+                    "Не удалось получить learned execution playbook.",
+                    exc_info=True,
+                )
         selected_tool_names = get_selected_tool_names(
             user_text,
             self.registry.names,
             has_image=has_image,
+            max_tools=28 if action_was_requested else 20,
             tool_schemas=all_tool_schemas,
+            broaden=action_was_requested,
         )
         # Детерминированный роутер задаёт обязательный минимум, а
         # контекстный селектор добавляет альтернативы и инструменты проверки.
@@ -901,6 +938,16 @@ class AgentService:
             if request_prefers_interactive_browser(
                 user_text
             )
+            else ""
+        )
+        execution_prompt = (
+            "\n\n" + UNIVERSAL_EXECUTION_PROMPT
+            if action_was_requested
+            else ""
+        )
+        learned_prompt = (
+            "\n\n" + learned_execution_prompt
+            if learned_execution_prompt
             else ""
         )
 
@@ -944,6 +991,8 @@ class AgentService:
                 "role": "system",
                 "content": (
                     SYSTEM_PROMPT
+                    + execution_prompt
+                    + learned_prompt
                     + interactive_browser_prompt
                 ),
             },
@@ -990,15 +1039,6 @@ class AgentService:
 
         tool_calls = collect_tool_calls(generated)
 
-        action_was_requested = (
-            request_requires_action(user_text)
-            or (
-                use_tools
-                and execution_decision.needs_tools
-                and not has_image
-            )
-        )
-
         # Небольшие модели иногда отвечают «не могу», даже когда подходящий
         # tool был передан. Даём ровно одну повторную попытку с расширенным,
         # но всё ещё ограниченным набором возможностей.
@@ -1035,6 +1075,8 @@ class AgentService:
                             SYSTEM_PROMPT
                             + "\n\n"
                             + CAPABILITY_RECOVERY_PROMPT
+                            + execution_prompt
+                            + learned_prompt
                             + interactive_browser_prompt
                         ),
                     },
@@ -1335,6 +1377,8 @@ class AgentService:
                         SYSTEM_PROMPT
                         + "\n\n"
                         + TOOL_CONTINUATION_PROMPT
+                        + execution_prompt
+                        + learned_prompt
                         + interactive_browser_prompt
                     ),
                 },
@@ -1399,6 +1443,23 @@ class AgentService:
             logger.warning(
                 "Достигнут лимит агентного цикла."
             )
+
+        if (
+            executed_tool_results
+            and not budget_exhausted
+            and self.execution_memory is not None
+        ):
+            try:
+                await asyncio.to_thread(
+                    self.execution_memory.remember_success,
+                    user_text,
+                    executed_tool_results,
+                )
+            except Exception:
+                logger.warning(
+                    "Не удалось сохранить learned execution playbook.",
+                    exc_info=True,
+                )
 
         return await self._create_final_report(
             user_text=user_text,

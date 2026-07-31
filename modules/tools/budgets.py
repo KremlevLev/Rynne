@@ -21,7 +21,7 @@ class AgentBudget:
 
     # Логические вызовы модели: первичный выбор, recovery и продолжение
     # многошаговой цепочки по фактическим результатам инструментов.
-    max_logical_model_calls: int = 4
+    max_logical_model_calls: int = 8
 
     # Попытки провайдера на один логический вызов
     max_provider_attempts_per_call: int = 4
@@ -33,16 +33,16 @@ class AgentBudget:
     max_replans: int = 1
 
     # Вызовы инструментов
-    max_tool_calls: int = 10
+    max_tool_calls: int = 20
 
     # Время выполнения
-    max_wall_time_seconds: float = 180.0
+    max_wall_time_seconds: float = 300.0
 
     # Повторы одного инструмента
     max_same_tool_repeats: int = 1
 
     # Размер наблюдений (символы)
-    max_observation_characters: int = 4000
+    max_observation_characters: int = 12000
 
     # Для будущего использования.
     max_tokens: int = 0

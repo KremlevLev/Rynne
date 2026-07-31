@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from modules.application.agent import AgentService
+from modules.agent.execution_memory import ExecutionMemory
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
 from modules.tools.runtime import ToolRegistry, ToolRunner
@@ -157,7 +158,7 @@ class SequentialBrowserLLM:
         )
 
 
-def test_agent_continues_tool_loop_until_full_goal() -> None:
+def test_agent_continues_tool_loop_until_full_goal(tmp_path) -> None:
     executed: list[str] = []
     schemas = [
         {
@@ -232,6 +233,7 @@ def test_agent_continues_tool_loop_until_full_goal() -> None:
         llm,
         registry,
         ToolRunner(registry),
+        execution_memory=ExecutionMemory(tmp_path / "patterns.json"),
     )
 
     response = asyncio.run(
@@ -247,3 +249,6 @@ def test_agent_continues_tool_loop_until_full_goal() -> None:
         "read",
         "screenshot:False",
     ]
+    learned = (tmp_path / "patterns.json").read_text(encoding="utf-8")
+    assert "browser_open_url" in learned
+    assert "browser_screenshot" in learned

@@ -33,8 +33,12 @@ class RequestDispatcher:
     """
     Центральный диспетчер запросов Nova.
 
-    DIRECT:
-        выполняется без LLM через DirectRequestExecutor.
+    DIRECT без инструментов:
+        локальные настройки выполняются через DirectRequestExecutor.
+
+    Любое действие с инструментами:
+        передаётся AgentService, даже если router уверен в одном atomic tool.
+        Router задаёт capability hints и safety, но не перехватывает цель.
 
     CLARIFY:
         возвращается локальный уточняющий вопрос.
@@ -120,6 +124,7 @@ class RequestDispatcher:
             decision.strategy
             == ExecutionStrategy.DIRECT
             and not request.has_image
+            and not decision.needs_tools
         ):
             response = (
                 await self.direct_executor.execute(

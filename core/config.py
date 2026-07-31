@@ -279,7 +279,7 @@ MAX_AGENT_TURNS = int(
 )
 
 MAX_TOOL_CALLS = int(
-    os.getenv("NOVA_MAX_TOOL_CALLS", "12")
+    os.getenv("NOVA_MAX_TOOL_CALLS", "24")
 )
 
 MAX_CONTEXT_ESTIMATED_TOKENS = int(

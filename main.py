@@ -160,11 +160,6 @@ from modules.brain.llm import NovaLLM
 from modules.brain.memory import LocalMemory
 from modules.domain.state import AssistantState, RuntimeState
 from modules.tools.app_indexer import WindowsAppIndexer
-from modules.brain.bypass import (
-    check_fast_commands,
-    check_instant_app_close,
-    check_instant_app_launch,
-)
 
 from modules.tools.executor import (
     create_workspace_project,
@@ -542,7 +537,6 @@ async def run_voice_loop(
     speech: SpeechService,
     input_coordinator: InputCoordinator,
     listener: VoiceListener,
-    app_launcher: WindowsAppIndexer,
     windows_context: WindowsContext,
     preferences: PreferencesManager,
     event_handler=None,
@@ -636,53 +630,6 @@ async def run_voice_loop(
                 priority=1,
             )
             await runtime.sleep()
-            continue
-
-        is_launch, launch_response = await asyncio.to_thread(
-            check_instant_app_launch,
-            user_request,
-            app_launcher,
-        )
-        if is_launch:
-            # Извлекаем имя приложения из исходной команды.
-            lowered_request = user_request.lower().strip()
-
-            for launch_verb in (
-                "открой",
-                "включи",
-                "запусти",
-                "запуск",
-            ):
-                if lowered_request.startswith(
-                    launch_verb + " "
-                ):
-                    application_name = user_request[
-                        len(launch_verb):
-                    ].strip(" .,!?:;")
-
-                    windows_context.set_application(
-                        application_name
-                    )
-                    break
-                
-            await speech.say(launch_response)
-            continue
-        
-
-        is_close, close_response = await asyncio.to_thread(
-            check_instant_app_close,
-            user_request,
-        )
-        if is_close:
-            await speech.say(close_response)
-            continue
-
-        is_fast, fast_response = await asyncio.to_thread(
-            check_fast_commands,
-            user_request,
-        )
-        if is_fast:
-            await speech.say(fast_response)
             continue
 
         await runtime.set_state(AssistantState.THINKING)
@@ -1296,10 +1243,13 @@ async def async_main() -> None:
     # AGENT SERVICE
     # =========================================================
 
+    from modules.agent.execution_memory import ExecutionMemory
+
     agent = AgentService(
         llm,
         registry,
         runner,
+        execution_memory=ExecutionMemory(),
     )
 
     # =========================================================
@@ -1649,7 +1599,6 @@ async def async_main() -> None:
             speech,
             input_coordinator,
             listener,
-            app_launcher,
             windows_context,
             preferences,
             desktop_service.publish,

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
 import threading
 import time
@@ -12,6 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import psutil
 
 from modules.domain.results import ToolResult
 
@@ -22,6 +23,24 @@ logger = logging.getLogger("ProcessManager")
 MANAGED_PROCESSES_DIR = Path(
     "data/processes"
 )
+
+
+def _process_exists(pid: int | None) -> bool:
+    """Check a PID without sending console-control signals on Windows."""
+    if pid is None or pid <= 0:
+        return False
+
+    try:
+        process = psutil.Process(pid)
+        return (
+            process.is_running()
+            and process.status() != psutil.STATUS_ZOMBIE
+        )
+    except (psutil.NoSuchProcess, psutil.ZombieProcess, ValueError):
+        return False
+    except psutil.AccessDenied:
+        # Access denied still means that the operating system knows the PID.
+        return True
 
 
 @dataclass(slots=True)
@@ -54,14 +73,7 @@ class ManagedProcess:
             return self._process.poll() is None
         if self.pid is None or self.status != "running":
             return False
-        try:
-            os.kill(self.pid, 0)
-            return True
-        except PermissionError:
-            # The PID exists, but the current process cannot signal it.
-            return True
-        except (ProcessLookupError, OSError):
-            return False
+        return _process_exists(self.pid)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -155,33 +167,6 @@ class ProcessManager:
             timezone.utc
         ).isoformat()
         self._save_metadata(process)
-    def test_read_process_output() -> None:
-        manager = ProcessManager()
-    
-        result = manager.start_process(
-            [
-                "python",
-                "-c",
-                "import time; time.sleep(0.2); "
-                "print('output_line')",
-            ],
-            label="output_test",
-        )
-    
-        assert result.success
-    
-        process_id = result.data["process_id"]
-    
-        time.sleep(1.0)
-    
-        output_result = manager.read_process_output(
-            process_id,
-            max_lines=10,
-        )
-    
-        assert output_result.success
-        assert "output_line" in output_result.data["output"]
-
     def _restore_saved_processes(self) -> None:
         if not MANAGED_PROCESSES_DIR.exists():
             return
@@ -236,18 +221,9 @@ class ProcessManager:
 
                 # Проверяем, жив ли процесс.
                 if process.pid is not None:
-                    try:
-                        os.kill(
-                            process.pid,
-                            0,
-                        )
+                    if _process_exists(process.pid):
                         process.status = "running"
-                    except PermissionError:
-                        process.status = "running"
-                    except (
-                        ProcessLookupError,
-                        OSError,
-                    ):
+                    else:
                         process.status = "exited"
                         process.finished_at = (
                             datetime.now(
