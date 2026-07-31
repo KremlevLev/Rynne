@@ -2,14 +2,16 @@
 
 # Nova
 
-### Скажи, что должно быть сделано. Nova разберётся, какие окна, файлы и инструменты для этого нужны.
+### Tell it what needs to be done. Nova figures out which windows, files, and tools it needs.
 
-**Локальный OS-агент для Windows, который не просто отвечает — он действует на вашем компьютере.**
+**A local-first Windows OS agent that does more than answer — it acts on your computer.**
 
-[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#быстрый-старт)
-[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#быстрый-старт)
-[![Tests](https://img.shields.io/badge/tests-719%20passing-22C55E?style=for-the-badge)](#проверка)
-[![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
+[![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#quick-start)
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#quick-start)
+[![Tests](https://img.shields.io/badge/tests-740%20passing-22C55E?style=for-the-badge)](#verification)
+[![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#control-and-safety)
+
+**English** · [Русский](README.ru.md)
 
 </div>
 
@@ -17,288 +19,249 @@
 
 <div align="center">
 
-**Голос · окна · файлы · терминал · браузер · память · MCP · фоновые планы**
+**Voice · windows · files · terminal · browser · memory · MCP · background plans**
 
 </div>
 
 ---
 
-## Не ещё один чат. Исполнитель.
+## Not another chat. An operator.
 
-Обычному ассистенту вы объясняете задачу, получаете инструкцию и всё равно
-делаете работу сами. Nova получает цель, выбирает подходящие инструменты,
-выполняет шаги и показывает, что получилось.
+With a regular assistant, you describe a task, get a set of instructions, and still do the work yourself. Nova takes a goal, selects the right tools, executes the steps, and shows you a verifiable result.
 
-> **«Открой проект, запусти тесты, покажи ошибки и не потеряй процесс, пока я
-> занимаюсь другим».**
+> **“Open the project, run its tests, show me the failures, and keep the process alive while I work on something else.”**
 
-Nova может открыть приложения, работать с файлами, запустить команду в фоне,
-следить за процессом, продолжить план после перезапуска и сообщить, когда
-результат готов.
+Nova can open applications, work with files, run commands in the background, monitor processes, resume durable plans after a restart, and notify you when the result is ready.
 
-| Обычный AI-чат | Nova |
+| Regular AI chat | Nova |
 |---|---|
-| Пишет, куда нажать | Нажимает через API или UI Automation |
-| Даёт команду для терминала | Запускает и контролирует процесс |
-| Забывает задачу после закрытия | Сохраняет checkpoints фоновых планов |
-| Видит только prompt | Работает с окнами, файлами, браузером и MCP |
-| Говорит «не могу» без доступного действия | Ищет подходящий инструмент и объясняет реальный blocker |
+| Tells you where to click | Clicks through APIs or UI Automation |
+| Gives you a terminal command | Starts and monitors the process |
+| Forgets the task after closing | Persists background-plan checkpoints |
+| Only sees the prompt | Works with windows, files, browsers, and MCP |
+| Says “I can't” before looking for a path | Searches its capability registry and reports only a real blocker |
 
-## Одна фраза → законченный workflow
-
-```text
-Вы:   «Запусти проект, прогони тесты и скажи, если сервер упадёт»
-
-Nova: понимает цель
-      → выбирает terminal + process tools
-      → запускает работу в фоне
-      → сохраняет состояние
-      → следит за тестами и сервером
-      → возвращается с результатом
-```
-
-Не нужно помнить названия инструментов или вручную собирать цепочку команд.
-Вы описываете результат человеческим языком.
-
-## Что Nova уже умеет
-
-### Управлять Windows
-
-- Открывать одно или сразу несколько приложений.
-- Сворачивать и закрывать окна, менять громкость.
-- Находить элементы интерфейса через UI Automation и нажимать их.
-- Распознавать текст на экране через OCR.
-- Принимать голосовую команду по `Ctrl+Shift+Space`.
+## One sentence → a finished workflow
 
 ```text
-«Открой блокнот, калькулятор и проводник»
-«Найди кнопку “Сохранить” в активном окне и нажми её»
-«Распознай текст на экране»
+You:  “Start the project, run the tests, and tell me if the server goes down.”
+
+Nova: understands the goal
+      → selects terminal and process tools
+      → starts the work in the background
+      → persists its state
+      → monitors the tests and server
+      → comes back with the result
 ```
 
-### Работать как инженерный агент
+You do not need to remember tool names or manually assemble command chains. Describe the outcome in plain language.
 
-- Автоматически понимать активный Git/workspace по IDE, терминалу и файлам.
-- Выполнять относительные terminal/file/Git-команды именно в этом проекте.
-- Читать, создавать и изменять файлы с backup и diff.
-- Отменять последние изменения Nova командой «верни как было», не затирая более свежие ручные правки.
-- Проверять Git status, diff, log, ветки и делать commit.
-- Запускать команды, тесты и долгоживущие процессы.
-- Читать stdout/stderr, проверять health и останавливать дерево процессов.
-- Управлять Playwright-браузером.
+## What Nova can do today
+
+### Operate Windows
+
+- Open one application or a whole batch of them.
+- Minimize and close windows, manage window placement, and change volume.
+- Find UI elements through Windows UI Automation and interact with them.
+- Read on-screen text through OCR.
+- Accept voice commands from the UI or with `Ctrl+Shift+Space`.
 
 ```text
-«Запусти тесты здесь» — полный путь к проекту указывать не нужно
-«Отмени последнее изменение Nova» — восстановится точный проверенный backup
-«Покажи изменения в проекте и предложи название коммита»
-«Запусти python -m pytest в фоне и покажи итог»
-«Подними HTTP-сервер на 8000 и следи, чтобы он не упал»
+“Open Notepad, Calculator, and File Explorer.”
+“Find the Save button in the active window and click it.”
+“Read the text currently visible on screen.”
 ```
 
-### Помнить и продолжать
+### Work like an engineering agent
 
-- Хранить долговременные факты локально в SQLite.
-- Создавать многошаговые и фоновые планы.
-- Сохранять checkpoint после каждого подтверждённого шага.
-- Продолжать незавершённый план после перезапуска без повтора side effects.
-- Создавать напоминания.
+- Infer the active Git workspace from your IDE, terminal, and files.
+- Run relative terminal, file, and Git operations in that workspace.
+- Read, create, and patch files with backups and diffs.
+- Undo Nova's last file change without overwriting newer manual edits.
+- Inspect Git status, diffs, logs, and branches, and create commits.
+- Start tests, commands, servers, and long-running processes.
+- Read stdout/stderr, run health checks, and stop complete process trees.
+- Drive a persistent Chrome or Edge profile for browser tasks.
 
 ```text
-«Запомни, что рабочие репозитории лежат в D:\Projects»
-«Запусти в фоне план: открой проект, прогони тесты, собери отчёт»
-«Напомни через 20 минут проверить сборку»
+“Run the tests here.”
+“Undo Nova's last change.”
+“Show me the project diff and suggest a commit title.”
+“Run python -m pytest in the background and report the result.”
+“Start an HTTP server on port 8000 and watch it.”
 ```
 
-### Быть проактивной, но не самовольной
+### Remember and continue
 
-В настройках есть opt-in режим **«Nova рядом»**. Когда он включён, Nova
-изредка анализирует только активное окно и может сама спросить:
-
-> «Похоже, сборка упала. Разобраться с ошибкой?»
-
-Кнопка под предложением превращает его в обычный пользовательский запрос.
-Регистрация на сайте, ответ в мессенджере, публикация или другое внешнее
-действие проходят через стандартный orchestrator, preview и permission policy.
-Само наблюдение никогда не получает инструменты.
-
-Nova сообщает, когда:
-
-- в активном окне появилась явная ошибка, блокер или полезный момент для помощи;
-- завершился фоновый план или тесты;
-- упал управляемый сервер;
-- CPU или RAM остаются перегруженными несколько измерений подряд — с указанием процесса-виновника;
-- на диске заканчивается место;
-- одноразовый процесс подозрительно долго остаётся запущенным;
-- в Git появился конфликт или изменения давно не закоммичены;
-- failed-план можно безопасно продолжить с последнего checkpoint;
-- повторяющуюся последовательность действий стоит сохранить как workflow;
-- явно отслеживаемая публичная страница изменилась;
-- резервная копия пропала или устарела;
-- для установленного Python-пакета вышла новая версия.
-
-Уведомления имеют cooldown, quiet hours, уровень важности и объяснимую
-причину. Nova предлагает действие, но не выполняет новый side effect без
-запроса пользователя.
+- Store long-term facts locally in SQLite.
+- Create multi-step foreground and background plans.
+- Save a checkpoint after every verified step.
+- Resume unfinished work after restart without repeating side effects.
+- Create reminders and monitoring rules.
 
 ```text
-«Следи за https://example.com/releases и сообщи, когда страница изменится»
-«Покажи сайты, за которыми ты следишь»
-«Удали подписку watch_...»
-«Следи за D:\Backups и предупреди, если backup старше 24 часов»
-«Покажи контроль резервных копий»
-«Следи за обновлениями пакета requests»
+“Remember that my work repositories are in D:\Projects.”
+“Run this in the background: open the project, test it, and prepare a report.”
+“Remind me in 20 minutes to check the build.”
 ```
 
-Для поиска повторов сохраняются только названия инструментов, случайные
-operation/turn/session ID и время. Аргументы, пути, сообщения и результаты не
-попадают в эту историю; записи старше configured lookback удаляются.
+### Be proactive without taking over
 
-## Почему Nova реже отвечает «я не могу»
+The opt-in **Nova Nearby** mode occasionally inspects only the active window. When it notices a clear problem or useful opportunity, it can ask:
 
-Инструменты регистрируются в общем capability registry. Роутер выбирает их по
-намерению задачи, а не заставляет одну модель угадывать всё сразу.
+> “It looks like the build failed. Want me to investigate the error?”
 
-- Частые Windows-команды выполняются напрямую, без лишнего LLM-вызова.
-- Для сложной задачи Nova строит план и вызывает инструменты по шагам.
-- MCP-инструменты подключаются к тому же registry.
-- Ошибки инструментов возвращаются как структурированный результат, а не
-  маскируются общим отказом.
-- Опасные операции проходят через permission policy.
+Accepting the suggestion turns it into a normal user request. Account creation, sending a message, publishing content, or any other external side effect still goes through the regular orchestrator, preview, and permission policy. The observer itself never receives action tools.
 
-## Модели и маршрутизация
+Nova can also notify you when:
 
-Для Groq маршрут намеренно ограничен двумя моделями:
+- a background plan or test run finishes;
+- a managed server stops;
+- CPU or memory remains overloaded across several samples;
+- disk space runs low;
+- a one-shot process stays alive suspiciously long;
+- a Git repository has conflicts or stale uncommitted changes;
+- a failed plan can safely resume from its latest checkpoint;
+- a repeated sequence may be worth saving as a workflow;
+- a tracked public webpage changes;
+- a backup disappears or becomes stale;
+- a watched Python package receives an update.
 
-| Запрос | Модель |
+Notifications have cooldowns, importance levels, quiet hours, and an explicit explanation. Proactive observation proposes an action; it does not silently execute a new side effect.
+
+```text
+“Watch https://example.com/releases and tell me when it changes.”
+“Watch D:\Backups and warn me if the backup is older than 24 hours.”
+“Watch the requests package for updates.”
+```
+
+## Why Nova says “I can't” less often
+
+Every built-in and MCP tool is registered in a shared capability registry. The router selects capabilities from task intent instead of asking one model to guess every possible action at once.
+
+- Common Windows commands can execute directly without an unnecessary LLM call.
+- Complex tasks enter a multi-step tool loop driven by actual tool results.
+- MCP tools join the same registry as native tools.
+- Tool errors return as structured results and can trigger another route.
+- Nova reports inability only after it has exhausted applicable tools or encountered a real permission/environment blocker.
+- Risky actions always pass through the permission policy.
+
+## Models, providers, and routing
+
+For Groq, routing is intentionally limited to two models:
+
+| Request | Model |
 |---|---|
-| Текст, рассуждение и tool calling | `openai/gpt-oss-120b` |
-| Запрос с изображением | `qwen/qwen3.6-27b` |
+| Text, reasoning, and tool calling | `openai/gpt-oss-120b` |
+| Requests with an image | `qwen/qwen3.6-27b` |
 
-OpenRouter может использоваться как резервный провайдер. Nova не отправляет
-текстовый tool-call в случайную маленькую модель ради формального fallback.
+Nova also supports OpenRouter and Google Gemini as independent provider routes. Settings can hold an unlimited pool of keys for each provider. Keys are masked in the UI, rotated on limits or transient failures, and stored only in the current user's application data.
 
-## Быстрый старт
+Groq is also used for cloud speech recognition when configured. Nova does not route text tool calls to an unsuitable small model merely to claim fallback coverage.
 
-### 1. Клонируйте Nova
+## Install on Windows
+
+For a normal installation you only need one file:
+
+```text
+Nova_0.1.6_x64-setup.exe
+```
+
+Run it with a regular double click. Nova installs for the current Windows user, appears in the Start menu and Installed Apps, and does not require Python, Node.js, or Rust on the user's machine.
+
+On first launch, open **Settings** and add one or more Groq, OpenRouter, or Gemini API keys. Nova stores them in its user data directory and reconnects Core automatically.
+
+The desktop app includes three presentation modes:
+
+- **Aura** — the full atmospheric UI with activity and context panels.
+- **Focus** — a compact layout with more room for conversation.
+- **Console** — a clean, dense, CLI-inspired workspace.
+
+## Quick start from source
+
+### 1. Clone Nova
 
 ```powershell
 git clone https://github.com/KremlevLev/nova.git
 cd nova
 ```
 
-### 2. Создайте окружение
+### 2. Create the environment
 
 ```powershell
 py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python scripts/install_dependencies.py
-python -m playwright install chromium
 ```
 
-### 3. Добавьте ключ
+Nova's browser agent uses an installed Chrome or Edge browser with a dedicated persistent profile. A separately downloaded Playwright Chromium is not required for normal desktop use.
+
+### 3. Add provider keys
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Минимальный `.env`:
+Minimal configuration:
 
 ```env
 GROQ_API_KEYS=gsk_your_key
 ```
 
-Ключ Groq создаётся в [console.groq.com](https://console.groq.com/keys).
-Для резервного маршрута можно также задать:
+You can also configure pools for all supported providers:
 
 ```env
-OPENROUTER_API_KEYS=sk-or-your_key
+GROQ_API_KEYS=gsk_key_one,gsk_key_two
+OPENROUTER_API_KEYS=sk-or-key_one,sk-or-key_two
+GEMINI_API_KEYS=AIza_key_one,AIza_key_two
 ```
 
-### 4. Запустите
+Create a Groq key at [console.groq.com](https://console.groq.com/keys).
+
+### 4. Run Nova Core
 
 ```powershell
 python -m main
 ```
 
-Нажмите **`Ctrl+Shift+Space`** и скажите:
+Press **`Ctrl+Shift+Space`** and say:
 
-> **«Открой блокнот и напиши: Nova работает».**
+> **“Open Notepad and write: Nova is working.”**
 
-## Горячие клавиши
+## Hotkeys
 
-| Клавиша | Действие |
+| Shortcut | Action |
 |---|---|
-| `Ctrl+Shift+Space` | Включить или выключить голосовой режим |
-| `Esc` | Прервать речь Nova |
-| `Ctrl+Shift+Q` | Аварийно прервать речь Nova |
+| `Ctrl+Shift+Space` | Start or stop a manual voice session |
+| `Esc` | Interrupt Nova's speech |
+| `Ctrl+Shift+Q` | Emergency speech interruption |
 
-## Desktop UI
+## Desktop development
 
-Текущий PySide6-интерфейс запускается вместе с Nova и остаётся рабочим
-fallback на время миграции. Он даёт один центр управления:
-
-- диалог и история выполнения;
-- фоновые процессы и их логи;
-- память;
-- разрешения для рискованных действий;
-- состояние моделей и провайдеров;
-- proactive-уведомления и причины их появления.
-
-Интерфейс можно отключить:
-
-```env
-NOVA_DESKTOP_UI=false
-```
-
-Новый desktop-клиент развивается в `apps/desktop`: React + TypeScript отвечают
-за presentation layer, Tauri — за окно, установщик и обновления, а всё AI-ядро
-остаётся в Python.
-
-### Обычная установка на Windows
-
-Пользователю нужен только один файл:
-
-```text
-Nova_0.1.6_x64-setup.exe
-```
-
-Запустите installer обычным двойным кликом. Nova установится для текущего
-пользователя в `%LOCALAPPDATA%\Nova`, появится в меню «Пуск» и в списке
-установленных программ. Python, Node.js и Rust на пользовательском компьютере
-не требуются.
-
-При первом старте без API-ключа приложение не падает: откройте «Настройки»,
-выберите Groq/OpenRouter/Gemini и вставьте ключ. Nova сохранит его в
-пользовательских данных приложения и сама переподключит Core.
-
-### Запуск для разработки
-
-Для локального просмотра кликабельного dev-сценария:
+For a clickable browser-only UI preview:
 
 ```powershell
 cd apps\desktop
 npm install
 npm run dev
-# открыть http://127.0.0.1:1420/?demo=1
+# open http://127.0.0.1:1420/?demo=1
 ```
 
-Без `?demo=1` браузерный preview честно показывает отсутствие Tauri Core.
-JSONL bridge и supervisor уже реализованы, но полноценный desktop-запуск
-проверяется отдельной командой:
+Without `?demo=1`, a browser preview correctly reports that Tauri Core is unavailable.
+
+For the complete native desktop application:
 
 ```powershell
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-cd C:\Users\Utest\Desktop\nova\apps\desktop
+cd C:\Users\you\path\to\nova\apps\desktop
 npm run desktop
 ```
 
-Эта команда сама запускает Vite, собирает/открывает нативное окно Tauri и
-поднимает Python Core. Не запускайте `npm run dev` одновременно: оба процесса
-попытаются занять порт `1420`.
+This command launches Vite, opens the native Tauri window, and starts Python Core. Do not run `npm run dev` separately at the same time because both processes would compete for port `1420`.
 
-### Сборка Windows installer
+### Build the Windows installer
 
-Один раз установите build dependencies:
+Install build dependencies once:
 
 ```powershell
 python -m pip install -r requirements-build.txt
@@ -306,33 +269,30 @@ cd apps\desktop
 npm install
 ```
 
-Затем:
+Then build:
 
 ```powershell
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
 npm run installer
 ```
 
-Команда собирает React, упаковывает headless Python Core через PyInstaller,
-собирает Tauri release и создаёт:
+The build compiles React, packages headless Python Core with PyInstaller, compiles the Tauri release shell, and creates:
 
 ```text
 apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.6_x64-setup.exe
 ```
 
-Core использует source fingerprint: повторная сборка пропускает PyInstaller,
-если Python-ядро не менялось. Для принудительной пересборки:
+Core uses a source fingerprint, so repeated builds skip PyInstaller when Python Core has not changed. Force a clean Core package with:
 
 ```powershell
 npm run build:core -- --force
 ```
 
-Подробнее: [`docs/desktop_architecture.md`](docs/desktop_architecture.md).
+See [`docs/desktop_architecture.md`](docs/desktop_architecture.md) for the architecture and packaging boundary.
 
-## MCP: подключите рабочие сервисы
+## MCP: connect the services you use
 
-Nova поддерживает `stdio`, Streamable HTTP и legacy SSE через официальный MCP
-Python SDK. Конфиг совместим с форматом `mcpServers`:
+Nova supports `stdio`, Streamable HTTP, and legacy SSE through the official MCP Python SDK. Save a standard `mcpServers` configuration:
 
 ```env
 NOVA_MCP_CONFIG=C:\Users\you\.config\nova\mcp.json
@@ -357,27 +317,25 @@ NOVA_MCP_AUTO_DISCOVERY=false
 }
 ```
 
-После handshake инструменты получают risk/category metadata и участвуют в
-общем capability routing. Значения `${ENV_NAME}` подставляются локально и не
-добавляются в prompt.
+After the handshake, tools receive risk/category metadata and join the shared capability router. `${ENV_NAME}` values are substituted locally and never added to the prompt.
 
-## Контроль и безопасность
+## Control and safety
 
-OS-агент не должен быть «магией», которой приходится слепо доверять.
+An OS agent should be capable, but it must remain predictable.
 
-- Рискованные операции требуют подтверждения.
-- Python-код выполняется в sandbox.
-- Запись в системные каталоги ограничена.
-- Fallback не повторяет уже выполненный side effect.
-- Фоновые действия и причины proactive-предложений журналируются.
-- «Nova рядом» выключена по умолчанию: при наблюдении кадр остаётся в RAM и в vision-модель уходит только активное окно.
-- После клика «Помочь» визуальный контекст создаётся как одноразовый attachment и удаляется сразу после чтения агентом.
-- Окна password manager, банков, оплаты и private browsing автоматически пропускаются.
-- Содержимое экрана считается недоверенным и проверяется на prompt injection.
-- MCP auto-discovery выключен по умолчанию.
-- Секреты остаются в `.env` и environment variables.
+- Risky operations require confirmation.
+- Generated Python executes inside a sandbox.
+- Writes to protected system locations are restricted.
+- A fallback route never repeats a side effect that already succeeded.
+- Background actions and proactive suggestions are journaled.
+- Nova Nearby is opt-in; screenshots remain in memory during observation.
+- When you accept visual help, context becomes a one-use attachment and is deleted immediately after the agent reads it.
+- Password managers, banking, payment, and private-browsing windows are skipped automatically.
+- On-screen content is treated as untrusted and checked for prompt injection.
+- MCP auto-discovery is opt-in.
+- Secrets remain in `.env`, environment variables, or the user app-data key store.
 
-Порог свободного места и quiet hours настраиваются:
+Example proactive controls:
 
 ```env
 NOVA_PROACTIVE_QUIET_START=22
@@ -402,11 +360,11 @@ NOVA_PROACTIVE_PACKAGE_CHECK_SECONDS=21600
 NOVA_PROACTIVE_DISABLED_KINDS=disk_space_low,tests_completed
 ```
 
-## Как это устроено
+## Architecture
 
 ```mermaid
 flowchart LR
-    U["Голос / Desktop UI"] --> I["Intent routing"]
+    U["Voice / Desktop UI"] --> I["Intent routing"]
     I --> D["Direct Windows actions"]
     I --> P["Planner"]
     P --> R["Tool registry"]
@@ -421,54 +379,43 @@ flowchart LR
 ```text
 nova/
 ├── apps/
-│   └── desktop/       React/TypeScript UI и Tauri Windows shell
-├── core/              конфигурация и системные правила
+│   └── desktop/       React/TypeScript UI and Tauri Windows shell
+├── core/              configuration and system rules
 ├── modules/
-│   ├── agent/         планы, background tasks, proactive engine
-│   ├── application/   request pipeline и отчёты
-│   ├── audio/         STT и TTS
-│   ├── brain/         LLM gateway и model routing
-│   ├── browser/       Playwright
-│   ├── storage/       SQLite, память, checkpoints, artifacts
+│   ├── agent/         plans, background tasks, proactive engine
+│   ├── application/   request pipeline and reports
+│   ├── audio/         STT and TTS
+│   ├── brain/         LLM gateway and model routing
+│   ├── browser/       Chrome/Edge browser automation
+│   ├── storage/       SQLite, memory, checkpoints, artifacts
 │   ├── tools/         registry, runner, policies
-│   ├── ui/            PySide6 Desktop UI и overlay
-│   └── windows/       процессы, файлы, Git, UIA, OCR
+│   ├── ui/            desktop protocol and legacy fallback UI
+│   └── windows/       processes, files, Git, UIA, OCR
 ├── tests/
 ├── main.py
 └── roadmap.md
 ```
 
-## Проверка
+The language boundary is intentional: React and TypeScript own presentation, Tauri owns the native window and installer, Python owns the AI agent, and Go is reserved for workers whose performance profile actually justifies it.
+
+## Verification
 
 ```powershell
-python -m pytest -q
+python -m pytest tests/ -q
 cd apps\desktop
 npm test
 npm run build
-```
-
-Текущий regression suite: **724 Python-теста + 4 desktop contract tests**.
-
-Для проверки именно оркестратора без Groq, сети и реальных действий:
-
-```powershell
 python -m tests.orchestrator_acceptance
 ```
 
-Golden-сценарии прогоняют production selector, tool schemas, registry, policy,
-runtime validation и события выполнения. Все handlers заменены безопасными
-recorders: приложения, файлы, терминал и сайты фактически не затрагиваются.
-Новая capability добавляется одной записью в `GOLDEN_SCENARIOS` внутри
-[`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
+Current regression suite: **740 Python tests + 11 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
-## Статус проекта
+The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 
-Nova активно развивается. Уже работают OS-инструменты, durable background
-plans, MCP layer, desktop UI, память и безопасная проактивность. Дальше —
-расширение proactive-сценариев и multi-agent orchestration.
+## Project status
 
-Подробный и честный backlog находится в [`roadmap.md`](roadmap.md).
+Nova is under active development. The Windows tools, durable background plans, MCP layer, React/Tauri desktop app, memory, provider pools, browser profile, and proactive safety model are already implemented. The next major areas are broader proactive scenarios, richer task screens, signed releases, automatic updates, and multi-agent orchestration.
 
-Если вам нужен Windows-агент, которому можно не только задать вопрос, но и
-передать реальную задачу — попробуйте Nova и расскажите, на каком workflow она
-должна экономить ваше время следующей.
+The detailed backlog and completed milestones live in [`roadmap.md`](roadmap.md).
+
+If you want a Windows agent that can do more than rephrase a task — try Nova on a real workflow and tell us where it saved you time and where it got in the way.

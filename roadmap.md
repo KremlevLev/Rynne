@@ -7,6 +7,8 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 
 ## Desktop migration: React + Tauri
 
+- ✅ Основной `README.md` полностью переведён на английский; актуальная полная русская
+  версия сохранена как `README.ru.md`, между языками добавлена явная навигация.
 - ✅ Зафиксированы языковые границы: React/TypeScript presentation layer,
   Tauri shell, Python Agent Core; Go допускается только для подтверждённых
   профилированием hot workers.
@@ -28,6 +30,10 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - ✅ Добавлена installer-сборка: headless Python Core пакуется PyInstaller
   `onedir`, включается в Tauri resources и устанавливается через NSIS без
   требования Python/Node/Rust на пользовательском компьютере.
+- ✅ Свежий NSIS после voice/proactive/provider-pool изменений собран 31.07.2026:
+  `Nova_0.1.6_x64-setup.exe`, 617.8 MiB, SHA-256
+  `AC25B3F9FF970CE65102DB7ABCCF105483AC7030D92CAD41D43DFE415A0D0DC8`;
+  следующий release-шаг — code signing.
 - ✅ Release supervisor разрешает фактический Windows NSIS resource layout
   (`resources/nova-core`) и хранит runtime data вне каталога установки.
 - ✅ NSIS проверен end-to-end: тихая current-user установка, запуск окна и
