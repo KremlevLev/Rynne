@@ -22,6 +22,33 @@ logger = logging.getLogger("WakeWord")
 load_dotenv()
 
 
+VOSK_MODEL_DIRECTORY_NAME = "vosk-model-small-ru-0.22"
+
+
+def discover_vosk_model_path() -> Path | None:
+    """Find a configured or locally installed Russian Vosk model."""
+    configured = os.getenv("NOVA_VOSK_MODEL", "").strip()
+    project_root = Path(__file__).resolve().parents[2]
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    candidates = [
+        Path(configured) if configured else None,
+        project_root / "data" / "vosk" / VOSK_MODEL_DIRECTORY_NAME,
+        Path.cwd() / "data" / "vosk" / VOSK_MODEL_DIRECTORY_NAME,
+        (
+            Path(local_app_data)
+            / "Nova"
+            / "models"
+            / VOSK_MODEL_DIRECTORY_NAME
+            if local_app_data
+            else None
+        ),
+    ]
+    for candidate in candidates:
+        if candidate is not None and candidate.is_dir():
+            return candidate.resolve()
+    return None
+
+
 @dataclass(slots=True)
 class WakeWordConfig:
     enabled: bool
@@ -30,14 +57,14 @@ class WakeWordConfig:
     model_configured: bool = False
 
     sample_rate: int = 16_000
-    block_size: int = 2_048
+    block_size: int = 1_024
 
-    silence_duration: float = 1.1
+    silence_duration: float = 0.85
     maximum_command_duration: float = 15.0
-    pre_roll_duration: float = 1.2
+    pre_roll_duration: float = 0.8
 
-    minimum_rms_threshold: float = 0.006
-    sensitivity: float = 0.55
+    minimum_rms_threshold: float = 0.003
+    sensitivity: float = 0.72
 
     input_device: int | str | None = None
 
@@ -45,15 +72,13 @@ class WakeWordConfig:
     def from_environment(
         cls,
     ) -> "WakeWordConfig":
-        enabled = os.getenv(
-            "NOVA_WAKE_WORD_ENABLED",
-            "false",
-        ).lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        model_path = discover_vosk_model_path()
+        enabled_raw = os.getenv("NOVA_WAKE_WORD_ENABLED", "").strip()
+        enabled = (
+            model_path is not None
+            if not enabled_raw
+            else enabled_raw.lower() in {"1", "true", "yes", "on"}
+        )
 
         input_device_raw = os.getenv(
             "NOVA_INPUT_DEVICE",
@@ -70,27 +95,16 @@ class WakeWordConfig:
             )
         else:
             input_device = input_device_raw
-        model_path_raw = os.getenv(
-            "NOVA_VOSK_MODEL",
-            "",
-        ).strip()
-
         return cls(
             enabled=enabled,
             wake_word=os.getenv(
                 "NOVA_WAKE_WORD",
                 "нова",
             ).strip().lower(),
-            model_path=(
-                Path(model_path_raw)
-                if model_path_raw
-                else Path(
-                    "__nova_vosk_model_not_configured__"
-                )
+            model_path=model_path or Path(
+                "__nova_vosk_model_not_configured__"
             ),
-            model_configured=bool(
-                model_path_raw
-            ),
+            model_configured=model_path is not None,
             maximum_command_duration=float(
                 os.getenv(
                     "NOVA_WAKE_COMMAND_TIMEOUT",
@@ -100,7 +114,7 @@ class WakeWordConfig:
             sensitivity=float(
                 os.getenv(
                     "NOVA_WAKE_WORD_SENSITIVITY",
-                    "0.55",
+                    "0.72",
                 )
             ),
             input_device=input_device,
@@ -133,9 +147,9 @@ class WakeCapture:
 
 
 WAKE_PREFIX_PATTERNS = (
-    r"^\s*нова[\s,;:!?.-]*",
-    r"^\s*эй[\s,;:!?.-]+нова[\s,;:!?.-]*",
-    r"^\s*слушай[\s,;:!?.-]+нова[\s,;:!?.-]*",
+    r"^\s*нов[ао][\s,;:!?.-]*",
+    r"^\s*эй[\s,;:!?.-]+нов[ао][\s,;:!?.-]*",
+    r"^\s*слушай[\s,;:!?.-]+нов[ао][\s,;:!?.-]*",
 )
 
 
@@ -168,11 +182,13 @@ def contains_wake_word(
     if not normalized_wake:
         return False
 
-    return bool(
-        re.search(
-            rf"\b{re.escape(normalized_wake)}\b",
-            normalized,
-        )
+    aliases = {normalized_wake}
+    if normalized_wake == "нова":
+        # Small Russian Vosk models sometimes finalize «Нова» as «ново».
+        aliases.add("ново")
+    return any(
+        re.search(rf"\b{re.escape(alias)}\b", normalized)
+        for alias in aliases
     )
 
 
@@ -367,9 +383,21 @@ class WakeWordDetector:
                 error=str(exc),
             )
 
+        wake_grammar = [
+            self.config.wake_word,
+            f"эй {self.config.wake_word}",
+            f"слушай {self.config.wake_word}",
+            (
+                "ново"
+                if self.config.wake_word == "нова"
+                else self.config.wake_word
+            ),
+            "[unk]",
+        ]
         recognizer = KaldiRecognizer(
             model,
             self.config.sample_rate,
+            json.dumps(wake_grammar, ensure_ascii=False),
         )
 
         stream_arguments = {
@@ -490,15 +518,19 @@ class WakeWordDetector:
                             + rms * 0.005
                         )
 
+                        sensitivity = min(
+                            1.0,
+                            max(
+                                0.0,
+                                self.config.sensitivity,
+                            ),
+                        )
                         threshold = max(
                             (
                                 self.config
                                 .minimum_rms_threshold
                             ),
-                            noise_floor * (
-                                1.2
-                                + self.config.sensitivity
-                            ),
+                            noise_floor * (1.65 - sensitivity * 0.5),
                         )
 
                     accepted = (
@@ -520,13 +552,14 @@ class WakeWordDetector:
                             )
                         )
 
-                    if (
+                    just_detected = (
                         not wake_detected
                         and contains_wake_word(
                             recognized_text,
                             self.config.wake_word,
                         )
-                    ):
+                    )
+                    if just_detected:
                         wake_detected = True
                         wake_text = recognized_text
 
@@ -544,9 +577,9 @@ class WakeWordDetector:
                         )
 
                     if wake_detected:
-                        captured_audio.append(
-                            raw_bytes
-                        )
+                        # The detection block is already present in pre-roll.
+                        if not just_detected:
+                            captured_audio.append(raw_bytes)
 
                         post_wake_blocks += 1
 

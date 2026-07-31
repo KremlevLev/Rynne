@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 747 tests passed
+python -m pytest tests/ -q  # 750 tests passed
 cd apps/desktop && npm test  # 12 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -72,6 +72,10 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - ✅ Три сохраняемых режима React UI явно подписаны как «Красивый», «Средний» и
   «Лёгкий» в верхней панели и вынесены в отдельный блок Settings; переключение и
   компоновка визуально проверены в локальном браузере.
+- ✅ Режимы UI теперь принципиально различаются: «Красивый» использует трёхпанельный
+  cinematic layout с glow/glass, «Средний» — плотную icon rail без activity-панели,
+  «Лёгкий» — однооконный console layout; задачи, автоматизации и настройки доступны
+  в каждом режиме через sidebar или компактную верхнюю навигацию.
 - ✅ Browser Agent запускает установленный Chrome или Edge с отдельным
   постоянным профилем Nova и больше не требует скачанного Playwright Chromium
   внутри installer; локальный Chrome smoke-test пройден.
@@ -95,6 +99,13 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   виден под composer, а ошибка PortAudio больше не оставляет включённую кнопку без объяснения.
 - ✅ «Nova рядом» больше не рисует ложное оптимистичное состояние: UI ждёт подтверждение Core,
   а явно включённый визуальный помощник работает и ночью, сохраняя остальные тихие часы.
+- ✅ «Nova рядом» публикует heartbeat каждого vision-прохода: UI различает «проверяю»,
+  «проверено — всё спокойно», найденную подсказку и реальную ошибку; первая проверка
+  начинается сразу, следующие выполняются каждые 90 секунд вместо немого ожидания.
+- ✅ Wake word «Нова» переведён на ограниченную Vosk-грамматику с вариантом «ново»,
+  меньшим audio block и исправленной sensitivity; модель находится автоматически,
+  Settings показывает доступность режима, а `voice_diagnostics.py` проверяет реальный
+  микрофон/Vosk и умеет провести ограниченный по времени listening test.
 - ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;
   provider помечается `unconfigured`, чтобы UI мог провести onboarding.
 - ⬜ Перенести реальные task/process/settings экраны на React.
@@ -261,7 +272,7 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 
 ## Голос
 
-- Wake word «Нова».
+- ✅ Wake word «Нова».
 - Несколько wake words.
 - Пользовательские wake words.
 - Push-to-talk.

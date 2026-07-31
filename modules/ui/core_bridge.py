@@ -93,6 +93,29 @@ class CoreDesktopBridge:
         self._plan_fingerprints: dict[str, tuple[str, ...]] = {}
         self._bg_fingerprints: dict[str, str] = {}
 
+    def _preferences_payload(self, snapshot=None) -> dict[str, Any]:
+        current = snapshot or (
+            self.preferences.snapshot()
+            if self.preferences is not None
+            else None
+        )
+        payload = current.to_dict() if current is not None else {}
+        if self.mode_manager is not None:
+            payload["wake_word_available"] = bool(
+                getattr(
+                    self.mode_manager,
+                    "wake_word_available",
+                    False,
+                )
+            )
+            wake_runtime = getattr(self.mode_manager, "wake_runtime", None)
+            detector = getattr(wake_runtime, "detector", None)
+            config = getattr(detector, "config", None)
+            payload["wake_word"] = str(
+                getattr(config, "wake_word", "нова")
+            )
+        return payload
+
 
     async def run(
         self,
@@ -144,9 +167,7 @@ class CoreDesktopBridge:
         if self.preferences is not None:
             self.desktop.publish(
                 "preferences",
-                self.preferences
-                .snapshot()
-                .to_dict(),
+                self._preferences_payload(),
             )
 
 
@@ -440,7 +461,7 @@ class CoreDesktopBridge:
                 return
             self.desktop.publish(
                 "preferences",
-                snapshot.to_dict(),
+                self._preferences_payload(snapshot),
             )
             self._publish_command_result(
                 command_id,
@@ -502,7 +523,7 @@ class CoreDesktopBridge:
                 return
             self.desktop.publish(
                 "preferences",
-                snapshot.to_dict(),
+                self._preferences_payload(snapshot),
             )
             self._publish_command_result(
                 command_id,
@@ -879,7 +900,7 @@ class CoreDesktopBridge:
                     )
                     self.desktop.publish(
                         "preferences",
-                        snapshot.to_dict(),
+                        self._preferences_payload(snapshot),
                     )
                     self._publish_command_result(
                         command_id,

@@ -471,14 +471,14 @@ NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES = int(
 NOVA_PROACTIVE_VISION_CHECK_SECONDS = float(
     os.getenv(
         "NOVA_PROACTIVE_VISION_CHECK_SECONDS",
-        "180",
+        "90",
     )
 )
 
 NOVA_PROACTIVE_VISION_MIN_CONFIDENCE = float(
     os.getenv(
         "NOVA_PROACTIVE_VISION_MIN_CONFIDENCE",
-        "0.78",
+        "0.70",
     )
 )
 

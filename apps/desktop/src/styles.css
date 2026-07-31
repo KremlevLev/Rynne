@@ -85,6 +85,10 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .topbar { display: flex; align-items: center; justify-content: space-between; height: 76px; padding: 0 26px; border-bottom: 1px solid var(--border); }
 .topbar .eyebrow { margin: 0 0 5px; }.topbar h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
+.compact-nav { display: none; align-items: center; gap: 3px; }
+.compact-nav button { display: flex; align-items: center; gap: 6px; height: 31px; padding: 0 9px; border: 0; border-radius: 8px; color: #727d8e; background: transparent; cursor: pointer; font-size: 9px; }
+.compact-nav button:hover { color: #d3d8e2; background: rgba(255,255,255,.04); }
+.compact-nav button.active { color: #dcd7ff; background: rgba(141,125,255,.12); }
 .mode-switcher { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.018); }
 .mode-switcher button { display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 66px; height: 29px; padding: 0 8px; border: 0; border-radius: 7px; color: #667184; background: transparent; cursor: pointer; font-size: 9px; }
 .mode-switcher button:hover { color: #cbd1dc; background: rgba(255,255,255,.045); }
@@ -206,6 +210,15 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .appearance-option > span:last-child { display: grid; gap: 5px; }
 .appearance-option strong { font-size: 10px; }
 .appearance-option small { color: #687385; font-size: 8px; line-height: 1.45; }
+.voice-mode-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.voice-mode-options button { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 11px; color: #7f8999; background: rgba(8,11,16,.5); text-align: left; cursor: pointer; }
+.voice-mode-options button > span { display: grid; gap: 4px; min-width: 0; }
+.voice-mode-options strong { color: #bdc4cf; font-size: 10px; }
+.voice-mode-options small { color: #657082; font-size: 8px; line-height: 1.4; }
+.voice-mode-options button.active { color: #9af1f7; border-color: rgba(82,215,234,.35); background: rgba(82,215,234,.075); }
+.voice-mode-options button.active strong { color: #d7fbfd; }
+.voice-mode-options button:disabled { opacity: .45; cursor: not-allowed; }
+.settings-status code { color: #b9afff; font: 9px "Cascadia Mono", "Consolas", monospace; }
 .mode-preview { display: grid; grid-template-columns: 18% 1fr 23%; gap: 3px; width: 100%; height: 46px; padding: 5px; overflow: hidden; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; background: #090c11; }
 .mode-preview i { display: block; border-radius: 3px; background: #191d28; }
 .mode-preview i:nth-child(2) { background: linear-gradient(160deg, rgba(141,125,255,.24), #121620 55%); }
@@ -214,14 +227,29 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .mode-preview.console { display: block; padding: 8px; }
 .mode-preview.console i:nth-child(2) { display: block; width: 78%; height: 4px; box-shadow: 0 9px 0 #1d2430, 0 18px 0 rgba(141,125,255,.22); }
 
-/* Focus keeps navigation but gives the conversation most of the window. */
-.app-shell.ui-focus { grid-template-columns: 190px minmax(520px, 1fr); }
+/* Aura is the cinematic layout: glass, glow and a live context rail. */
+.app-shell.ui-aura { background: radial-gradient(circle at 72% -20%, rgba(116,91,255,.13), transparent 36%), rgba(9,11,16,.96); }
+.ui-aura .workspace::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 54% 25%, rgba(141,125,255,.045), transparent 28%); }
+.ui-aura .sidebar, .ui-aura .context-panel { backdrop-filter: blur(18px); }
+.ui-aura .topbar { background: linear-gradient(90deg, rgba(141,125,255,.035), transparent 48%); }
+.ui-aura .timeline.assistant .timeline-content { padding: 9px 12px; border: 1px solid rgba(255,255,255,.035); border-radius: 11px; background: rgba(16,20,28,.38); }
+
+/* Focus is a dense editor layout with an icon rail and no decorative panel. */
+.app-shell.ui-focus { grid-template-columns: 74px minmax(520px, 1fr); background: #0a0d12; }
 .ui-focus .context-panel { display: none; }
-.ui-focus .sidebar { padding: 16px 11px 13px; }
-.ui-focus .brand { padding-bottom: 17px; }
-.ui-focus .topbar { height: 64px; padding-inline: 22px; }
-.ui-focus .conversation { padding-inline: max(28px, 8vw); }
-.ui-focus .composer-wrap { padding-inline: max(28px, 8vw); }
+.ui-focus .sidebar { align-items: center; padding: 14px 9px 12px; background: #0c1016; }
+.ui-focus .brand { justify-content: center; padding: 2px 0 16px; }
+.ui-focus .brand > div:last-child, .ui-focus .new-task span, .ui-focus .new-task kbd, .ui-focus nav .eyebrow, .ui-focus .nav-item span, .ui-focus .nav-item b, .ui-focus .core-load, .ui-focus .profile div { display: none; }
+.ui-focus .new-task { justify-content: center; width: 40px; padding: 0; }
+.ui-focus .sidebar nav { width: 100%; margin-top: 13px; }
+.ui-focus .nav-item { justify-content: center; height: 42px; padding: 0; }
+.ui-focus .profile { justify-content: center; padding-inline: 0; }
+.ui-focus .topbar { height: 60px; padding-inline: 22px; background: #0b0e14; }
+.ui-focus .conversation { padding: 20px max(28px, 9vw) 24px; }
+.ui-focus .composer-wrap { padding: 13px max(28px, 9vw) 15px; background: #0a0d12; }
+.ui-focus .timeline { margin-bottom: 16px; }
+.ui-focus .timeline-dot { box-shadow: none; }
+.ui-focus .large-orb, .ui-focus .brand-orb { box-shadow: none; }
 
 /* Console is intentionally minimal, but keeps hierarchy and interaction. */
 .app-shell.ui-console { grid-template-columns: minmax(0, 1fr); background: #080a0e; }
@@ -231,6 +259,9 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .ui-console .topbar .eyebrow { display: none; }
 .ui-console .topbar h1 { font: 12px "Cascadia Mono", "Consolas", monospace; color: #aab4c4; }
 .ui-console .topbar h1::before { content: "nova / "; color: #756af0; }
+.ui-console .compact-nav { display: flex; }
+.ui-console .compact-nav button span { display: none; }
+.ui-console .compact-nav button { width: 31px; padding: 0; justify-content: center; border-radius: 6px; }
 .ui-console .proactive { border-radius: 7px; background: transparent; }
 .ui-console .icon-button { display: none; }
 .ui-console .mode-switcher { border-radius: 7px; background: #0d1016; }
@@ -254,6 +285,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .ui-console .attach, .ui-console .send { border-radius: 7px; }
 .ui-console .settings-view { padding-inline: max(24px, calc((100vw - 980px) / 2)); }
 .ui-console .settings-card { max-width: 760px; border-radius: 10px; background: #0d1118; }
+.ui-console .appearance-options, .ui-console .voice-mode-options { gap: 6px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes breathe { 50% { box-shadow: 0 0 58px rgba(112,91,230,.27), inset 0 0 20px rgba(255,255,255,.05); } }
@@ -263,6 +295,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   .app-shell { grid-template-columns: 210px minmax(500px, 1fr); }
   .context-panel { display: none; }
   .provider-pool { grid-template-columns: 1fr; }
+  .voice-mode-options { grid-template-columns: 1fr; }
   .provider-group header small { min-height: 0; }
 }
 

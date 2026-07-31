@@ -183,6 +183,16 @@ class InteractionModeManager:
             preferences = WAKE_WORD
             runtime = active
         """
+        if (
+            mode == InputMode.WAKE_WORD
+            and self.wake_runtime is not None
+            and not self.wake_word_available
+        ):
+            raise ValueError(
+                "Wake word недоступен: установите русскую Vosk-модель "
+                "командой `python -m vosk_install` и перезапустите Nova Core."
+            )
+
         async with self._lock:
             previous_mode = (
                 self.preferences

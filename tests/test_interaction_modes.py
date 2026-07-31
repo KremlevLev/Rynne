@@ -303,3 +303,27 @@ def test_wake_detector_availability() -> None:
     )
 
     assert manager.wake_word_available
+
+
+def test_unavailable_wake_word_mode_is_rejected() -> None:
+    async def scenario() -> None:
+        manager = InteractionModeManager(
+            preferences=PreferencesManager(),
+            runtime=RuntimeState(),
+        )
+        manager.attach_wake_runtime(
+            type(
+                "UnavailableWakeRuntime",
+                (),
+                {"detector": type("Detector", (), {"available": False})()},
+            )()
+        )
+
+        try:
+            await manager.set_mode(InputMode.WAKE_WORD)
+        except ValueError as exc:
+            assert "Vosk" in str(exc)
+        else:
+            raise AssertionError("Unavailable wake word mode was enabled")
+
+    asyncio.run(scenario())

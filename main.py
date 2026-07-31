@@ -1,6 +1,7 @@
 # main.py
 from __future__ import annotations
 from pathlib import Path
+import time
 
 from modules.windows.process_manager import (
     ProcessManager
@@ -1299,10 +1300,19 @@ async def async_main() -> None:
             delay = 2.0
             if enabled:
                 try:
+                    if NOVA_DESKTOP_UI:
+                        desktop_service.publish(
+                            "proactive_status",
+                            {
+                                "phase": "scanning",
+                                "message": "Проверяю активное окно…",
+                            },
+                        )
                     insight = (
                         await proactive_vision_observer
                         .inspect()
                     )
+                    suggestion_count = 0
                     if insight is not None:
                         for suggestion in (
                             proactive_engine
@@ -1315,12 +1325,35 @@ async def async_main() -> None:
                                 "proactive_suggestion",
                                 suggestion.to_dict(),
                             )
+                            suggestion_count += 1
+                    if NOVA_DESKTOP_UI:
+                        desktop_service.publish(
+                            "proactive_status",
+                            {
+                                "phase": "checked",
+                                "message": (
+                                    "Нашла повод помочь"
+                                    if suggestion_count
+                                    else "Проверено — всё спокойно"
+                                ),
+                                "checked_at": time.time(),
+                                "suggestions": suggestion_count,
+                            },
+                        )
                 except asyncio.CancelledError:
                     raise
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "Сбой opt-in режима «Nova рядом»."
                     )
+                    if NOVA_DESKTOP_UI:
+                        desktop_service.publish(
+                            "proactive_status",
+                            {
+                                "phase": "error",
+                                "message": f"Проверка не удалась: {exc}",
+                            },
+                        )
                 delay = max(
                     30.0,
                     NOVA_PROACTIVE_VISION_CHECK_SECONDS,
@@ -1446,6 +1479,11 @@ async def async_main() -> None:
         coordinator=input_coordinator,
         preferences=preferences,
         runtime=runtime,
+        event_handler=(
+            desktop_service.publish
+            if NOVA_DESKTOP_UI
+            else None
+        ),
     )
     mode_manager.attach_wake_runtime(
         wake_runtime

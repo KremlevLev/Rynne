@@ -252,12 +252,20 @@ Without `?demo=1`, a browser preview correctly reports that Tauri Core is unavai
 For the complete native desktop application:
 
 ```powershell
-$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-cd C:\Users\you\path\to\nova\apps\desktop
-npm run desktop
+cd C:\Users\you\path\to\nova
+.\scripts\dev-desktop.ps1
 ```
 
-This command launches Vite, opens the native Tauri window, and starts Python Core. Do not run `npm run dev` separately at the same time because both processes would compete for port `1420`.
+This command discovers the local Vosk model, enables the wake word when available, launches Vite, opens the native Tauri window, and starts Python Core. Install the small Russian Vosk model once with `python -m vosk_install`, or let the launcher do it with `.\scripts\dev-desktop.ps1 -InstallWakeWord`.
+
+Check the microphone, audio format, and Vosk runtime without launching Nova:
+
+```powershell
+python scripts\voice_diagnostics.py
+python scripts\voice_diagnostics.py --listen 20
+```
+
+Do not run `npm run dev` separately at the same time because both processes would compete for port `1420`.
 
 ### Build the Windows installer
 
@@ -346,7 +354,7 @@ NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS=15
 NOVA_PROACTIVE_CPU_PERCENT=90
 NOVA_PROACTIVE_MEMORY_PERCENT=88
 NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES=4
-NOVA_PROACTIVE_VISION_CHECK_SECONDS=180
+NOVA_PROACTIVE_VISION_CHECK_SECONDS=90
 NOVA_PROACTIVE_VISION_MIN_CONFIDENCE=0.78
 NOVA_PROACTIVE_STALE_PROCESS_HOURS=4
 NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS=60

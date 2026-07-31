@@ -44,15 +44,35 @@ class WakeWordRuntime:
         coordinator: InputCoordinator,
         preferences: PreferencesManager,
         runtime: RuntimeState,
+        event_handler=None,
     ) -> None:
         self.detector = detector
         self.listener = listener
         self.coordinator = coordinator
         self.preferences = preferences
         self.runtime = runtime
+        self.event_handler = event_handler
 
         self._closed = False
         self._unavailable_logged = False
+
+    def _publish_status(
+        self,
+        status: str,
+        message: str,
+        **payload,
+    ) -> None:
+        if self.event_handler is None:
+            return
+        self.event_handler(
+            "voice_status",
+            {
+                "status": status,
+                "message": message,
+                "mode": "wake_word",
+                **payload,
+            },
+        )
 
     async def run(
         self,
@@ -95,6 +115,10 @@ class WakeWordRuntime:
                         )
                     )
                     self._unavailable_logged = True
+                    self._publish_status(
+                        "unavailable",
+                        "Wake word недоступен: установите русскую Vosk-модель.",
+                    )
 
                 await self._sleep_or_shutdown(
                     shutdown_event,
@@ -103,6 +127,10 @@ class WakeWordRuntime:
                 continue
 
             self._unavailable_logged = False
+            self._publish_status(
+                "waiting_wake_word",
+                f"Жду «{self.detector.config.wake_word.title()}»…",
+            )
 
             capture = await asyncio.to_thread(
                 self.detector.wait_for_command,
@@ -141,6 +169,11 @@ class WakeWordRuntime:
                 continue
 
             assert capture.audio_path is not None
+            self._publish_status(
+                "wake_word_detected",
+                "Услышала Nova — распознаю команду…",
+                detected_text=capture.detected_text,
+            )
 
             try:
                 await self.runtime.set_state(
@@ -193,6 +226,10 @@ class WakeWordRuntime:
                         },
                     )
                 )
+                self._publish_status(
+                    "command_recognized",
+                    f"Команда: {clean_command}",
+                )
 
                 if request is None:
                     logger.warning(
@@ -218,6 +255,10 @@ class WakeWordRuntime:
                 )
 
                 await self.runtime.activate()
+                self._publish_status(
+                    "listening",
+                    "Да? Слушаю следующую команду…",
+                )
 
     async def _sleep_or_shutdown(
         self,

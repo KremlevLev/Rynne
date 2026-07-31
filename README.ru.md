@@ -289,14 +289,23 @@ JSONL bridge и supervisor уже реализованы, но полноцен�
 проверяется отдельной командой:
 
 ```powershell
-$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
-cd C:\Users\Utest\Desktop\nova\apps\desktop
-npm run desktop
+cd C:\Users\Utest\Desktop\nova
+.\scripts\dev-desktop.ps1
 ```
 
-Эта команда сама запускает Vite, собирает/открывает нативное окно Tauri и
-поднимает Python Core. Не запускайте `npm run dev` одновременно: оба процесса
-попытаются занять порт `1420`.
+Скрипт сам находит локальную Vosk-модель, включает wake word, запускает Vite,
+открывает нативное окно Tauri и поднимает Python Core. Если русской small-модели
+ещё нет, один раз выполните `python -m vosk_install` или запустите
+`.\scripts\dev-desktop.ps1 -InstallWakeWord`.
+
+Отдельная проверка микрофона, аудиоформата и Vosk без запуска Nova:
+
+```powershell
+python scripts\voice_diagnostics.py
+python scripts\voice_diagnostics.py --listen 20
+```
+
+Не запускайте `npm run dev` одновременно: оба процесса попытаются занять порт `1420`.
 
 ### Сборка Windows installer
 
@@ -390,7 +399,7 @@ NOVA_PROACTIVE_SYSTEM_CHECK_SECONDS=15
 NOVA_PROACTIVE_CPU_PERCENT=90
 NOVA_PROACTIVE_MEMORY_PERCENT=88
 NOVA_PROACTIVE_SYSTEM_CONSECUTIVE_SAMPLES=4
-NOVA_PROACTIVE_VISION_CHECK_SECONDS=180
+NOVA_PROACTIVE_VISION_CHECK_SECONDS=90
 NOVA_PROACTIVE_VISION_MIN_CONFIDENCE=0.78
 NOVA_PROACTIVE_STALE_PROCESS_HOURS=4
 NOVA_PROACTIVE_REPOSITORY_CHECK_SECONDS=60

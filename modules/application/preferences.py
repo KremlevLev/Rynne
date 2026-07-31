@@ -1,7 +1,6 @@
 # modules/application/preferences.py
 from __future__ import annotations
 import os
-from pathlib import Path
 import logging
 import threading
 from dataclasses import dataclass
@@ -12,6 +11,7 @@ from modules.input_hub.models import (
     InputMode,
     ModelSelectionMode,
 )
+from modules.input_hub.wake_word import WakeWordConfig
 
 
 logger = logging.getLogger("Preferences")
@@ -57,22 +57,7 @@ class PreferencesManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
 
-        wake_enabled = os.getenv(
-            "NOVA_WAKE_WORD_ENABLED",
-            "false",
-        ).lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-
-        wake_model = Path(
-            os.getenv(
-                "NOVA_VOSK_MODEL",
-                "",
-            )
-        )
+        wake_config = WakeWordConfig.from_environment()
         continuous_enabled = os.getenv(
             "NOVA_CONTINUOUS_LISTENING",
             "false",
@@ -86,8 +71,7 @@ class PreferencesManager:
         self._input_mode = (
             InputMode.WAKE_WORD
             if (
-                wake_enabled
-                and wake_model.is_dir()
+                wake_config.available
             )
             else (
                 InputMode.CONTINUOUS

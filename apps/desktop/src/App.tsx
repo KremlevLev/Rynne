@@ -255,6 +255,10 @@ export function App() {
   const [inputMode, setInputMode] = useState("sleep");
   const [voicePending, setVoicePending] = useState(false);
   const [proactivePending, setProactivePending] = useState(false);
+  const [proactiveStatus, setProactiveStatus] = useState("Выключено");
+  const [proactivePhase, setProactivePhase] = useState("idle");
+  const [wakeWordAvailable, setWakeWordAvailable] = useState(false);
+  const [wakeWord, setWakeWord] = useState("Нова");
   const [provider, setProvider] = useState<ProviderName>("groq");
   const [apiKey, setApiKey] = useState("");
   const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
@@ -294,11 +298,28 @@ export function App() {
             setProactive(event.payload.proactive_vision_enabled === true);
             const mode = event.payload.input_mode;
             if (typeof mode === "string") setInputMode(mode);
+            setWakeWordAvailable(event.payload.wake_word_available === true);
+            const configuredWakeWord = event.payload.wake_word;
+            if (typeof configuredWakeWord === "string" && configuredWakeWord) {
+              setWakeWord(configuredWakeWord);
+            }
             setVoicePending(false);
             setProactivePending(false);
             if (event.payload.proactive_vision_enabled === true) {
               setActiveTool("Nova рядом наблюдает за активным окном");
+              setProactiveStatus((current) => current === "Выключено" ? "Запускаю…" : current);
+            } else {
+              setProactiveStatus("Выключено");
+              setProactivePhase("idle");
             }
+          }
+          if (event.event_type === "proactive_status") {
+            const phase = text(event.payload, "phase", "idle");
+            const message = text(event.payload, "message", "Nova рядом работает");
+            setProactivePhase(phase);
+            setProactiveStatus(message);
+            if (phase === "scanning") setActiveTool(message);
+            if (phase === "checked") setActiveTool("Ожидаю задачу");
           }
           if (event.event_type === "voice_status") {
             setVoiceStatus(text(event.payload, "message"));
@@ -395,6 +416,19 @@ export function App() {
     }
   }
 
+  async function selectInputMode(mode: "wake_word" | "continuous" | "sleep") {
+    setVoicePending(true);
+    setVoiceStatus(mode === "wake_word" ? `Включаю ожидание «${wakeWord}»…` : "Переключаю микрофон…");
+    try {
+      await transport.send("set_input_mode", { input_mode: mode });
+    } catch (error) {
+      setVoicePending(false);
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось переключить голосовой режим.",
+      );
+    }
+  }
+
   async function refreshProviderKeys() {
     setProviderKeysLoading(true);
     try {
@@ -438,6 +472,16 @@ export function App() {
   }
 
   const voiceActive = inputMode === "continuous";
+  const wakeWordActive = inputMode === "wake_word";
+  const proactiveBadge = proactivePending
+    ? "…"
+    : !proactive
+      ? "Выкл"
+      : proactivePhase === "scanning"
+        ? "Смотрю"
+        : proactivePhase === "error"
+          ? "Ошибка"
+          : "Вкл";
 
   return (
     <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
@@ -458,7 +502,7 @@ export function App() {
         </div>
 
         <button className="new-task" onClick={() => transport.send("new_task")}>
-          <Plus size={16} /> Новая задача <kbd>Ctrl N</kbd>
+          <Plus size={16} /> <span>Новая задача</span> <kbd>Ctrl N</kbd>
         </button>
 
         <nav>
@@ -491,6 +535,20 @@ export function App() {
             <span className="eyebrow">ПЕРСОНАЛЬНЫЙ АГЕНТ</span>
             <h1>{nav.find((item) => item.key === view)?.label}</h1>
           </div>
+          <nav className="compact-nav" aria-label="Разделы Nova">
+            {nav.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                className={view === key ? "active" : ""}
+                onClick={() => setView(key)}
+                aria-label={label}
+                title={label}
+              >
+                <Icon size={15} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
           <div className="top-actions">
             <div className="mode-switcher" aria-label="Режим интерфейса">
               {UI_MODE_OPTIONS.map((option) => {
@@ -519,12 +577,12 @@ export function App() {
               onClick={() => void toggleProactive()}
               disabled={proactivePending || connection !== "connected"}
               title={proactive
-                ? "Nova анализирует активное окно и предложит помощь, когда заметит проблему"
+                ? proactiveStatus
                 : "Включить наблюдение за активным окном"}
             >
               <Radio size={15} />
               Nova рядом
-              <span>{proactivePending ? "…" : proactive ? "Вкл" : "Выкл"}</span>
+              <span>{proactiveBadge}</span>
             </button>
             <button className="icon-button" aria-label="Команды"><Command size={18} /></button>
           </div>
@@ -611,9 +669,9 @@ export function App() {
                   )}
                 </div>
               </div>
-              {voiceActive && (
+              {(voiceActive || wakeWordActive) && (
                 <div className="voice-status" role="status">
-                  <span />{voiceStatus || "Слушаю микрофон…"}
+                  <span />{voiceStatus || (wakeWordActive ? `Жду «${wakeWord}» · Vosk локально` : "Слушаю микрофон…")}
                 </div>
               )}
               <p>Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием</p>
@@ -646,6 +704,43 @@ export function App() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="settings-card voice-card">
+              <span className="settings-icon"><Mic size={22} /></span>
+              <div>
+                <span className="eyebrow">ГОЛОС И WAKE WORD</span>
+                <h2>Позови Nova без кнопки</h2>
+                <p>Vosk локально слушает только короткое слово «{wakeWord}». После него Nova записывает команду и передаёт её обычному STT.</p>
+              </div>
+              <div className="voice-mode-options">
+                <button
+                  className={wakeWordActive ? "active" : ""}
+                  onClick={() => void selectInputMode("wake_word")}
+                  disabled={voicePending || !wakeWordAvailable}
+                >
+                  <Radio size={16} />
+                  <span><strong>Wake word</strong><small>{wakeWordAvailable ? `Всегда жду «${wakeWord}»` : "Vosk-модель не установлена"}</small></span>
+                </button>
+                <button
+                  className={voiceActive ? "active" : ""}
+                  onClick={() => void selectInputMode("continuous")}
+                  disabled={voicePending}
+                >
+                  <Mic size={16} />
+                  <span><strong>Непрерывно</strong><small>Слушать речь без ключевого слова</small></span>
+                </button>
+                <button
+                  className={inputMode === "sleep" ? "active" : ""}
+                  onClick={() => void selectInputMode("sleep")}
+                  disabled={voicePending}
+                >
+                  <Square size={15} />
+                  <span><strong>Выключено</strong><small>Не использовать микрофон</small></span>
+                </button>
+              </div>
+              {!wakeWordAvailable && (
+                <p className="settings-status">Для dev-режима выполните: <code>python -m vosk_install</code>, затем перезапустите Core.</p>
+              )}
             </div>
             <div className="settings-card provider-card">
               <span className="settings-icon"><KeyRound size={22} /></span>

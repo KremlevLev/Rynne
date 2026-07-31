@@ -31,6 +31,10 @@ def test_contains_wake_word() -> None:
         "Эй, Нова!"
     )
 
+    assert contains_wake_word(
+        "ново"
+    )
+
 
 def test_does_not_match_part_of_word() -> None:
     assert not contains_wake_word(
@@ -112,6 +116,33 @@ def test_detector_available_with_model_directory(
     detector = WakeWordDetector(config)
 
     assert detector.available
+
+
+def test_environment_config_auto_enables_discovered_model(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    model_directory = tmp_path / "vosk-model"
+    model_directory.mkdir()
+    monkeypatch.setenv("NOVA_VOSK_MODEL", str(model_directory))
+    monkeypatch.delenv("NOVA_WAKE_WORD_ENABLED", raising=False)
+
+    config = WakeWordConfig.from_environment()
+
+    assert config.available
+    assert config.model_path == model_directory.resolve()
+
+
+def test_explicit_environment_switch_can_disable_wake_word(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    model_directory = tmp_path / "vosk-model"
+    model_directory.mkdir()
+    monkeypatch.setenv("NOVA_VOSK_MODEL", str(model_directory))
+    monkeypatch.setenv("NOVA_WAKE_WORD_ENABLED", "false")
+
+    assert not WakeWordConfig.from_environment().available
 
 
 def test_detector_caches_fatal_vosk_initialization_error(

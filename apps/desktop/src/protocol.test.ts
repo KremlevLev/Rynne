@@ -37,6 +37,7 @@ describe("Nova desktop protocol", () => {
 
   it("keeps the initial contract explicit", () => {
     expect(NOVA_EVENT_TYPES).toContain("proactive_suggestion");
+    expect(NOVA_EVENT_TYPES).toContain("proactive_status");
     expect(NOVA_COMMAND_ACTIONS).toContain("set_preference");
   });
 
