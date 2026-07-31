@@ -124,6 +124,7 @@ class DemoNovaTransport implements NovaTransport {
   private listener: EventListener | null = null;
   private timers = new Set<number>();
   private seeded = false;
+  private voiceActive = false;
 
   async connect(
     onEvent: EventListener,
@@ -187,6 +188,17 @@ class DemoNovaTransport implements NovaTransport {
     }
     if (action === "new_task") {
       this.push("runtime", { status: "idle", voice_enabled: true });
+    }
+    if (action === "toggle_voice_mode") {
+      this.voiceActive = !this.voiceActive;
+      this.push("preferences", {
+        proactive_vision_enabled: true,
+        input_mode: this.voiceActive ? "continuous" : "text_only",
+      });
+      this.push("voice_status", {
+        status: this.voiceActive ? "listening" : "stopped",
+        message: this.voiceActive ? "Слушаю микрофон…" : "Голосовой ввод остановлен.",
+      });
     }
   }
 

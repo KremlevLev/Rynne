@@ -61,6 +61,8 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "скриншот сайта",
         "снимок страницы",
         "посмотри страницу",
+        "сделай скрин",
+        "скрин",
     },
     "git_status": {"git", "статус репозитория", "git status"},
     "git_log": {"git log", "коммиты", "commits"},
@@ -138,7 +140,7 @@ ACTION_MARKERS = (
 )
 
 INTERACTIVE_BROWSER_ACTION_MARKERS = (
-    "открой", "зайди", "перейди", "включи браузер",
+    "открой", "зайди", "перейди", "включи браузер", "включи в браузере",
     "open ", "visit ", "go to ", "navigate ",
 )
 INTERACTIVE_BROWSER_CONTEXT_MARKERS = (
@@ -151,6 +153,11 @@ NON_INTERACTIVE_WEB_TOOLS = {
     "scrape_webpage",
     "open_website",
     "browser_research",
+}
+INTERACTIVE_BROWSER_CONFLICTING_TOOLS = {
+    "open_application",
+    "open_application_batch",
+    "write_in_application",
 }
 
 
@@ -481,6 +488,10 @@ def select_tools_for_request(
 
     if interactive_browser:
         for tool_name in NON_INTERACTIVE_WEB_TOOLS:
+            scores.pop(tool_name, None)
+        # Навигация должна выполняться управляемым browser session, а не
+        # завершаться после простого запуска Chrome через Windows launcher.
+        for tool_name in INTERACTIVE_BROWSER_CONFLICTING_TOOLS:
             scores.pop(tool_name, None)
 
     ranked = sorted(

@@ -115,6 +115,9 @@ INTERACTIVE BROWSER:
 затем browser_get_page_text и продолжай кликами/заполнением до всей цели. Если
 страница требует входа, открой её и коротко попроси пользователя войти в
 появившемся окне; профиль Nova сохранит эту авторизацию для следующих задач.
+Для OpenRouter Activity используй https://openrouter.ai/activity. Если пользователь
+просит скрин или снимок результата, обязательно заверши browser_screenshot после
+навигации и проверки страницы. Не вызывай open_application для браузерной задачи.
 """.strip()
 
 MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
@@ -126,6 +129,19 @@ def request_requires_action(text: str) -> bool:
     return any(
         re.search(pattern, lowered)
         for pattern in ACTION_PATTERNS
+    )
+
+
+def request_requires_browser_screenshot(text: str) -> bool:
+    lowered = text.lower().replace("ё", "е")
+    return any(
+        marker in lowered
+        for marker in (
+            "скрин",
+            "снимок страницы",
+            "снимок сайта",
+            "screenshot",
+        )
     )
 
 
@@ -1343,6 +1359,30 @@ class AgentService:
             pending_tool_calls = collect_tool_calls(
                 generated
             )
+            executed_tool_names = {
+                str(item.get("name", ""))
+                for item in executed_tool_results
+            }
+            if (
+                not pending_tool_calls
+                and request_requires_browser_screenshot(user_text)
+                and "browser_screenshot" in self.registry.names
+                and "browser_screenshot" not in executed_tool_names
+                and any(name.startswith("browser_") for name in executed_tool_names)
+            ):
+                # Снимок — явная read-only часть пользовательской цели. Не
+                # позволяем модели завершить браузерную задачу сразу после
+                # навигации/чтения, забыв сохранить запрошенный артефакт.
+                pending_tool_calls = [
+                    {
+                        "id": f"required_screenshot_{uuid.uuid4().hex}",
+                        "type": "function",
+                        "function": {
+                            "name": "browser_screenshot",
+                            "arguments": '{"full_page":false}',
+                        },
+                    }
+                ]
             continuation_message: dict[str, Any] = {
                 "role": "assistant",
                 "content": generated.text,

@@ -545,6 +545,7 @@ async def run_voice_loop(
     app_launcher: WindowsAppIndexer,
     windows_context: WindowsContext,
     preferences: PreferencesManager,
+    event_handler=None,
 ) -> None:
     while not runtime.is_shutting_down:
         current_mode = (
@@ -566,6 +567,15 @@ async def run_voice_loop(
 
         await runtime.set_state(AssistantState.LISTENING)
 
+        if event_handler is not None:
+            event_handler(
+                "voice_status",
+                {
+                    "status": "listening",
+                    "message": "Слушаю микрофон…",
+                },
+            )
+
         user_request = await asyncio.to_thread(
             listener.listen,
             lambda: (
@@ -577,8 +587,32 @@ async def run_voice_loop(
         if runtime.is_shutting_down:
             break
 
-        if not runtime.is_active or not user_request:
+        if not runtime.is_active:
             continue
+
+        if not user_request:
+            voice_error = str(
+                getattr(listener, "last_error", "") or ""
+            ).strip()
+            if voice_error and event_handler is not None:
+                event_handler(
+                    "voice_status",
+                    {
+                        "status": "error",
+                        "message": voice_error,
+                    },
+                )
+                await asyncio.sleep(2.0)
+            continue
+
+        if event_handler is not None:
+            event_handler(
+                "voice_status",
+                {
+                    "status": "recognized",
+                    "message": f"Распознано: {user_request}",
+                },
+            )
 
         lowered = user_request.lower()
 
@@ -1618,6 +1652,7 @@ async def async_main() -> None:
             app_launcher,
             windows_context,
             preferences,
+            desktop_service.publish,
         ),
         name="nova-voice-loop",
     )

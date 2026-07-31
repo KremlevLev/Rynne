@@ -319,6 +319,13 @@ def test_browser_with_follow_up_goal_is_not_direct() -> None:
     assert decision.needs_tools
 
 
+def test_impatient_follow_up_does_not_open_filler_as_application() -> None:
+    decision = create_router().route("Так открой, ало")
+
+    assert decision.strategy != ExecutionStrategy.DIRECT
+    assert decision.intent != IntentKind.APPLICATION_OPEN
+
+
 def test_open_project_is_development_not_app() -> None:
     decision = create_router().route(
         "Открой проект и запусти тесты"

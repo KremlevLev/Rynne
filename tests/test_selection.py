@@ -363,3 +363,28 @@ def test_interactive_account_navigation_excludes_search_substitute() -> None:
     assert "search_web_tavily" not in result
     assert "scrape_webpage" not in result
     assert "open_website" not in result
+
+
+def test_openrouter_activity_uses_browser_session_and_screenshot() -> None:
+    available = {
+        "open_application",
+        "write_in_application",
+        "browser_open_url",
+        "browser_get_page_text",
+        "browser_click",
+        "browser_screenshot",
+        "search_web_tavily",
+    }
+    request = (
+        "Включи в браузере OpenRouter и там чекни мою "
+        "активность, сделав скрин"
+    )
+
+    result = select_tools_for_request(request, available, broaden=True)
+
+    assert "browser_open_url" in result
+    assert "browser_get_page_text" in result
+    assert "browser_screenshot" in result
+    assert "open_application" not in result
+    assert "write_in_application" not in result
+    assert "search_web_tavily" not in result

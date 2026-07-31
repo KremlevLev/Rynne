@@ -153,8 +153,15 @@ export function scrollConversationToBottom(
   if (!element) return;
   element.scrollTo({
     top: element.scrollHeight,
-    behavior: "smooth",
+    behavior: "auto",
   });
+}
+
+export function isConversationNearBottom(
+  element: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">,
+  threshold = 96,
+): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
 }
 
 const nav = [
@@ -257,6 +264,9 @@ export function App() {
     readUiMode(typeof window === "undefined" ? null : window.localStorage)
   ));
   const conversationRef = useRef<HTMLDivElement>(null);
+  const followConversationRef = useRef(true);
+  const [followingConversation, setFollowingConversation] = useState(true);
+  const [voiceStatus, setVoiceStatus] = useState("");
   const runtime = runtimePresentation(runtimeState);
 
   useEffect(() => {
@@ -290,6 +300,10 @@ export function App() {
               setActiveTool("Nova рядом наблюдает за активным окном");
             }
           }
+          if (event.event_type === "voice_status") {
+            setVoiceStatus(text(event.payload, "message"));
+            setVoicePending(false);
+          }
           if (event.event_type === "task_progress") {
             const value = event.payload.progress;
             if (typeof value === "number") setTaskProgress(value);
@@ -316,8 +330,24 @@ export function App() {
   }, [transport]);
 
   useEffect(() => {
-    scrollConversationToBottom(conversationRef.current);
+    if (followConversationRef.current) {
+      scrollConversationToBottom(conversationRef.current);
+    }
   }, [timeline]);
+
+  function handleConversationScroll() {
+    const element = conversationRef.current;
+    if (!element) return;
+    const nearBottom = isConversationNearBottom(element);
+    followConversationRef.current = nearBottom;
+    setFollowingConversation(nearBottom);
+  }
+
+  function resumeConversationFollow() {
+    followConversationRef.current = true;
+    setFollowingConversation(true);
+    scrollConversationToBottom(conversationRef.current);
+  }
 
   useEffect(() => {
     if (connection === "connected") void refreshProviderKeys();
@@ -502,7 +532,13 @@ export function App() {
 
         {view === "dialog" ? (
           <div className="dialog-view">
-            <div className="conversation" ref={conversationRef}>
+            <div
+              className="conversation"
+              ref={conversationRef}
+              onScroll={handleConversationScroll}
+              tabIndex={0}
+              aria-label="История диалога"
+            >
               <div className="date-divider"><span>Сегодня</span></div>
               {timeline.map((item) => (
                 <article key={item.id} className={`timeline ${item.kind}`}>
@@ -528,6 +564,13 @@ export function App() {
                 </article>
               ))}
             </div>
+
+            {!followingConversation && (
+              <button className="jump-to-latest" onClick={resumeConversationFollow}>
+                К новым сообщениям
+                <ChevronRight size={14} />
+              </button>
+            )}
 
             <div className="composer-wrap">
               <div className={busy ? "composer busy" : "composer"}>
@@ -568,6 +611,11 @@ export function App() {
                   )}
                 </div>
               </div>
+              {voiceActive && (
+                <div className="voice-status" role="status">
+                  <span />{voiceStatus || "Слушаю микрофон…"}
+                </div>
+              )}
               <p>Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием</p>
             </div>
           </div>

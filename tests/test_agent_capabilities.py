@@ -180,6 +180,20 @@ def test_agent_continues_tool_loop_until_full_goal() -> None:
         {
             "type": "function",
             "function": {
+                "name": "browser_screenshot",
+                "description": "Сохраняет снимок страницы.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "full_page": {"type": "boolean"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "browser_get_page_text",
                 "description": "Читает текущую страницу.",
                 "parameters": {
@@ -201,11 +215,16 @@ def test_agent_continues_tool_loop_until_full_goal() -> None:
         executed.append("read")
         return ToolResult.ok("Активность: 42 запроса.")
 
+    def browser_screenshot(full_page: bool = False) -> ToolResult:
+        executed.append(f"screenshot:{full_page}")
+        return ToolResult.ok("Скриншот сохранён: activity.png")
+
     registry = ToolRegistry.from_legacy(
         schemas,
         {
             "browser_open_url": browser_open_url,
             "browser_get_page_text": browser_get_page_text,
+            "browser_screenshot": browser_screenshot,
         },
     )
     llm = SequentialBrowserLLM()
@@ -217,13 +236,14 @@ def test_agent_continues_tool_loop_until_full_goal() -> None:
 
     response = asyncio.run(
         agent.run(
-            "Открой OpenRouter и проверь мою активность"
+            "Открой OpenRouter, проверь мою активность и сделай скрин"
         )
     )
 
     assert response.success
-    assert len(llm.calls) == 3
+    assert len(llm.calls) == 4
     assert executed == [
         "open:https://openrouter.ai/activity",
         "read",
+        "screenshot:False",
     ]

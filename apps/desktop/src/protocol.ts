@@ -26,6 +26,7 @@ export const NOVA_EVENT_TYPES = [
   "memories",
   "integrations",
   "preferences",
+  "voice_status",
   "models",
   "command_result",
   "shutdown",

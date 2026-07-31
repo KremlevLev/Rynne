@@ -146,6 +146,7 @@ class VoiceListener:
                 "Запись будет работать, но транскрипция недоступна."
             )
         self.local_stt = LocalSTTFallback()
+        self.last_error: str | None = None
 
         self._log_audio_device()
 
@@ -756,9 +757,11 @@ class VoiceListener:
         self,
         should_abort: Callable[[], bool] | None = None,
     ) -> str:
+        self.last_error = None
         try:
             audio = self._record(should_abort)
         except sd.PortAudioError as exc:
+            self.last_error = f"Нет доступа к микрофону: {exc}"
             logger.exception(
                 "Ошибка доступа к микрофону: %s",
                 exc,
@@ -766,6 +769,7 @@ class VoiceListener:
             time.sleep(1.0)
             return ""
         except Exception:
+            self.last_error = "Непредвиденная ошибка записи звука."
             logger.exception(
                 "Непредвиденная ошибка записи звука."
             )

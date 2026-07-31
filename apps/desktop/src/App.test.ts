@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   eventToItem,
+  isConversationNearBottom,
   normalizeUiMode,
   readUiMode,
   scrollConversationToBottom,
@@ -48,8 +49,21 @@ describe("eventToItem", () => {
 
     expect(scrollTo).toHaveBeenCalledWith({
       top: 2048,
-      behavior: "smooth",
+      behavior: "auto",
     });
+  });
+
+  it("does not force new events over a user reading older messages", () => {
+    expect(isConversationNearBottom({
+      scrollHeight: 2400,
+      scrollTop: 700,
+      clientHeight: 600,
+    })).toBe(false);
+    expect(isConversationNearBottom({
+      scrollHeight: 2400,
+      scrollTop: 1740,
+      clientHeight: 600,
+    })).toBe(true);
   });
 });
 
