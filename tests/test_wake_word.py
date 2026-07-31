@@ -31,6 +31,13 @@ def test_contains_wake_word() -> None:
         "Эй, Нова!"
     )
 
+
+def test_repeated_and_latin_wake_words_are_not_commands() -> None:
+    assert strip_wake_prefix("Нова, Нова, Нова") == ""
+    assert strip_wake_prefix("Nova.") == ""
+    assert strip_wake_prefix("Наува, открой браузер") == "открой браузер"
+    assert strip_wake_prefix("Новчик, привет") == "привет"
+
     assert contains_wake_word(
         "ново"
     )

@@ -43,6 +43,40 @@ def _process_exists(pid: int | None) -> bool:
         return True
 
 
+def _normalized_executable(value: str) -> str:
+    return Path(str(value)).name.lower().removesuffix(".exe")
+
+
+def _process_matches_identity(
+    pid: int | None,
+    command: list[str],
+    create_time: float | None = None,
+) -> bool:
+    """Reject saved metadata after Windows has reused the old PID."""
+    if not _process_exists(pid) or pid is None or not command:
+        return False
+    try:
+        process = psutil.Process(pid)
+        if create_time is not None and abs(process.create_time() - create_time) > 1.0:
+            return False
+        actual = process.cmdline()
+        if not actual:
+            return False
+        if _normalized_executable(actual[0]) != _normalized_executable(command[0]):
+            return False
+        expected_args = [str(item).strip() for item in command[1:] if str(item).strip()]
+        actual_args = [str(item).strip() for item in actual[1:] if str(item).strip()]
+        return all(argument in actual_args for argument in expected_args)
+    except (
+        psutil.NoSuchProcess,
+        psutil.ZombieProcess,
+        psutil.AccessDenied,
+        ValueError,
+        OSError,
+    ):
+        return False
+
+
 @dataclass(slots=True)
 class ManagedProcess:
     process_id: str
@@ -55,6 +89,8 @@ class ManagedProcess:
     started_at: str | None = None
     finished_at: str | None = None
     exit_code: int | None = None
+    pid_create_time: float | None = None
+    restored: bool = False
 
     stdout_path: str | None = None
     stderr_path: str | None = None
@@ -73,7 +109,11 @@ class ManagedProcess:
             return self._process.poll() is None
         if self.pid is None or self.status != "running":
             return False
-        return _process_exists(self.pid)
+        return _process_matches_identity(
+            self.pid,
+            self.command,
+            self.pid_create_time,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -85,6 +125,8 @@ class ManagedProcess:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "exit_code": self.exit_code,
+            "pid_create_time": self.pid_create_time,
+            "restored": self.restored,
             "stdout_path": self.stdout_path,
             "stderr_path": self.stderr_path,
             "health_check_url": (
@@ -159,10 +201,16 @@ class ProcessManager:
             if exit_code is None:
                 return
             process.exit_code = exit_code
-        elif process.is_running:
+        elif _process_matches_identity(
+            process.pid,
+            process.command,
+            process.pid_create_time,
+        ):
             return
 
         process.status = "exited"
+        # A restored live process genuinely changed state during this session.
+        process.restored = False
         process.finished_at = datetime.now(
             timezone.utc
         ).isoformat()
@@ -205,6 +253,8 @@ class ProcessManager:
                         "finished_at"
                     ),
                     exit_code=data.get("exit_code"),
+                    pid_create_time=data.get("pid_create_time"),
+                    restored=True,
                     stdout_path=data.get(
                         "stdout_path"
                     ),
@@ -219,10 +269,17 @@ class ProcessManager:
                     ),
                 )
 
-                # Проверяем, жив ли процесс.
-                if process.pid is not None:
-                    if _process_exists(process.pid):
+                # PID сам по себе недостаточен: Windows переиспользует PID.
+                if process.pid is not None and process.status == "running":
+                    if _process_matches_identity(
+                        process.pid,
+                        process.command,
+                        process.pid_create_time,
+                    ):
                         process.status = "running"
+                        process.pid_create_time = psutil.Process(
+                            process.pid
+                        ).create_time()
                     else:
                         process.status = "exited"
                         process.finished_at = (
@@ -230,6 +287,7 @@ class ProcessManager:
                                 timezone.utc
                             ).isoformat()
                         )
+                        self._save_metadata(process)
 
                 self._processes[process_id] = (
                     process
@@ -331,6 +389,9 @@ class ProcessManager:
             command=command,
             pid=process.pid,
             status="running",
+            pid_create_time=psutil.Process(
+                process.pid
+            ).create_time(),
             started_at=datetime.now(
                 timezone.utc
             ).isoformat(),

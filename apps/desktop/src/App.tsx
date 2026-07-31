@@ -259,6 +259,7 @@ export function App() {
   const [proactivePhase, setProactivePhase] = useState("idle");
   const [wakeWordAvailable, setWakeWordAvailable] = useState(false);
   const [wakeWord, setWakeWord] = useState("Нова");
+  const [wakeSensitivity, setWakeSensitivity] = useState(0.72);
   const [provider, setProvider] = useState<ProviderName>("groq");
   const [apiKey, setApiKey] = useState("");
   const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
@@ -303,6 +304,8 @@ export function App() {
             if (typeof configuredWakeWord === "string" && configuredWakeWord) {
               setWakeWord(configuredWakeWord);
             }
+            const sensitivity = event.payload.wake_word_sensitivity;
+            if (typeof sensitivity === "number") setWakeSensitivity(sensitivity);
             setVoicePending(false);
             setProactivePending(false);
             if (event.payload.proactive_vision_enabled === true) {
@@ -425,6 +428,31 @@ export function App() {
       setVoicePending(false);
       setSettingsStatus(
         error instanceof Error ? error.message : "Не удалось переключить голосовой режим.",
+      );
+    }
+  }
+
+  async function setWakeWordSensitivity(value: number) {
+    const normalized = Math.min(1, Math.max(0, value));
+    setWakeSensitivity(normalized);
+    try {
+      await transport.send("set_wake_word_sensitivity", { value: normalized });
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось изменить чувствительность.",
+      );
+    }
+  }
+
+  async function runProactiveCheck() {
+    setProactiveStatus("Запрашиваю проверку…");
+    setProactivePhase("scanning");
+    try {
+      await transport.send("run_proactive_check");
+    } catch (error) {
+      setProactivePhase("error");
+      setProactiveStatus(
+        error instanceof Error ? error.message : "Не удалось запустить проверку.",
       );
     }
   }
@@ -674,6 +702,24 @@ export function App() {
                   <span />{voiceStatus || (wakeWordActive ? `Жду «${wakeWord}» · Vosk локально` : "Слушаю микрофон…")}
                 </div>
               )}
+              <div className="composer-voice-modes" aria-label="Режим микрофона">
+                <button
+                  className={wakeWordActive ? "active" : ""}
+                  onClick={() => void selectInputMode("wake_word")}
+                  disabled={voicePending || !wakeWordAvailable || connection !== "connected"}
+                  title={`Ждать обращение «${wakeWord}»`}
+                ><Radio size={12} /> Wake «{wakeWord}»</button>
+                <button
+                  className={voiceActive ? "active" : ""}
+                  onClick={() => void selectInputMode("continuous")}
+                  disabled={voicePending || connection !== "connected"}
+                ><Mic size={12} /> Слушать</button>
+                <button
+                  className={inputMode === "sleep" ? "active" : ""}
+                  onClick={() => void selectInputMode("sleep")}
+                  disabled={voicePending || connection !== "connected"}
+                ><Square size={10} /> Выкл.</button>
+              </div>
               <p>Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием</p>
             </div>
           </div>
@@ -741,6 +787,35 @@ export function App() {
               {!wakeWordAvailable && (
                 <p className="settings-status">Для dev-режима выполните: <code>python -m vosk_install</code>, затем перезапустите Core.</p>
               )}
+              {wakeWordAvailable && (
+                <label className="wake-sensitivity">
+                  <span><strong>Чувствительность</strong><small>{Math.round(wakeSensitivity * 100)}% · выше — легче услышать обращение</small></span>
+                  <input
+                    type="range"
+                    min="0.35"
+                    max="1"
+                    step="0.05"
+                    value={wakeSensitivity}
+                    onChange={(event) => setWakeSensitivity(Number(event.target.value))}
+                    onPointerUp={(event) => void setWakeWordSensitivity(Number(event.currentTarget.value))}
+                    onKeyUp={(event) => void setWakeWordSensitivity(Number(event.currentTarget.value))}
+                  />
+                </label>
+              )}
+            </div>
+            <div className="settings-card proactive-card">
+              <span className="settings-icon"><Radio size={22} /></span>
+              <div>
+                <span className="eyebrow">NOVA РЯДОМ</span>
+                <h2>Понятная проверка активного окна</h2>
+                <p>Режим делает локальный снимок активного окна, ищет видимую проблему и предлагает действие. Ничего не нажимает и не отправляет без вашего подтверждения.</p>
+              </div>
+              <div className="proactive-test">
+                <span className={`proactive-phase ${proactivePhase}`}><i />{proactive ? proactiveStatus : "Режим выключен"}</span>
+                <button onClick={() => void runProactiveCheck()} disabled={!proactive || proactivePhase === "scanning" || connection !== "connected"}>
+                  Проверить сейчас
+                </button>
+              </div>
             </div>
             <div className="settings-card provider-card">
               <span className="settings-icon"><KeyRound size={22} /></span>

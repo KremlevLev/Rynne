@@ -5,9 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#090b10" />
     <title>Nova</title>
+    <style>
+      html, body, #root { width: 100%; height: 100%; margin: 0; background: #080a0f; }
+      .boot { height: 100%; display: grid; place-items: center; color: #dfe3ff; font-family: Inter, "Segoe UI", sans-serif; }
+      .boot-inner { display: grid; justify-items: center; gap: 18px; }
+      .boot-orb { width: 58px; height: 58px; border: 1px solid rgba(139,111,255,.55); border-radius: 19px; display: grid; place-items: center; background: radial-gradient(circle at 35% 25%, #8268dc, #242044 70%); box-shadow: 0 0 42px rgba(111,82,220,.28); animation: boot-pulse 1.6s ease-in-out infinite; }
+      .boot-orb::after { content: "✦"; font-size: 26px; }
+      .boot-copy { display: grid; gap: 6px; text-align: center; }
+      .boot-copy strong { font-size: 18px; letter-spacing: .01em; }
+      .boot-copy span { color: #747d91; font-size: 12px; }
+      .boot-line { width: 170px; height: 2px; overflow: hidden; border-radius: 2px; background: #181c27; }
+      .boot-line::after { content: ""; display: block; width: 45%; height: 100%; background: linear-gradient(90deg, transparent, #8e75ff, transparent); animation: boot-line 1.25s ease-in-out infinite; }
+      @keyframes boot-pulse { 50% { transform: translateY(-3px); box-shadow: 0 0 58px rgba(111,82,220,.42); } }
+      @keyframes boot-line { from { transform: translateX(-120%); } to { transform: translateX(340%); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot"><div class="boot-inner"><div class="boot-orb"></div><div class="boot-copy"><strong>Nova запускается</strong><span>Подключаю Core и голосовые сервисы…</span></div><div class="boot-line"></div></div></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

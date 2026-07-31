@@ -138,6 +138,26 @@ def create_bridge():
     )
 
 
+def test_manual_proactive_check_triggers_callback() -> None:
+    async def scenario() -> None:
+        desktop = FakeDesktop()
+        requested: list[bool] = []
+        bridge = CoreDesktopBridge(
+            desktop=desktop,
+            process_manager=FakeProcessManager(),
+            memory_store=FakeMemoryStore(),
+            permission_manager=PermissionManager(),
+            llm=FakeLLM(),
+            runtime=FakeRuntime(),
+            request_proactive_check=lambda: requested.append(True),
+        )
+        await bridge.handle_command(make_command("run_proactive_check"))
+        assert requested == [True]
+        assert desktop.events[-1]["payload"]["success"] is True
+
+    asyncio.run(scenario())
+
+
 def test_publish_snapshots() -> None:
     async def scenario() -> None:
         (

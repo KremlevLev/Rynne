@@ -742,7 +742,15 @@ async def async_main() -> None:
         if legacy_overlay_enabled
         else None
     )
-    speech = SpeechService(runtime)
+    speech = SpeechService(
+        runtime,
+        event_handler=(
+            desktop_service.publish
+            if NOVA_DESKTOP_UI
+            else None
+        ),
+        warm_up_on_start=True,
+    )
     browser_manager = BrowserManager(
     headless=False
 )
@@ -1276,6 +1284,7 @@ async def async_main() -> None:
             ),
         )
     )
+    proactive_vision_check_requested = asyncio.Event()
 
     async def proactive_vision_worker() -> None:
         while not runtime.shutdown_event.is_set():
@@ -1360,10 +1369,26 @@ async def async_main() -> None:
                 )
 
             try:
-                await asyncio.wait_for(
-                    runtime.shutdown_event.wait(),
-                    timeout=delay,
+                shutdown_waiter = asyncio.create_task(
+                    runtime.shutdown_event.wait()
                 )
+                check_waiter = asyncio.create_task(
+                    proactive_vision_check_requested.wait()
+                )
+                done, pending = await asyncio.wait(
+                    {shutdown_waiter, check_waiter},
+                    timeout=delay,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    await asyncio.gather(
+                        *pending,
+                        return_exceptions=True,
+                    )
+                if check_waiter in done:
+                    proactive_vision_check_requested.clear()
             except asyncio.TimeoutError:
                 pass
 
@@ -1440,6 +1465,7 @@ async def async_main() -> None:
             await speech.say(
                 response.speech_text,
                 priority=5,
+                wait=False,
             )
 
     # =========================================================
@@ -1527,6 +1553,9 @@ async def async_main() -> None:
         mcp_gateway=mcp_gateway,
         proactive_context_store=(
             proactive_vision_observer.context_store
+        ),
+        request_proactive_check=(
+            proactive_vision_check_requested.set
         ),
 
     )

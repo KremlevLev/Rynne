@@ -10,6 +10,7 @@ from modules.audio.tts import (
     reset_interrupt_flag,
     speak,
     stop_speaking,
+    warm_up_tts,
 )
 from modules.domain.state import (
     AssistantState,
@@ -272,8 +273,12 @@ class SpeechService:
     def __init__(
         self,
         runtime: RuntimeState,
+        event_handler=None,
+        warm_up_on_start: bool = False,
     ) -> None:
         self.runtime = runtime
+        self.event_handler = event_handler
+        self.warm_up_on_start = warm_up_on_start
 
         self._queue: asyncio.PriorityQueue[
             tuple[
@@ -287,6 +292,7 @@ class SpeechService:
 
         self._counter = itertools.count()
         self._worker_task: asyncio.Task[None] | None = None
+        self._warmup_task: asyncio.Task[None] | None = None
 
         self._closed = False
 
@@ -326,6 +332,11 @@ class SpeechService:
                 self._run(),
                 name="nova-speech-worker",
             )
+            if self.warm_up_on_start:
+                self._warmup_task = asyncio.create_task(
+                    asyncio.to_thread(warm_up_tts),
+                    name="nova-tts-warmup",
+                )
 
             logger.info("TTS worker запущен.")
 
@@ -378,6 +389,7 @@ class SpeechService:
                 completed,
             )
         )
+        self._publish_status("queued", "Готовлю голосовой ответ…")
 
         if not wait:
             return
@@ -472,6 +484,17 @@ class SpeechService:
 
             await self.runtime.set_state(next_state)
 
+    def _publish_status(self, status: str, message: str) -> None:
+        if self.event_handler is not None:
+            self.event_handler(
+                "voice_status",
+                {
+                    "status": status,
+                    "message": message,
+                    "mode": "tts",
+                },
+            )
+
     async def close(self) -> None:
         async with self._lifecycle_lock:
             if self._closed:
@@ -497,6 +520,21 @@ class SpeechService:
                 logger.exception(
                     "Ошибка остановки TTS при закрытии."
                 )
+
+            if self._warmup_task is not None:
+                # asyncio.to_thread itself cannot abort an in-flight model load,
+                # but awaiting it prevents a detached task from outliving Core.
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(self._warmup_task),
+                        timeout=5.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("TTS warm-up всё ещё завершается в фоне.")
+                except Exception:
+                    logger.exception("Ошибка фоновой подготовки TTS.")
+                finally:
+                    self._warmup_task = None
 
             # Завершаем ожидающие сообщения.
             while True:
@@ -573,6 +611,7 @@ class SpeechService:
 
                 self._current_future = completed
                 self._current_generation = generation
+                speech_succeeded = False
 
                 try:
                     # Sentinel.
@@ -594,6 +633,7 @@ class SpeechService:
                     await self.runtime.set_state(
                         AssistantState.SPEAKING
                     )
+                    self._publish_status("speaking", "Nova отвечает голосом…")
 
                     chunks = split_speech_chunks(text)
 
@@ -610,10 +650,17 @@ class SpeechService:
                             )
                             break
 
-                        await asyncio.to_thread(
+                        played = await asyncio.to_thread(
                             speak,
                             chunk,
                         )
+                        if played is False:
+                            if generation != self._generation:
+                                break
+                            raise RuntimeError(
+                                "Silero не смог синтезировать или воспроизвести речь."
+                            )
+                    speech_succeeded = generation == self._generation
 
                     if (
                         completed is not None
@@ -633,6 +680,10 @@ class SpeechService:
                 except Exception as exc:
                     logger.exception(
                         "Ошибка TTS worker."
+                    )
+                    self._publish_status(
+                        "error",
+                        "Голос временно недоступен; текстовый ответ уже показан.",
                     )
 
                     if (
@@ -656,6 +707,8 @@ class SpeechService:
                         await self.runtime.set_state(
                             next_state
                         )
+                    if speech_succeeded:
+                        self._publish_status("ready", "Голос готов.")
 
         except asyncio.CancelledError:
             logger.info("TTS worker отменен.")

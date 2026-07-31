@@ -58,6 +58,7 @@ class CoreDesktopBridge:
         background_plan_manager=None,
         mcp_gateway=None,
         proactive_context_store=None,
+        request_proactive_check=None,
     ) -> None:
         self.desktop = desktop
         self.process_manager = (
@@ -86,6 +87,7 @@ class CoreDesktopBridge:
         self.proactive_context_store = (
             proactive_context_store
         )
+        self.request_proactive_check = request_proactive_check
         self._last_submission: dict[str, Any] | None = None
         self._reported_plan_ids: set[str] = set()
         self._reported_bg_ids: set[str] = set()
@@ -113,6 +115,9 @@ class CoreDesktopBridge:
             config = getattr(detector, "config", None)
             payload["wake_word"] = str(
                 getattr(config, "wake_word", "нова")
+            )
+            payload["wake_word_sensitivity"] = float(
+                getattr(config, "sensitivity", 0.72)
             )
         return payload
 
@@ -533,6 +538,36 @@ class CoreDesktopBridge:
             return
 
         try:
+            if action == "run_proactive_check":
+                if self.request_proactive_check is None:
+                    raise RuntimeError("Проверка активного окна недоступна.")
+                self.request_proactive_check()
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message="Проверка активного окна запущена.",
+                )
+                return
+
+            if action == "set_wake_word_sensitivity":
+                wake_runtime = getattr(self.mode_manager, "wake_runtime", None)
+                config = getattr(getattr(wake_runtime, "detector", None), "config", None)
+                if config is None:
+                    raise RuntimeError("Wake word detector недоступен.")
+                sensitivity = min(1.0, max(0.0, float(payload.get("value", 0.72))))
+                config.sensitivity = sensitivity
+                if self.preferences is not None:
+                    self.desktop.publish(
+                        "preferences",
+                        self._preferences_payload(),
+                    )
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message=f"Чувствительность wake word: {round(sensitivity * 100)}%.",
+                )
+                return
+
             if action == "refresh":
                 await self.publish_snapshots()
 

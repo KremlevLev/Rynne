@@ -165,6 +165,27 @@ def test_failed_server_process_creates_high_priority_suggestion() -> None:
         database.close()
 
 
+def test_restored_or_unknown_process_completion_is_not_replayed() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            local_hour=lambda: 12,
+        )
+        base = {
+            "process_id": "old_test",
+            "label": "test_script",
+            "command": ["python", "-c", "print('old')"],
+            "status": "exited",
+            "exit_code": 0,
+            "restored": True,
+        }
+        assert engine.observe_processes([base]) == []
+        assert engine.observe_processes([{**base, "restored": False, "exit_code": None}]) == []
+        database.close()
+
+
 def test_successful_test_process_is_classified_separately() -> None:
     with tempfile.TemporaryDirectory() as directory:
         database = Database(Path(directory) / "nova.db")

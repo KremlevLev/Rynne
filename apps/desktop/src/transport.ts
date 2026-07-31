@@ -125,6 +125,7 @@ class DemoNovaTransport implements NovaTransport {
   private timers = new Set<number>();
   private seeded = false;
   private voiceActive = false;
+  private inputMode = "sleep";
 
   async connect(
     onEvent: EventListener,
@@ -136,7 +137,13 @@ class DemoNovaTransport implements NovaTransport {
     if (!this.seeded) {
       this.seeded = true;
       this.push("runtime", { status: "idle", voice_enabled: true });
-      this.push("preferences", { proactive_vision_enabled: true });
+      this.push("preferences", {
+        proactive_vision_enabled: true,
+        input_mode: this.inputMode,
+        wake_word_available: true,
+        wake_word: "Нова",
+        wake_word_sensitivity: 0.78,
+      });
       this.push("processes", {
         processes: [
           {
@@ -191,14 +198,50 @@ class DemoNovaTransport implements NovaTransport {
     }
     if (action === "toggle_voice_mode") {
       this.voiceActive = !this.voiceActive;
+      this.inputMode = this.voiceActive ? "continuous" : "sleep";
       this.push("preferences", {
         proactive_vision_enabled: true,
-        input_mode: this.voiceActive ? "continuous" : "text_only",
+        input_mode: this.inputMode,
+        wake_word_available: true,
+        wake_word: "Нова",
+        wake_word_sensitivity: 0.78,
       });
       this.push("voice_status", {
         status: this.voiceActive ? "listening" : "stopped",
         message: this.voiceActive ? "Слушаю микрофон…" : "Голосовой ввод остановлен.",
       });
+    }
+    if (action === "set_input_mode") {
+      this.inputMode = String(payload.input_mode ?? "sleep");
+      this.voiceActive = this.inputMode === "continuous";
+      this.push("preferences", {
+        proactive_vision_enabled: true,
+        input_mode: this.inputMode,
+        wake_word_available: true,
+        wake_word: "Нова",
+        wake_word_sensitivity: 0.78,
+      });
+      this.push("voice_status", {
+        status: this.inputMode === "wake_word" ? "waiting_wake_word" : this.inputMode,
+        message: this.inputMode === "wake_word" ? "Жду «Нова»…" : "Режим микрофона изменён.",
+      });
+    }
+    if (action === "set_wake_word_sensitivity") {
+      this.push("preferences", {
+        proactive_vision_enabled: true,
+        input_mode: this.inputMode,
+        wake_word_available: true,
+        wake_word: "Нова",
+        wake_word_sensitivity: Number(payload.value ?? 0.78),
+      });
+    }
+    if (action === "run_proactive_check") {
+      this.push("proactive_status", { phase: "scanning", message: "Проверяю активное окно…" });
+      this.later(650, () => this.push("proactive_status", {
+        phase: "checked",
+        message: "Проверено — всё спокойно",
+        suggestions: 0,
+      }));
     }
   }
 

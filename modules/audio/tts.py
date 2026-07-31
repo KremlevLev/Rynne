@@ -26,11 +26,19 @@ def is_tts_playing() -> bool:
 MODEL_PATH = "data/v5_ru.pt"
 _silero_model = None
 _torch_module = None
+_silero_engine_lock = threading.Lock()
 
 def _get_silero_engine():
     """Ленивая инициализация Silero TTS v5 на CPU"""
     global _silero_model, _torch_module
-    if _silero_model is None:
+    if _silero_model is not None:
+        return _silero_model
+
+    # Startup warm-up and the first reply can arrive at the same time. Torch
+    # PackageImporter is not safe to initialize twice in parallel.
+    with _silero_engine_lock:
+        if _silero_model is not None:
+            return _silero_model
         if _torch_module is None:
             logger.info("Загрузка локального TTS runtime...")
             import torch
@@ -61,10 +69,15 @@ def _get_silero_engine():
             logger.error(f"Ошибка при инициализации Silero v5: {e}")
     return _silero_model
 
-def speak(text: str, speaker: str = "baya"):
+def warm_up_tts() -> bool:
+    """Load the local model before the first assistant reply."""
+    return _get_silero_engine() is not None
+
+
+def speak(text: str, speaker: str = "baya") -> bool:
     """Синтезирует и озвучивает текст через Silero v5 напрямую в ОЗУ с поддержкой прерывания"""
     if not text:
-        return
+        return False
         
     cleaned_text = text.strip()
     
@@ -73,12 +86,12 @@ def speak(text: str, speaker: str = "baya"):
     # Если букв нет (например, пришли только кавычки, точки, скобки или пробелы), пропускаем.
     if not any(char.isalpha() for char in cleaned_text):
         logger.debug(f"Пропуск озвучки строки без букв: '{cleaned_text}'")
-        return
+        return False
         
     # ФАЗА 1: Прерываемся перед началом работы, если флаг затыкания уже установлен
     if _speech_interrupted:
         logger.debug("Воспроизведение отменено: зафиксирован флаг прерывания речи.")
-        return
+        return False
     
     from modules.ui.overlay import update_status
     update_status("ГОВОРИТ")
@@ -89,14 +102,14 @@ def speak(text: str, speaker: str = "baya"):
     model = _get_silero_engine()
     if not model:
         logger.error("Голосовой движок Silero не запущен.")
-        return
+        return False
         
     try:
         sample_rate = 24000  # 24 кГц
         
         # ФАЗА 2: Проверка непосредственно перед тяжелым синтезом нейросети
         if _speech_interrupted:
-            return
+            return False
             
         # Генерация аудио
         audio = model.apply_tts(
@@ -109,7 +122,7 @@ def speak(text: str, speaker: str = "baya"):
         
         # ФАЗА 3: Проверка перед самой отправкой аудио на звуковую карту
         if _speech_interrupted:
-            return
+            return False
             
         audio_data = audio.numpy()
         global _tts_playing
@@ -123,9 +136,11 @@ def speak(text: str, speaker: str = "baya"):
         finally:
             with _tts_playing_lock:
                 _tts_playing = False
+        return True
         
     except Exception as e:
         logger.error(f"Ошибка во время синтеза или воспроизведения Silero: {e}")
+        return False
 
 
 

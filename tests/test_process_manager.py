@@ -7,6 +7,7 @@ import time
 from modules.windows.process_manager import (
     ProcessManager,
     _process_exists,
+    _process_matches_identity,
 )
 
 
@@ -14,6 +15,10 @@ def test_process_exists_never_signals_current_windows_process() -> None:
     assert _process_exists(os.getpid())
     assert not _process_exists(None)
     assert not _process_exists(-1)
+    assert not _process_matches_identity(
+        os.getpid(),
+        ["definitely-not-the-current-process.exe"],
+    )
 
 
 def test_start_and_stop_process() -> None:

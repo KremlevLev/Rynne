@@ -147,9 +147,9 @@ class WakeCapture:
 
 
 WAKE_PREFIX_PATTERNS = (
-    r"^\s*нов[ао][\s,;:!?.-]*",
     r"^\s*эй[\s,;:!?.-]+нов[ао][\s,;:!?.-]*",
     r"^\s*слушай[\s,;:!?.-]+нов[ао][\s,;:!?.-]*",
+    r"^\s*(?:нов[ао]|наува|новчик|nova)[\s,;:!?.-]*",
 )
 
 
@@ -205,19 +205,24 @@ def strip_wake_prefix(
     """
     clean = str(text).strip()
 
-    for pattern in WAKE_PREFIX_PATTERNS:
-        updated = re.sub(
-            pattern,
-            "",
-            clean,
-            count=1,
-            flags=re.IGNORECASE,
-        )
-
-        if updated != clean:
-            return updated.strip(
-                " \t\r\n,;:!?.-"
+    # STT may repeat the invocation ("Нова, Нова") or return Latin "Nova".
+    # Remove every leading invocation so a wake-only utterance never becomes
+    # an accidental LLM request.
+    changed = True
+    while clean and changed:
+        changed = False
+        for pattern in WAKE_PREFIX_PATTERNS:
+            updated = re.sub(
+                pattern,
+                "",
+                clean,
+                count=1,
+                flags=re.IGNORECASE,
             )
+            if updated != clean:
+                clean = updated.strip(" \t\r\n,;:!?.-")
+                changed = True
+                break
 
     return clean.strip()
 

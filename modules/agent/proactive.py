@@ -304,6 +304,9 @@ class ProactiveSuggestionEngine:
         now = self.clock()
         suggestions: list[ProactiveSuggestion] = []
         for process in processes:
+            # Do not replay old completions restored from metadata at startup.
+            if bool(process.get("restored")):
+                continue
             status = str(process.get("status") or "")
             if status != "exited":
                 continue
@@ -312,6 +315,10 @@ class ProactiveSuggestionEngine:
             if not process_id:
                 continue
             exit_code = process.get("exit_code")
+            # A restored process has no Popen handle, so its exact exit code
+            # cannot be recovered. Do not label an unknown code as failure.
+            if exit_code is None:
+                continue
             source_key = (
                 f"process:{process_id}:{status}:{exit_code}"
             )
@@ -726,6 +733,8 @@ class ProactiveSuggestionEngine:
         now = self.clock()
         suggestions: list[ProactiveSuggestion] = []
         for process in processes:
+            if bool(process.get("restored")):
+                continue
             if str(process.get("status") or "") != "running":
                 continue
 
