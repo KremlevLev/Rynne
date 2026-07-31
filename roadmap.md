@@ -30,9 +30,9 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - ✅ Добавлена installer-сборка: headless Python Core пакуется PyInstaller
   `onedir`, включается в Tauri resources и устанавливается через NSIS без
   требования Python/Node/Rust на пользовательском компьютере.
-- ✅ Свежий NSIS после voice/proactive/provider-pool изменений собран 31.07.2026:
-  `Nova_0.1.6_x64-setup.exe`, 617.8 MiB, SHA-256
-  `AC25B3F9FF970CE65102DB7ABCCF105483AC7030D92CAD41D43DFE415A0D0DC8`;
+- ✅ Свежий NSIS после исправления layout диалога, явных режимов UI и просмотра
+  маскированных API-ключей собран 31.07.2026: `Nova_0.1.6_x64-setup.exe`,
+  617.8 MiB, SHA-256 `CF06C50E4503B5056C7F1441487C0E1D72C3216F8BA5B0CD08E6DCD5A9E09495`;
   следующий release-шаг — code signing.
 - ✅ Release supervisor разрешает фактический Windows NSIS resource layout
   (`resources/nova-core`) и хранит runtime data вне каталога установки.
