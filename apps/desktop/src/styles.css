@@ -240,6 +240,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .proactive-phase { display: flex; align-items: center; gap: 8px; min-width: 0; color: #8d97a8; font-size: 10px; }
 .proactive-phase i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #5e6878; }
 .proactive-phase.scanning i { background: var(--cyan); box-shadow: 0 0 12px rgba(82,215,234,.7); animation: voice-pulse 1.3s infinite; }
+.proactive-phase.investigating i { background: #a88cff; box-shadow: 0 0 12px rgba(168,140,255,.7); animation: voice-pulse 1.1s infinite; }
 .proactive-phase.checked i { background: #4fd9a0; }
 .proactive-phase.error i { background: #ff718d; }
 .proactive-test button { padding: 8px 12px; border: 1px solid rgba(126,105,221,.32); border-radius: 8px; color: #d9d4ff; background: rgba(126,105,221,.1); cursor: pointer; }

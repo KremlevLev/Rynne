@@ -7,6 +7,7 @@ from modules.agent.execution_memory import ExecutionMemory
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
 from modules.tools.runtime import ToolRegistry, ToolRunner
+from modules.tools.base import RiskLevel
 
 
 class RefusalThenToolLLM:
@@ -95,6 +96,135 @@ def test_action_refusal_retries_with_real_tools() -> None:
         and message.get("content") == "Проверь время"
         for message in llm.history
     ) == 1
+
+
+class TwoPromisesThenToolLLM(RefusalThenToolLLM):
+    async def complete(self, **kwargs) -> ModelResponse:
+        self.calls += 1
+        schemas = kwargs.get("tools") or []
+        self.seen_tool_names.append({
+            schema["function"]["name"]
+            for schema in schemas
+        })
+        if self.calls <= 2:
+            return ModelResponse(
+                provider="fake",
+                model="fake",
+                key_label="test",
+                text="Хорошо, сейчас проверю.",
+                tool_calls=[],
+            )
+        if self.calls == 3:
+            assert "TOOL CALL REPAIR" in kwargs["messages"][0]["content"]
+            return ModelResponse(
+                provider="fake",
+                model="fake",
+                key_label="test",
+                text="",
+                tool_calls=[{
+                    "id": "call_time_repaired",
+                    "type": "function",
+                    "function": {
+                        "name": "get_current_time",
+                        "arguments": "{}",
+                    },
+                }],
+            )
+        return ModelResponse(
+            provider="fake",
+            model="fake",
+            key_label="test",
+            text="Готово.",
+            tool_calls=[],
+        )
+
+
+def test_action_promise_gets_second_tool_call_repair() -> None:
+    calls: list[str] = []
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "get_current_time",
+            "description": "Возвращает текущее время.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        },
+    }
+    registry = ToolRegistry.from_legacy(
+        [schema],
+        {"get_current_time": lambda: (
+            calls.append("get_current_time")
+            or ToolResult.ok("Время проверено.")
+        )},
+    )
+    llm = TwoPromisesThenToolLLM()
+    agent = AgentService(llm, registry, ToolRunner(registry))
+
+    response = asyncio.run(agent.run("Посмотри текущее время"))
+
+    assert response.success
+    assert calls == ["get_current_time"]
+    assert llm.calls == 4
+
+
+class CaptureAmbientToolsLLM:
+    def __init__(self) -> None:
+        self.history = []
+        self.tool_names: set[str] = set()
+
+    async def complete(self, **kwargs) -> ModelResponse:
+        self.tool_names = {
+            schema["function"]["name"]
+            for schema in (kwargs.get("tools") or [])
+        }
+        return ModelResponse(
+            provider="fake",
+            model="fake",
+            key_label="test",
+            text="Безопасная проверка не требуется.",
+            tool_calls=[],
+        )
+
+
+def test_ambient_agent_never_receives_mutating_tool_schemas() -> None:
+    schemas = [
+        {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": name,
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            },
+        }
+        for name in ("get_system_status", "open_application")
+    ]
+    registry = ToolRegistry.from_legacy(
+        schemas,
+        {
+            "get_system_status": lambda: ToolResult.ok("ok"),
+            "open_application": lambda: ToolResult.ok("opened"),
+        },
+    )
+    assert registry.get("get_system_status").risk == RiskLevel.READ_ONLY
+    llm = CaptureAmbientToolsLLM()
+    agent = AgentService(llm, registry, ToolRunner(registry))
+
+    from modules.input_hub.models import RequestSource, UserRequest
+    request = UserRequest.from_text(
+        "Проверь систему и открой приложение",
+        source=RequestSource.BACKGROUND_TASK,
+        metadata={"proactive_autonomous": True},
+    )
+    asyncio.run(agent.run(request, use_tools=True))
+
+    assert llm.tool_names == {"get_system_status"}
 
 
 class SequentialBrowserLLM:

@@ -515,9 +515,11 @@ export function App() {
       ? "Выкл"
       : proactivePhase === "scanning"
         ? "Смотрю"
-        : proactivePhase === "error"
-          ? "Ошибка"
-          : "Вкл";
+        : proactivePhase === "investigating"
+          ? "Исследую"
+          : proactivePhase === "error"
+            ? "Ошибка"
+            : "Вкл";
 
   return (
     <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
@@ -820,7 +822,7 @@ export function App() {
               </div>
               <div className="proactive-test">
                 <span className={`proactive-phase ${proactivePhase}`}><i />{proactive ? proactiveStatus : "Режим выключен"}</span>
-                <button onClick={() => void runProactiveCheck()} disabled={!proactive || proactivePhase === "scanning" || connection !== "connected"}>
+                <button onClick={() => void runProactiveCheck()} disabled={!proactive || ["scanning", "investigating"].includes(proactivePhase) || connection !== "connected"}>
                   Проверить сейчас
                 </button>
               </div>
@@ -949,7 +951,7 @@ export function App() {
           <button
             className="nearby-check"
             onClick={() => void runProactiveCheck()}
-            disabled={!proactive || proactivePhase === "scanning" || connection !== "connected"}
+            disabled={!proactive || ["scanning", "investigating"].includes(proactivePhase) || connection !== "connected"}
           >
             Проверить через 3 секунды
           </button>

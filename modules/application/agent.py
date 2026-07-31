@@ -12,7 +12,7 @@ from typing import Any
 from modules.application.reporting import (
     build_assistant_response_from_tools,
 )
-from modules.tools.base import ToolContext
+from modules.tools.base import RiskLevel, ToolContext
 from modules.tools.budgets import (
     AgentBudget,
     BudgetManager,
@@ -85,6 +85,17 @@ ACTION_PATTERNS = (
     r"\bотправь\b",
     r"\bзаполни\b",
     r"\bсобери\b",
+    r"\bзайди\b",
+    r"\bперейди\b",
+    r"\bпосмотри\b",
+    r"\bпокажи\b",
+    r"\bчекни\b",
+    r"\bпроведи\b",
+    r"\bopen\b",
+    r"\blaunch\b",
+    r"\bcheck\b",
+    r"\bfind\b",
+    r"\bsearch\b",
 )
 
 
@@ -95,6 +106,17 @@ CAPABILITY RECOVERY:
 высокоуровневый skill. Не заявляй, что действие невозможно, пока не проверила
 этот набор. Если не хватает только одного критичного аргумента, задай один
 короткий уточняющий вопрос. Не имитируй успешное выполнение без tool result.
+""".strip()
+
+TOOL_CALL_REPAIR_PROMPT = """
+TOOL CALL REPAIR:
+Предыдущая попытка описала действие словами, но не вызвала инструмент. Это не
+результат. Ещё раз сопоставь исходную цель со схемами доступных tools и сейчас
+верни реальный tool call для первого проверяемого шага. Не обещай выполнить
+действие позже и не пиши «ожидаю результат», пока tool не был вызван. Если
+готового узкого инструмента нет, используй подходящий высокоуровневый plan/tool.
+Задай вопрос только когда без одного конкретного значения невозможно безопасно
+сформировать даже первый вызов.
 """.strip()
 
 TOOL_CONTINUATION_PROMPT = """
@@ -926,6 +948,23 @@ class AgentService:
             & self.registry.names
         )
 
+        # Ambient diagnostics receive only non-mutating capabilities. Policy
+        # repeats the same restriction at execution time as defence in depth.
+        proactive_autonomous_request = bool(
+            request_object is not None
+            and request_object.metadata.get("proactive_autonomous")
+        )
+        if proactive_autonomous_request:
+            selected_tool_names = {
+                name
+                for name in selected_tool_names
+                if (
+                    (definition := self.registry.get(name))
+                    is not None
+                    and definition.risk == RiskLevel.READ_ONLY
+                )
+            }
+
         tool_schemas = (
             self.registry.schemas(
                 selected_tool_names
@@ -1060,6 +1099,16 @@ class AgentService:
             expanded_tool_names.update(
                 selected_tool_names
             )
+            if proactive_autonomous_request:
+                expanded_tool_names = {
+                    name
+                    for name in expanded_tool_names
+                    if (
+                        (definition := self.registry.get(name))
+                        is not None
+                        and definition.risk == RiskLevel.READ_ONLY
+                    )
+                }
             expanded_tool_schemas = self.registry.schemas(
                 expanded_tool_names
             )
@@ -1108,6 +1157,61 @@ class AgentService:
                         ),
                         exc,
                     )
+
+        # Второй recovery нужен не для бесконечных повторов, а для частого
+        # сбоя tool-calling моделей: модель перечисляет правильные tools, но
+        # снова отвечает обещанием. Последняя попытка явно требует первый
+        # исполнимый шаг и получает предыдущий ответ как отрицательный пример.
+        if (
+            not tool_calls
+            and use_tools
+            and action_was_requested
+            and tool_schemas
+            and budget_state.logical_model_calls
+            < self.default_budget.max_logical_model_calls
+        ):
+            self.budget_manager.record_model_call(turn_id)
+            repair_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        SYSTEM_PROMPT
+                        + "\n\n"
+                        + CAPABILITY_RECOVERY_PROMPT
+                        + "\n\n"
+                        + TOOL_CALL_REPAIR_PROMPT
+                        + execution_prompt
+                        + learned_prompt
+                        + interactive_browser_prompt
+                    ),
+                },
+                *messages[1:],
+                {
+                    "role": "assistant",
+                    "content": generated.text,
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Исправь предыдущий ответ: вызови доступный "
+                        "инструмент для первого шага исходной задачи."
+                    ),
+                },
+            ]
+            try:
+                generated = await self._request_model(
+                    complexity=complexity,
+                    messages=repair_messages,
+                    tools=tool_schemas,
+                    allow_tools=True,
+                    has_image=has_image,
+                )
+                tool_calls = collect_tool_calls(generated)
+            except Exception as exc:
+                logger.warning(
+                    "Tool-call repair завершился ошибкой: %s",
+                    exc,
+                )
 
         assistant_message: dict[str, Any] = {
             "role": "assistant",
@@ -1256,6 +1360,12 @@ class AgentService:
                     tool_call["function"]["name"],
                 )
 
+                proactive_autonomous = bool(
+                    request_object
+                    and request_object.metadata.get(
+                        "proactive_autonomous"
+                    )
+                )
                 tool_context = ToolContext.create(
                     session_id=self.session_id,
                     turn_id=turn_id,
@@ -1266,7 +1376,11 @@ class AgentService:
                         if request_object is not None
                         else None
                     ),
-                    source="assistant",
+                    source=(
+                        "proactive"
+                        if proactive_autonomous
+                        else "assistant"
+                    ),
                     metadata={
                         "user_request": user_text,
                         "has_image": has_image,
@@ -1291,6 +1405,9 @@ class AgentService:
                             )
                             if request_object is not None
                             else False
+                        ),
+                        "proactive_autonomous": (
+                            proactive_autonomous
                         ),
                     },
                 )

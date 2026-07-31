@@ -120,6 +120,14 @@ def evaluate_policy(
         )
         return PolicyDecision.DENY
 
+    # Ambient Nova may independently collect facts, but it must never mutate
+    # the machine, browser or external services. This guard lives in policy,
+    # below the LLM, so an incorrect proactive plan cannot bypass it.
+    if policy_context.metadata.get("proactive_autonomous"):
+        if policy_context.risk == RiskLevel.READ_ONLY:
+            return PolicyDecision.ALLOW
+        return PolicyDecision.DENY
+
     if policy_context.tool_name in ALWAYS_ALLOWED:
         return PolicyDecision.ALLOW
 

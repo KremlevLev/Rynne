@@ -105,6 +105,9 @@ from modules.agent.system_health import (
 from modules.agent.proactive_vision import (
     ProactiveVisionObserver,
 )
+from modules.agent.proactive_diagnostics import (
+    ProactiveDiagnosticRunner,
+)
 from modules.storage.artifacts import (
     ArtifactStore,
 )
@@ -1284,6 +1287,15 @@ async def async_main() -> None:
             ),
         )
     )
+    proactive_diagnostic_runner = ProactiveDiagnosticRunner(
+        AgentService(
+            llm,
+            registry,
+            runner,
+            execution_memory=ExecutionMemory(),
+        ),
+        workspace_path=str(Path.cwd()),
+    )
     proactive_vision_check_requested = asyncio.Event()
 
     async def proactive_vision_worker() -> None:
@@ -1335,6 +1347,21 @@ async def async_main() -> None:
                     )
                     suggestion_count = 0
                     if insight is not None:
+                        if NOVA_DESKTOP_UI:
+                            desktop_service.publish(
+                                "proactive_status",
+                                {
+                                    "phase": "investigating",
+                                    "message": (
+                                        "Нашла повод помочь — собираю "
+                                        "безопасные факты под капотом…"
+                                    ),
+                                    "manual": manual_check,
+                                },
+                            )
+                        insight = await proactive_diagnostic_runner.investigate(
+                            insight
+                        )
                         for suggestion in (
                             proactive_engine
                             .observe_visual_insight(

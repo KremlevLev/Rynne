@@ -93,6 +93,28 @@ def test_proactive_suggestion_write_requires_confirmation() -> None:
     )
 
 
+def test_autonomous_proactive_run_is_strictly_read_only() -> None:
+    read_context = create_policy_context(
+        "get_system_status",
+        risk=RiskLevel.READ_ONLY,
+    )
+    read_context.metadata["proactive_autonomous"] = True
+    assert evaluate_policy(read_context) == PolicyDecision.ALLOW
+
+    for risk in (
+        RiskLevel.LOW,
+        RiskLevel.WRITE,
+        RiskLevel.EXECUTE,
+        RiskLevel.DESTRUCTIVE,
+    ):
+        context = create_policy_context(
+            "ambient_candidate",
+            risk=risk,
+        )
+        context.metadata["proactive_autonomous"] = True
+        assert evaluate_policy(context) == PolicyDecision.DENY
+
+
 def test_execute_risk_requires_confirmation() -> None:
     context = create_policy_context(
         "run_terminal_command",
