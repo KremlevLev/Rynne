@@ -19,7 +19,6 @@ from modules.brain.model_router import (
     TaskComplexity,
     build_model_route,
 )
-from modules.browser.security import BrowserSecurity
 from modules.tools.os_utils import get_active_window_rect
 
 
@@ -50,6 +49,14 @@ RUSSIAN_INJECTION_PATTERN = re.compile(
         r"(?:все\s+)?(?:предыдущие\s+)?инструкции|"
         r"системн(?:ый|ые)\s+(?:промпт|инструкции)|"
         r"(?:выполни|запусти)\s+(?:эту\s+)?команду\s*:"
+    )
+)
+ENGLISH_INJECTION_PATTERN = re.compile(
+    (
+        r"(?i)(?:ignore|disregard|forget)\s+(?:all\s+)?"
+        r"(?:previous\s+)?instructions|"
+        r"(?:system|developer)\s+(?:prompt|instructions)|"
+        r"(?:run|execute)\s+(?:this\s+)?command\s*:"
     )
 )
 
@@ -181,13 +188,23 @@ class ProactiveVisionObserver:
         )
         self._last_title = ""
         self._last_fingerprint: int | None = None
-        self._security = BrowserSecurity()
+        self.last_outcome: dict[str, Any] = {
+            "code": "idle",
+            "message": "Проверка ещё не выполнялась.",
+        }
         self.context_store = (
             context_store
             or ProactiveVisionContextStore(
                 clock=clock
             )
         )
+
+    def _set_outcome(self, code: str, message: str, **details: Any) -> None:
+        self.last_outcome = {
+            "code": code,
+            "message": message,
+            **details,
+        }
 
     @staticmethod
     def _capture_active_window() -> Image.Image | None:
@@ -294,36 +311,39 @@ class ProactiveVisionObserver:
         )
         return clean[:max_length].strip()
 
-    async def inspect(self) -> ProactiveVisionInsight | None:
+    async def inspect(self, *, force: bool = False) -> ProactiveVisionInsight | None:
         title = str(
             self.window_title_provider() or ""
         ).strip()
         lowered_title = title.casefold()
-        if (
-            not title
-            or "nova" in lowered_title
-            or any(
+        if not title:
+            self._set_outcome("no_active_window", "Не удалось определить активное окно.")
+            return None
+        if lowered_title in {"nova", "nova desktop"}:
+            self._set_outcome("nova_window", "Откройте другое окно — Nova не анализирует саму себя.")
+            return None
+        if any(
                 marker in lowered_title
                 for marker in SENSITIVE_WINDOW_MARKERS
-            )
-        ):
+            ):
+            self._set_outcome("sensitive_window", "Пропущено чувствительное окно.")
             return None
 
         image = await asyncio.to_thread(
             self.image_provider
         )
         if image is None:
+            self._set_outcome("capture_failed", "Не удалось сделать снимок активного окна.")
             return None
         fingerprint = self._fingerprint(image)
-        if self._is_duplicate(title, fingerprint):
+        if not force and self._is_duplicate(title, fingerprint):
+            self._set_outcome("duplicate", "Экран не изменился с прошлой проверки.")
             return None
-
-        self._last_title = title
-        self._last_fingerprint = fingerprint
         candidates = build_model_route(
             TaskComplexity.VISION
         )
         if not candidates:
+            self._set_outcome("no_model", "Нет доступной vision-модели или API-ключа.")
             return None
 
         jpeg_bytes = self._jpeg_bytes(image)
@@ -383,7 +403,12 @@ class ProactiveVisionObserver:
         )
         payload = self._extract_json(response.text)
         if payload is None:
+            self._set_outcome("invalid_response", "Vision-модель вернула ответ в неверном формате.")
             return None
+
+        # Only a completed, parseable model pass becomes duplicate state.
+        self._last_title = title
+        self._last_fingerprint = fingerprint
 
         try:
             confidence = float(
@@ -404,10 +429,19 @@ class ProactiveVisionObserver:
                 in {"true", "yes", "1", "да"}
             )
         )
-        if (
-            not should_interrupt
-            or confidence < self.min_confidence
-        ):
+        if not should_interrupt:
+            self._set_outcome(
+                "clear",
+                f"Vision не нашёл явной проблемы · уверенность {confidence:.0%}.",
+                confidence=confidence,
+            )
+            return None
+        if confidence < self.min_confidence:
+            self._set_outcome(
+                "low_confidence",
+                f"Возможная проблема замечена, но уверенность только {confidence:.0%}.",
+                confidence=confidence,
+            )
             return None
 
         suggested_request = self._safe_text(
@@ -425,25 +459,15 @@ class ProactiveVisionObserver:
         if (
             not message
             or not suggested_request
-            or self._security.detect_injection(
-                " ".join(
-                    (
-                        message,
-                        reason,
-                        suggested_request,
-                    )
-                )
-            )
-            or RUSSIAN_INJECTION_PATTERN.search(
-                " ".join(
-                    (
-                        message,
-                        reason,
-                        suggested_request,
-                    )
-                )
-            )
         ):
+            self._set_outcome("incomplete", "Vision заметил проблему, но не сформировал безопасное действие.")
+            return None
+        combined_suggestion = " ".join((message, reason, suggested_request))
+        if (
+            ENGLISH_INJECTION_PATTERN.search(combined_suggestion)
+            or RUSSIAN_INJECTION_PATTERN.search(combined_suggestion)
+        ):
+            self._set_outcome("blocked", "Предложение отклонено защитой от инструкций с экрана.")
             return None
 
         visual_fingerprint = self._fingerprint_text(
@@ -452,6 +476,11 @@ class ProactiveVisionObserver:
         self.context_store.put(
             visual_fingerprint,
             jpeg_bytes,
+        )
+        self._set_outcome(
+            "suggestion",
+            "Нашла явную проблему и подготовила предложение.",
+            confidence=confidence,
         )
         return ProactiveVisionInsight(
             should_interrupt=True,

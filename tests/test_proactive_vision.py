@@ -145,6 +145,52 @@ def test_proactive_vision_skips_duplicate_screen(
     assert len(llm.calls) == 1
 
 
+def test_manual_check_forces_duplicate_screen_reanalysis(monkeypatch) -> None:
+    patch_vision_route(monkeypatch)
+    llm = FakeVisionLLM(
+        '{"should_interrupt":false,"confidence":0.2}'
+    )
+    observer = ProactiveVisionObserver(
+        llm,
+        window_title_provider=lambda: "Editor",
+        image_provider=sample_image,
+    )
+
+    assert asyncio.run(observer.inspect()) is None
+    assert asyncio.run(observer.inspect(force=True)) is None
+    assert len(llm.calls) == 2
+
+
+def test_code_fix_suggestion_is_not_mistaken_for_prompt_injection(
+    monkeypatch,
+) -> None:
+    patch_vision_route(monkeypatch)
+    llm = FakeVisionLLM(
+        """
+        {
+          "should_interrupt": true,
+          "title": "Ошибки Python",
+          "message": "В редакторе видны синтаксические ошибки.",
+          "reason": "Строка import ai подсвечена как unresolved.",
+          "suggested_request": "Исправь import ai и синтаксис текущего файла",
+          "action_label": "Исправить",
+          "confidence": 0.96
+        }
+        """
+    )
+    observer = ProactiveVisionObserver(
+        llm,
+        window_title_provider=lambda: "main.py — Visual Studio Code",
+        image_provider=sample_image,
+    )
+
+    insight = asyncio.run(observer.inspect())
+
+    assert insight is not None
+    assert insight.action_label == "Исправить"
+    assert observer.last_outcome["code"] == "suggestion"
+
+
 def test_proactive_vision_never_captures_sensitive_window() -> None:
     captures = [0]
 
@@ -253,6 +299,32 @@ def test_visual_insight_is_persisted_without_screenshot() -> None:
         assert "screenshot" not in str(
             engine.journal()
         ).casefold()
+        database.close()
+
+
+def test_manual_visual_check_can_replay_existing_suggestion() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=600,
+            local_hour=lambda: 12,
+        )
+        insight = ProactiveVisionInsight(
+            should_interrupt=True,
+            title="Ошибки Python",
+            message="В файле видны ошибки.",
+            reason="Редактор показывает diagnostics.",
+            suggested_request="Исправь текущий файл",
+            action_label="Исправить",
+            confidence=0.95,
+            window_title="Editor",
+            visual_fingerprint="manual-replay",
+        )
+
+        assert len(engine.observe_visual_insight(insight)) == 1
+        assert engine.observe_visual_insight(insight) == []
+        assert len(engine.observe_visual_insight(insight, force=True)) == 1
         database.close()
 
 

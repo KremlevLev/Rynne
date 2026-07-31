@@ -14,6 +14,7 @@ export const NOVA_EVENT_TYPES = [
   "assistant_message",
   "proactive_suggestion",
   "proactive_status",
+  "proactive_check_result",
   "tool_started",
   "tool_completed",
   "task_started",

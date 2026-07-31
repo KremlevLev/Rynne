@@ -545,7 +545,7 @@ class CoreDesktopBridge:
                 self._publish_command_result(
                     command_id,
                     success=True,
-                    message="Проверка активного окна запущена.",
+                    message="Переключитесь на нужное окно — Nova проверит его через 3 секунды.",
                 )
                 return
 

@@ -236,6 +236,14 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
         body: text(payload, "message"),
         action: text(payload, "suggested_request"),
       };
+    case "proactive_check_result":
+      return {
+        id,
+        kind: "assistant",
+        title: "Nova рядом",
+        body: text(payload, "message", "Проверка активного окна завершена."),
+        status: text(payload, "outcome") === "blocked" ? "error" : "success",
+      };
     default:
       return null;
   }
@@ -445,7 +453,7 @@ export function App() {
   }
 
   async function runProactiveCheck() {
-    setProactiveStatus("Запрашиваю проверку…");
+    setProactiveStatus("Переключитесь на нужное окно — снимок через 3 секунды…");
     setProactivePhase("scanning");
     try {
       await transport.send("run_proactive_check");
@@ -930,6 +938,21 @@ export function App() {
             <li className={busy ? "active" : ""}><span />Выполнение инструментов</li>
             <li><span />Проверка результата</li>
           </ul>
+        </section>
+
+        <section className="context-card compact">
+          <header><span><Radio size={15} />Nova рядом</span><small>{proactiveBadge}</small></header>
+          <div className={`nearby-status ${proactivePhase}`}>
+            <i />
+            <span>{proactive ? proactiveStatus : "Наблюдение выключено"}</span>
+          </div>
+          <button
+            className="nearby-check"
+            onClick={() => void runProactiveCheck()}
+            disabled={!proactive || proactivePhase === "scanning" || connection !== "connected"}
+          >
+            Проверить через 3 секунды
+          </button>
         </section>
 
         <section className="context-card compact">

@@ -1287,6 +1287,7 @@ async def async_main() -> None:
     proactive_vision_check_requested = asyncio.Event()
 
     async def proactive_vision_worker() -> None:
+        manual_check = False
         while not runtime.shutdown_event.is_set():
             preference_snapshot = (
                 preferences.snapshot()
@@ -1309,6 +1310,17 @@ async def async_main() -> None:
             delay = 2.0
             if enabled:
                 try:
+                    if manual_check:
+                        if NOVA_DESKTOP_UI:
+                            desktop_service.publish(
+                                "proactive_status",
+                                {
+                                    "phase": "scanning",
+                                    "message": "Переключитесь на нужное окно — снимок через 3 секунды…",
+                                    "manual": True,
+                                },
+                            )
+                        await asyncio.sleep(3.0)
                     if NOVA_DESKTOP_UI:
                         desktop_service.publish(
                             "proactive_status",
@@ -1319,7 +1331,7 @@ async def async_main() -> None:
                         )
                     insight = (
                         await proactive_vision_observer
-                        .inspect()
+                        .inspect(force=manual_check)
                     )
                     suggestion_count = 0
                     if insight is not None:
@@ -1328,6 +1340,7 @@ async def async_main() -> None:
                             .observe_visual_insight(
                                 insight,
                                 ignore_quiet_hours=True,
+                                force=manual_check,
                             )
                         ):
                             desktop_service.publish(
@@ -1336,19 +1349,36 @@ async def async_main() -> None:
                             )
                             suggestion_count += 1
                     if NOVA_DESKTOP_UI:
+                        outcome = dict(
+                            proactive_vision_observer.last_outcome
+                        )
+                        status_message = (
+                            "Нашла повод помочь"
+                            if suggestion_count
+                            else str(
+                                outcome.get("message")
+                                or "Проверено — явных проблем не найдено."
+                            )
+                        )
                         desktop_service.publish(
                             "proactive_status",
                             {
                                 "phase": "checked",
-                                "message": (
-                                    "Нашла повод помочь"
-                                    if suggestion_count
-                                    else "Проверено — всё спокойно"
-                                ),
+                                "message": status_message,
                                 "checked_at": time.time(),
                                 "suggestions": suggestion_count,
+                                "outcome": str(outcome.get("code") or "unknown"),
+                                "manual": manual_check,
                             },
                         )
+                        if manual_check and not suggestion_count:
+                            desktop_service.publish(
+                                "proactive_check_result",
+                                {
+                                    "message": status_message,
+                                    "outcome": str(outcome.get("code") or "unknown"),
+                                },
+                            )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -1367,6 +1397,7 @@ async def async_main() -> None:
                     30.0,
                     NOVA_PROACTIVE_VISION_CHECK_SECONDS,
                 )
+                manual_check = False
 
             try:
                 shutdown_waiter = asyncio.create_task(
@@ -1389,6 +1420,7 @@ async def async_main() -> None:
                     )
                 if check_waiter in done:
                     proactive_vision_check_requested.clear()
+                    manual_check = True
             except asyncio.TimeoutError:
                 pass
 

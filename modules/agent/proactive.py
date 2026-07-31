@@ -669,6 +669,7 @@ class ProactiveSuggestionEngine:
         insight: Any,
         *,
         ignore_quiet_hours: bool = False,
+        force: bool = False,
     ) -> list[ProactiveSuggestion]:
         """Persists a safe vision insight without storing its screenshot."""
         if (
@@ -690,11 +691,14 @@ class ProactiveSuggestionEngine:
         if not fingerprint:
             return []
         source_key = f"visual:{fingerprint}"
-        if self._was_emitted(source_key):
+        already_emitted = self._was_emitted(source_key)
+        if already_emitted and not force:
             return []
 
         now = self.clock()
         if (
+            not force
+            and
             now - self._last_emitted.get(kind, 0.0)
             < self.cooldown_seconds
         ):
@@ -713,7 +717,8 @@ class ProactiveSuggestionEngine:
             ),
             action_label=str(insight.action_label),
         )
-        self._store(suggestion)
+        if not already_emitted:
+            self._store(suggestion)
         self._last_emitted[kind] = now
         return [suggestion]
 

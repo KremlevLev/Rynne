@@ -172,6 +172,14 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .context-card ul { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; color: #5d6778; font-size: 9px; }.context-card li { display: flex; align-items: center; gap: 7px; }.context-card li > span { width: 12px; height: 12px; border: 1px solid #343b49; border-radius: 50%; }
 .context-card li.done { color: #8f9aaa; }.context-card li.done svg { color: var(--success); }.context-card li.active { color: #bcb5eb; }.context-card li.active span { border-color: var(--accent); box-shadow: inset 0 0 0 3px #191b26; background: var(--accent); }
 .context-card.compact { padding-bottom: 13px; }.capabilities { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }.capabilities span { padding: 4px 7px; border-radius: 6px; color: #737f91; background: rgba(255,255,255,.035); font-size: 8px; }
+.nearby-status { display: flex; align-items: flex-start; gap: 7px; min-height: 28px; margin: 11px 0 9px; color: #7f8999; font-size: 9px; line-height: 1.45; }
+.nearby-status i { width: 7px; height: 7px; flex: 0 0 auto; margin-top: 3px; border-radius: 50%; background: #596272; }
+.nearby-status.scanning i { background: var(--cyan); box-shadow: 0 0 10px rgba(82,215,234,.65); animation: voice-pulse 1.3s infinite; }
+.nearby-status.checked i { background: var(--success); }
+.nearby-status.error i { background: #ff718d; }
+.nearby-check { width: 100%; padding: 7px 9px; border: 1px solid rgba(126,105,221,.26); border-radius: 8px; color: #bbb4e9; background: rgba(126,105,221,.075); font: inherit; font-size: 9px; cursor: pointer; }
+.nearby-check:hover { color: #eeeaff; border-color: rgba(126,105,221,.44); background: rgba(126,105,221,.12); }
+.nearby-check:disabled { opacity: .38; cursor: not-allowed; }
 
 .view-placeholder { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; }
 .view-placeholder > span { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid var(--border); border-radius: 18px; color: #8c80dd; background: var(--accent-soft); }
