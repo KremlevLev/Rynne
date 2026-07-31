@@ -480,8 +480,8 @@ def test_proactive_feedback_is_forwarded_to_engine() -> None:
         def __init__(self) -> None:
             self.feedback = []
 
-        def record_feedback(self, event_id, feedback):
-            self.feedback.append((event_id, feedback))
+        def record_feedback(self, event_id, feedback, **metadata):
+            self.feedback.append((event_id, feedback, metadata))
             return {"muted_until": 0.0}
 
     async def scenario() -> None:
@@ -497,9 +497,11 @@ def test_proactive_feedback_is_forwarded_to_engine() -> None:
             },
         ))
 
-        assert engine.feedback == [
-            ("proactive_visual_demo", "dismissed")
-        ]
+        assert engine.feedback == [(
+            "proactive_visual_demo",
+            "dismissed",
+            {"source": "desktop_ui"},
+        )]
         assert desktop.events[-1]["payload"]["success"] is True
 
     asyncio.run(scenario())

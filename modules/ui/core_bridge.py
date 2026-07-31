@@ -60,6 +60,7 @@ class CoreDesktopBridge:
         proactive_context_store=None,
         request_proactive_check=None,
         proactive_engine=None,
+        proactive_confirmation=None,
     ) -> None:
         self.desktop = desktop
         self.process_manager = (
@@ -90,6 +91,7 @@ class CoreDesktopBridge:
         )
         self.request_proactive_check = request_proactive_check
         self.proactive_engine = proactive_engine
+        self.proactive_confirmation = proactive_confirmation
         self._last_submission: dict[str, Any] | None = None
         self._reported_plan_ids: set[str] = set()
         self._reported_bg_ids: set[str] = set()
@@ -548,7 +550,15 @@ class CoreDesktopBridge:
                 state = self.proactive_engine.record_feedback(
                     event_id,
                     feedback,
+                    source="desktop_ui",
                 )
+                if (
+                    feedback == "dismissed"
+                    and self.proactive_confirmation is not None
+                ):
+                    pending = self.proactive_confirmation.pending()
+                    if pending is not None and pending.event_id == event_id:
+                        self.proactive_confirmation.reject()
                 muted_until = float(state.get("muted_until") or 0.0)
                 self._publish_command_result(
                     command_id,
@@ -900,12 +910,17 @@ class CoreDesktopBridge:
                             self.proactive_engine.record_feedback(
                                 proactive_event_id,
                                 "accepted",
+                                source="desktop_ui",
                             )
                         except ValueError:
                             logger.warning(
                                 "Не удалось отметить принятие %s.",
                                 proactive_event_id,
                             )
+                    if self.proactive_confirmation is not None:
+                        self.proactive_confirmation.confirm(
+                            proactive_event_id
+                        )
                 elif proactive_context_path:
                     Path(
                         proactive_context_path

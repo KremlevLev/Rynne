@@ -31,6 +31,8 @@ from modules.input_hub.coordinator import (
     InputCoordinator,
 )
 from modules.input_hub.models import (
+    Attachment,
+    AttachmentType,
     UserRequest,
 )
 from modules.routing.direct_executor import (
@@ -105,8 +107,12 @@ from modules.agent.system_health import (
 from modules.agent.proactive_vision import (
     ProactiveVisionObserver,
 )
+from modules.tools.budgets import AgentBudget
 from modules.agent.proactive_diagnostics import (
     ProactiveDiagnosticRunner,
+)
+from modules.agent.proactive_confirmation import (
+    ProactiveConfirmationManager,
 )
 from modules.storage.artifacts import (
     ArtifactStore,
@@ -754,6 +760,7 @@ async def async_main() -> None:
         ),
         warm_up_on_start=True,
     )
+    preferences = PreferencesManager()
     browser_manager = BrowserManager(
     headless=False
 )
@@ -850,6 +857,7 @@ async def async_main() -> None:
         ),
         disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
+    proactive_confirmation = ProactiveConfirmationManager()
     website_watch_manager = WebsiteWatchManager(database)
     backup_watch_manager = BackupWatchManager(database)
     package_update_manager = PackageUpdateManager(database)
@@ -870,6 +878,28 @@ async def async_main() -> None:
             proactive_engine.record_tool_completion(payload)
 
     runner.set_event_sink(handle_tool_event)
+
+    async def publish_proactive_suggestion(suggestion) -> None:
+        pending = proactive_confirmation.arm(suggestion)
+        desktop_service.publish(
+            "proactive_suggestion",
+            suggestion.to_dict(),
+        )
+        if not preferences.snapshot().tts_enabled:
+            return
+        concise_message = str(suggestion.message).split("\n\n", 1)[0]
+        concise_message = concise_message[:220].rstrip()
+        voice_text = f"{suggestion.title}. {concise_message}"
+        if pending is not None:
+            voice_text += (
+                " Скажите «Нова, давай» для подтверждения "
+                "или «Нова, не сейчас» для отмены."
+            )
+        await speech.say(
+            voice_text,
+            priority=4,
+            wait=False,
+        )
 
     async def proactive_worker() -> None:
         next_disk_check = 0.0
@@ -1081,10 +1111,7 @@ async def async_main() -> None:
                         )
                     )
                 for suggestion in suggestions:
-                    desktop_service.publish(
-                        "proactive_suggestion",
-                        suggestion.to_dict(),
-                    )
+                    await publish_proactive_suggestion(suggestion)
             try:
                 await asyncio.wait_for(
                     runtime.shutdown_event.wait(),
@@ -1262,13 +1289,13 @@ async def async_main() -> None:
         registry,
         runner,
         execution_memory=ExecutionMemory(),
+        isolated_history=True,
     )
 
     # =========================================================
     # NOVA 2.0 INPUT HUB И НАСТРОЙКИ
     # =========================================================
 
-    preferences = PreferencesManager()
     mode_manager = InteractionModeManager(
         preferences=preferences,
         runtime=runtime,
@@ -1287,14 +1314,24 @@ async def async_main() -> None:
             ),
         )
     )
+    def active_workspace_path() -> str | None:
+        snapshot = workspace_context.observe_foreground()
+        return str(snapshot.path) if snapshot is not None else None
+
+    proactive_diagnostic_agent = AgentService(
+        llm,
+        registry,
+        runner,
+        execution_memory=ExecutionMemory(),
+    )
+    proactive_diagnostic_agent.default_budget = AgentBudget(
+        max_logical_model_calls=4,
+        max_tool_calls=3,
+        max_wall_time_seconds=45.0,
+    )
     proactive_diagnostic_runner = ProactiveDiagnosticRunner(
-        AgentService(
-            llm,
-            registry,
-            runner,
-            execution_memory=ExecutionMemory(),
-        ),
-        workspace_path=str(Path.cwd()),
+        proactive_diagnostic_agent,
+        workspace_provider=active_workspace_path,
     )
     proactive_vision_check_requested = asyncio.Event()
 
@@ -1370,10 +1407,7 @@ async def async_main() -> None:
                                 force=manual_check,
                             )
                         ):
-                            desktop_service.publish(
-                                "proactive_suggestion",
-                                suggestion.to_dict(),
-                            )
+                            await publish_proactive_suggestion(suggestion)
                             suggestion_count += 1
                     if NOVA_DESKTOP_UI:
                         outcome = dict(
@@ -1406,6 +1440,15 @@ async def async_main() -> None:
                                     "outcome": str(outcome.get("code") or "unknown"),
                                 },
                             )
+                            if preferences.snapshot().tts_enabled:
+                                await speech.say(
+                                    (
+                                        "Проверка Nova рядом завершена. "
+                                        + status_message
+                                    ),
+                                    priority=4,
+                                    wait=False,
+                                )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -1527,6 +1570,80 @@ async def async_main() -> None:
                 wait=False,
             )
 
+    async def intercept_proactive_voice(
+        request: UserRequest,
+    ) -> AssistantResponse | None:
+        if not request.is_voice or proactive_confirmation.pending() is None:
+            return None
+        decision = proactive_confirmation.classify_voice(request.text)
+        if decision is None:
+            return None
+        if decision == "dismissed":
+            pending = proactive_confirmation.reject()
+            if pending is not None:
+                proactive_engine.record_feedback(
+                    pending.event_id,
+                    "dismissed",
+                    source="voice",
+                )
+                desktop_service.publish(
+                    "proactive_confirmation_resolved",
+                    {
+                        "event_id": pending.event_id,
+                        "decision": "dismissed",
+                    },
+                )
+            return AssistantResponse(
+                display_text="Хорошо, не буду выполнять эту подсказку.",
+                speech_text="Хорошо, не буду.",
+                success=True,
+            )
+
+        pending = proactive_confirmation.confirm()
+        if pending is None:
+            return AssistantResponse(
+                display_text="Время подтверждения истекло.",
+                speech_text="Время подтверждения истекло.",
+                success=False,
+                error_code="PROACTIVE_CONFIRMATION_EXPIRED",
+            )
+        original_confirmation = request.text
+        request.text = pending.request
+        request.metadata.update({
+            "proactive_suggestion_accepted": True,
+            "proactive_event_id": pending.event_id,
+            "voice_confirmation_text": original_confirmation,
+        })
+        if pending.context_key.startswith("visual:"):
+            context_path = (
+                proactive_vision_observer.context_store.materialize_once(
+                    pending.context_key
+                )
+            )
+            if context_path:
+                request.attachments.append(Attachment(
+                    attachment_type=AttachmentType.SCREENSHOT,
+                    path=context_path,
+                    display_name="Контекст активного окна",
+                    metadata={
+                        "proactive_context": True,
+                        "delete_after_read": True,
+                    },
+                ))
+        proactive_engine.record_feedback(
+            pending.event_id,
+            "accepted",
+            source="voice",
+        )
+        desktop_service.publish(
+            "proactive_confirmation_resolved",
+            {
+                "event_id": pending.event_id,
+                "decision": "accepted",
+            },
+        )
+        return None
+
     # =========================================================
     # REQUEST SERVICE
     # =========================================================
@@ -1548,6 +1665,7 @@ async def async_main() -> None:
                 request,
             )
         ),
+        request_interceptor=intercept_proactive_voice,
     )
 
     request_service_task = asyncio.create_task(
@@ -1617,6 +1735,7 @@ async def async_main() -> None:
             proactive_vision_check_requested.set
         ),
         proactive_engine=proactive_engine,
+        proactive_confirmation=proactive_confirmation,
 
     )
 

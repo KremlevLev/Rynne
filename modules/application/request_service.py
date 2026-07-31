@@ -34,6 +34,7 @@ RequestEnricher = Callable[
     [UserRequest],
     Any,
 ]
+RequestInterceptor = Callable[[UserRequest], Any]
 
 
 class RequestService:
@@ -59,6 +60,9 @@ class RequestService:
         request_enricher: (
             RequestEnricher | None
         ) = None,
+        request_interceptor: (
+            RequestInterceptor | None
+        ) = None,
     ) -> None:
         self.coordinator = coordinator
         self.dispatcher = dispatcher
@@ -67,6 +71,7 @@ class RequestService:
         )
         self.event_handler = event_handler
         self.request_enricher = request_enricher
+        self.request_interceptor = request_interceptor
 
         self._current_request: (
             UserRequest | None
@@ -157,6 +162,33 @@ class RequestService:
                     None
                 )
                 break
+
+            intercepted_response = None
+            if self.request_interceptor is not None:
+                try:
+                    intercepted_response = self.request_interceptor(request)
+                    if inspect.isawaitable(intercepted_response):
+                        intercepted_response = await intercepted_response
+                except Exception:
+                    logger.exception(
+                        "Request interceptor завершился ошибкой для %s.",
+                        request.request_id,
+                    )
+
+            if isinstance(intercepted_response, AssistantResponse):
+                await self._emit_event("request_started", request.to_dict())
+                if self.response_handler is not None:
+                    await self.response_handler(request, intercepted_response)
+                await self._emit_event(
+                    "request_completed",
+                    {
+                        "request_id": request.request_id,
+                        "success": intercepted_response.success,
+                        "error_code": intercepted_response.error_code,
+                    },
+                )
+                self.coordinator.task_done(request)
+                continue
 
             if self.request_enricher is not None:
                 try:

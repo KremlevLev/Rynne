@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from collections.abc import Callable
 from typing import Any
 
 from modules.agent.proactive_vision import ProactiveVisionInsight
@@ -15,17 +16,52 @@ class ProactiveDiagnosticRunner:
         self,
         agent: Any,
         *,
-        workspace_path: str,
+        workspace_provider: Callable[[], str | None] | None = None,
         timeout_seconds: float = 45.0,
     ) -> None:
         self.agent = agent
-        self.workspace_path = workspace_path
+        self.workspace_provider = workspace_provider
         self.timeout_seconds = max(5.0, timeout_seconds)
 
     async def investigate(
         self,
         insight: ProactiveVisionInsight,
     ) -> ProactiveVisionInsight:
+        workspace_path = (
+            self.workspace_provider()
+            if self.workspace_provider is not None
+            else None
+        )
+        allowed_tools = {
+            "get_current_time",
+            "get_system_status",
+            "list_active_windows",
+            "list_processes",
+            "get_process_status",
+            "read_process_output",
+            "browser_status",
+            "browser_get_page_text",
+            "browser_screenshot",
+        }
+        if workspace_path:
+            allowed_tools.update({
+                "read_text_file",
+                "get_file_diff",
+                "search_files",
+                "git_status",
+                "git_diff",
+                "git_log",
+                "git_branch",
+                "inspect_project",
+            })
+        metadata: dict[str, Any] = {
+            "proactive_autonomous": True,
+            "proactive_allowed_tools": sorted(allowed_tools),
+            "active_window_title": insight.window_title,
+        }
+        if workspace_path:
+            metadata["workspace_path"] = workspace_path
+
         request = UserRequest.from_text(
             (
                 "Проведи фоновую read-only диагностику возможной проблемы. "
@@ -37,11 +73,7 @@ class ProactiveDiagnosticRunner:
                 f"Предложенный следующий шаг: {insight.suggested_request}"
             ),
             source=RequestSource.BACKGROUND_TASK,
-            metadata={
-                "proactive_autonomous": True,
-                "workspace_path": self.workspace_path,
-                "active_window_title": insight.window_title,
-            },
+            metadata=metadata,
         )
         try:
             response = await asyncio.wait_for(

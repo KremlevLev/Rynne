@@ -40,7 +40,7 @@ def test_proactive_diagnostic_enriches_with_read_only_evidence() -> None:
     ))
     runner = ProactiveDiagnosticRunner(
         agent,
-        workspace_path="C:/workspace",
+        workspace_provider=lambda: "C:/workspace",
     )
 
     enriched = asyncio.run(runner.investigate(make_insight()))
@@ -48,6 +48,8 @@ def test_proactive_diagnostic_enriches_with_read_only_evidence() -> None:
     assert "уже проверила под капотом" in enriched.message
     request, kwargs = agent.requests[0]
     assert request.metadata["proactive_autonomous"] is True
+    assert request.metadata["workspace_path"] == "C:/workspace"
+    assert "read_text_file" in request.metadata["proactive_allowed_tools"]
     assert request.source.value == "background_task"
     assert kwargs["use_tools"] is True
 
@@ -62,7 +64,27 @@ def test_proactive_diagnostic_keeps_hint_when_no_tool_ran() -> None:
     ))
     runner = ProactiveDiagnosticRunner(
         agent,
-        workspace_path="C:/workspace",
+        workspace_provider=lambda: "C:/workspace",
     )
 
     assert asyncio.run(runner.investigate(insight)) == insight
+
+
+def test_proactive_diagnostic_does_not_read_nova_cwd_without_workspace() -> None:
+    agent = FakeDiagnosticAgent(AssistantResponse(
+        display_text="Система проверена.",
+        speech_text="Проверено.",
+        success=True,
+        data={"successful_count": 1},
+    ))
+    runner = ProactiveDiagnosticRunner(
+        agent,
+        workspace_provider=lambda: None,
+    )
+
+    asyncio.run(runner.investigate(make_insight()))
+
+    request, _ = agent.requests[0]
+    assert "workspace_path" not in request.metadata
+    assert "read_text_file" not in request.metadata["proactive_allowed_tools"]
+    assert "search_files" not in request.metadata["proactive_allowed_tools"]

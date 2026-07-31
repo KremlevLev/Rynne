@@ -227,6 +227,24 @@ def test_ambient_agent_never_receives_mutating_tool_schemas() -> None:
     assert llm.tool_names == {"get_system_status"}
 
 
+def test_ambient_agent_history_is_isolated_from_user_conversation() -> None:
+    registry = ToolRegistry.from_legacy([], {})
+    llm = CaptureAmbientToolsLLM()
+    llm.history = [{"role": "user", "content": "Основной диалог"}]
+
+    ambient = AgentService(
+        llm,
+        registry,
+        ToolRunner(registry),
+        isolated_history=True,
+    )
+
+    assert ambient.history == []
+    assert llm.history == [
+        {"role": "user", "content": "Основной диалог"}
+    ]
+
+
 class SequentialBrowserLLM:
     def __init__(self) -> None:
         self.history: list[dict] = []

@@ -85,6 +85,8 @@ class ProactiveSuggestionEngine:
         self,
         event_id: str,
         feedback: str,
+        *,
+        source: str = "unknown",
     ) -> dict[str, Any]:
         """Learns notification tolerance without storing user content."""
         normalized = str(feedback).casefold().strip()
@@ -122,6 +124,7 @@ class ProactiveSuggestionEngine:
             "dismissed": dismissed,
             "muted_until": muted_until,
             "last_feedback": normalized,
+            "last_source": str(source),
             "last_event_id": str(event_id),
         }
         self._set_state(state_key, updated)
@@ -129,6 +132,7 @@ class ProactiveSuggestionEngine:
             f"proactive_feedback_event:{event_id}",
             {
                 "feedback": normalized,
+                "source": str(source),
                 "recorded_at": self.clock(),
             },
         )

@@ -417,6 +417,7 @@ class AgentService:
         *,
         session_id: str | None = None,
         execution_memory: ExecutionMemory | None = None,
+        isolated_history: bool = False,
     ) -> None:
         self.llm = llm
         self.registry = registry
@@ -424,7 +425,7 @@ class AgentService:
         self.budget_manager = BudgetManager()
         self.default_budget = AgentBudget()
 
-        self.history = llm.history
+        self.history = [] if isolated_history else llm.history
 
         self.session_id = (
             session_id
@@ -964,6 +965,13 @@ class AgentService:
                     and definition.risk == RiskLevel.READ_ONLY
                 )
             }
+            explicitly_allowed = request_object.metadata.get(
+                "proactive_allowed_tools"
+            )
+            if isinstance(explicitly_allowed, list):
+                selected_tool_names.intersection_update(
+                    str(name) for name in explicitly_allowed
+                )
 
         tool_schemas = (
             self.registry.schemas(
@@ -1109,6 +1117,13 @@ class AgentService:
                         and definition.risk == RiskLevel.READ_ONLY
                     )
                 }
+                explicitly_allowed = request_object.metadata.get(
+                    "proactive_allowed_tools"
+                ) if request_object is not None else None
+                if isinstance(explicitly_allowed, list):
+                    expanded_tool_names.intersection_update(
+                        str(name) for name in explicitly_allowed
+                    )
             expanded_tool_schemas = self.registry.schemas(
                 expanded_tool_names
             )

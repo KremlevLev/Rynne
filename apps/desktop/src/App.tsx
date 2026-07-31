@@ -286,6 +286,7 @@ export function App() {
   const followConversationRef = useRef(true);
   const [followingConversation, setFollowingConversation] = useState(true);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [confirmingSuggestionId, setConfirmingSuggestionId] = useState<string | null>(null);
   const runtime = runtimePresentation(runtimeState);
 
   useEffect(() => {
@@ -337,6 +338,13 @@ export function App() {
             setProactiveStatus(message);
             if (phase === "scanning") setActiveTool(message);
             if (phase === "checked") setActiveTool("Ожидаю задачу");
+          }
+          if (event.event_type === "proactive_confirmation_resolved") {
+            const eventId = text(event.payload, "event_id");
+            setTimeline((current) => current.filter(
+              (item) => item.proactiveEventId !== eventId,
+            ));
+            setConfirmingSuggestionId(null);
           }
           if (event.event_type === "voice_status") {
             setVoiceStatus(text(event.payload, "message"));
@@ -429,10 +437,12 @@ export function App() {
       proactive_context_key: item.proactiveContextKey ?? "",
     });
     setTimeline((current) => current.filter((candidate) => candidate.id !== item.id));
+    setConfirmingSuggestionId(null);
   }
 
   async function dismissSuggestion(item: TimelineItem) {
     setTimeline((current) => current.filter((candidate) => candidate.id !== item.id));
+    setConfirmingSuggestionId(null);
     if (!item.proactiveEventId || connection !== "connected") return;
     try {
       await transport.send("proactive_feedback", {
@@ -685,14 +695,23 @@ export function App() {
                     {item.kind === "suggestion" && (
                       <div className="suggestion-actions">
                         {item.action && (
-                          <button className="suggestion-action" onClick={() => void acceptSuggestion(item)}>
-                            {item.actionLabel ?? "Помочь с этим"} <ChevronRight size={15} />
-                          </button>
+                          confirmingSuggestionId === item.id ? (
+                            <button className="suggestion-action confirm" onClick={() => void acceptSuggestion(item)}>
+                              Да, выполнить <ChevronRight size={15} />
+                            </button>
+                          ) : (
+                            <button className="suggestion-action" onClick={() => setConfirmingSuggestionId(item.id)}>
+                              {item.actionLabel ?? "Помочь с этим"} <ChevronRight size={15} />
+                            </button>
+                          )
                         )}
                         <button className="suggestion-dismiss" onClick={() => void dismissSuggestion(item)}>
                           Не сейчас
                         </button>
                       </div>
+                    )}
+                    {item.kind === "suggestion" && confirmingSuggestionId === item.id && (
+                      <small className="voice-confirm-hint">Или скажите: «Нова, давай»</small>
                     )}
                   </div>
                 </article>
