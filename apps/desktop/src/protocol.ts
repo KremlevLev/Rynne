@@ -42,6 +42,7 @@ export const NOVA_COMMAND_ACTIONS = [
   "set_preference",
   "set_wake_word_sensitivity",
   "run_proactive_check",
+  "proactive_feedback",
   "refresh",
   "stop_process",
   "delete_memory",

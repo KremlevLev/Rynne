@@ -74,7 +74,65 @@ class ProactiveSuggestionEngine:
         self._last_emitted: dict[str, float] = {}
 
     def _kind_enabled(self, kind: str) -> bool:
-        return kind not in self.disabled_kinds
+        if kind in self.disabled_kinds:
+            return False
+        feedback = self._get_state(
+            f"proactive_feedback_kind:{kind}"
+        )
+        return float(feedback.get("muted_until") or 0.0) <= self.clock()
+
+    def record_feedback(
+        self,
+        event_id: str,
+        feedback: str,
+    ) -> dict[str, Any]:
+        """Learns notification tolerance without storing user content."""
+        normalized = str(feedback).casefold().strip()
+        if normalized not in {"accepted", "dismissed"}:
+            raise ValueError("Неизвестная реакция на proactive-подсказку.")
+        row = self.database.fetchone(
+            "SELECT kind FROM proactive_events WHERE event_id = ?",
+            (str(event_id),),
+        )
+        if row is None:
+            raise ValueError("Proactive-подсказка не найдена.")
+
+        kind = str(row["kind"])
+        state_key = f"proactive_feedback_kind:{kind}"
+        state = self._get_state(state_key)
+        score = int(state.get("score") or 0)
+        accepted = int(state.get("accepted") or 0)
+        dismissed = int(state.get("dismissed") or 0)
+        muted_until = float(state.get("muted_until") or 0.0)
+        if normalized == "accepted":
+            accepted += 1
+            score = min(4, score + 2)
+            muted_until = 0.0
+        else:
+            dismissed += 1
+            score -= 1
+            if score <= -3:
+                muted_until = self.clock() + 6 * 60 * 60
+                score = 0
+
+        updated = {
+            "kind": kind,
+            "score": score,
+            "accepted": accepted,
+            "dismissed": dismissed,
+            "muted_until": muted_until,
+            "last_feedback": normalized,
+            "last_event_id": str(event_id),
+        }
+        self._set_state(state_key, updated)
+        self._set_state(
+            f"proactive_feedback_event:{event_id}",
+            {
+                "feedback": normalized,
+                "recorded_at": self.clock(),
+            },
+        )
+        return updated
 
     def can_observe(
         self,

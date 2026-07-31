@@ -1,7 +1,7 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 765 tests passed
-cd apps/desktop && npm test  # 12 tests passed
+python -m pytest tests/ -q  # 768 tests passed
+cd apps/desktop && npm test  # 13 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
 
@@ -130,6 +130,10 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - ✅ Actionable-фразы «зайди / перейди / посмотри / чекни / open / check» распознаются как
   действия; если модель дважды обещает выполнить задачу без tool call, последний repair-ход
   требует реальный первый вызов вместо сообщений «сейчас сделаю / ожидаю результат».
+- ✅ Feedback loop «Nova рядом» теперь проходит end-to-end: React сохраняет event id и
+  одноразовый screenshot context при принятии карточки, показывает настоящее action label
+  и кнопку «Не сейчас»; Core учится только на реакции без хранения пользовательского текста,
+  после трёх отклонений приглушает шумный тип инициативы на 6 часов, а принятие снимает mute.
 - ✅ Белый экран холодного старта заменён мгновенным встроенным boot-screen до загрузки React;
   Silero прогревается в фоне, не блокирует текстовый ответ и публикует состояние/ошибку TTS.
 - ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;

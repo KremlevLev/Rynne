@@ -41,6 +41,9 @@ type TimelineItem = {
   body?: string;
   status?: "working" | "success" | "error";
   action?: string;
+  actionLabel?: string;
+  proactiveEventId?: string;
+  proactiveContextKey?: string;
 };
 
 const UI_MODE_STORAGE_KEY = "nova.ui-mode";
@@ -235,6 +238,9 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
         title: text(payload, "title", "Nova заметила кое-что"),
         body: text(payload, "message"),
         action: text(payload, "suggested_request"),
+        actionLabel: text(payload, "action_label", "Помочь с этим"),
+        proactiveEventId: text(payload, "event_id"),
+        proactiveContextKey: text(payload, "source_key"),
       };
     case "proactive_check_result":
       return {
@@ -411,6 +417,31 @@ export function App() {
       setProactivePending(false);
       setSettingsStatus(
         error instanceof Error ? error.message : "Не удалось переключить Nova рядом.",
+      );
+    }
+  }
+
+  async function acceptSuggestion(item: TimelineItem) {
+    if (!item.action || busy || connection !== "connected") return;
+    await transport.send("submit_user_request", {
+      text: item.action,
+      proactive_event_id: item.proactiveEventId ?? "",
+      proactive_context_key: item.proactiveContextKey ?? "",
+    });
+    setTimeline((current) => current.filter((candidate) => candidate.id !== item.id));
+  }
+
+  async function dismissSuggestion(item: TimelineItem) {
+    setTimeline((current) => current.filter((candidate) => candidate.id !== item.id));
+    if (!item.proactiveEventId || connection !== "connected") return;
+    try {
+      await transport.send("proactive_feedback", {
+        event_id: item.proactiveEventId,
+        feedback: "dismissed",
+      });
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось сохранить реакцию.",
       );
     }
   }
@@ -651,10 +682,17 @@ export function App() {
                     </div>
                     {item.body && <p>{item.body}</p>}
                     {item.kind === "tool" && <small className="tool-id">{item.body}</small>}
-                    {item.action && (
-                      <button className="suggestion-action" onClick={() => send(item.action)}>
-                        Помочь с этим <ChevronRight size={15} />
-                      </button>
+                    {item.kind === "suggestion" && (
+                      <div className="suggestion-actions">
+                        {item.action && (
+                          <button className="suggestion-action" onClick={() => void acceptSuggestion(item)}>
+                            {item.actionLabel ?? "Помочь с этим"} <ChevronRight size={15} />
+                          </button>
+                        )}
+                        <button className="suggestion-dismiss" onClick={() => void dismissSuggestion(item)}>
+                          Не сейчас
+                        </button>
+                      </div>
                     )}
                   </div>
                 </article>

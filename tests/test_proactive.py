@@ -494,6 +494,49 @@ def test_proactive_kind_can_be_disabled() -> None:
         database.close()
 
 
+def test_feedback_temporarily_mutes_noisy_proactive_kind() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        now = [1000.0]
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            clock=lambda: now[0],
+            local_hour=lambda: 12,
+        )
+        suggestion = engine.observe_disk_space(
+            directory,
+            free_percent_threshold=10,
+            free_bytes_threshold=0,
+            usage=(1000, 950, 50),
+        )[0]
+
+        for _ in range(3):
+            state = engine.record_feedback(
+                suggestion.event_id,
+                "dismissed",
+            )
+        assert state["muted_until"] == 1000.0 + 6 * 60 * 60
+        assert not engine.can_observe("disk_space_low")
+
+        engine.record_feedback(suggestion.event_id, "accepted")
+        assert engine.can_observe("disk_space_low")
+        database.close()
+
+
+def test_feedback_rejects_unknown_event() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(database)
+        try:
+            engine.record_feedback("proactive_missing", "dismissed")
+        except ValueError as exc:
+            assert "не найдена" in str(exc)
+        else:
+            raise AssertionError("Unknown feedback event must fail")
+        database.close()
+
+
 def test_stale_process_suggests_cleanup_only_once() -> None:
     with tempfile.TemporaryDirectory() as directory:
         database = Database(Path(directory) / "nova.db")

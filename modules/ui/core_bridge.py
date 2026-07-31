@@ -59,6 +59,7 @@ class CoreDesktopBridge:
         mcp_gateway=None,
         proactive_context_store=None,
         request_proactive_check=None,
+        proactive_engine=None,
     ) -> None:
         self.desktop = desktop
         self.process_manager = (
@@ -88,6 +89,7 @@ class CoreDesktopBridge:
             proactive_context_store
         )
         self.request_proactive_check = request_proactive_check
+        self.proactive_engine = proactive_engine
         self._last_submission: dict[str, Any] | None = None
         self._reported_plan_ids: set[str] = set()
         self._reported_bg_ids: set[str] = set()
@@ -538,6 +540,27 @@ class CoreDesktopBridge:
             return
 
         try:
+            if action == "proactive_feedback":
+                if self.proactive_engine is None:
+                    raise RuntimeError("Proactive feedback недоступен.")
+                event_id = str(payload.get("event_id") or "")
+                feedback = str(payload.get("feedback") or "")
+                state = self.proactive_engine.record_feedback(
+                    event_id,
+                    feedback,
+                )
+                muted_until = float(state.get("muted_until") or 0.0)
+                self._publish_command_result(
+                    command_id,
+                    success=True,
+                    message=(
+                        "Поняла — похожие подсказки приглушены на 6 часов."
+                        if muted_until > 0
+                        else "Поняла, учту эту реакцию."
+                    ),
+                )
+                return
+
             if action == "run_proactive_check":
                 if self.request_proactive_check is None:
                     raise RuntimeError("Проверка активного окна недоступна.")
@@ -866,6 +889,23 @@ class CoreDesktopBridge:
                 )
                 if request is not None:
                     self._last_submission = dict(payload)
+                    proactive_event_id = str(
+                        payload.get("proactive_event_id") or ""
+                    )
+                    if (
+                        proactive_event_id.startswith("proactive_")
+                        and self.proactive_engine is not None
+                    ):
+                        try:
+                            self.proactive_engine.record_feedback(
+                                proactive_event_id,
+                                "accepted",
+                            )
+                        except ValueError:
+                            logger.warning(
+                                "Не удалось отметить принятие %s.",
+                                proactive_event_id,
+                            )
                 elif proactive_context_path:
                     Path(
                         proactive_context_path

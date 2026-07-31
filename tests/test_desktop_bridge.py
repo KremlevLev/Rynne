@@ -475,6 +475,36 @@ def test_proactive_acceptance_is_marked_on_request() -> None:
     asyncio.run(scenario())
 
 
+def test_proactive_feedback_is_forwarded_to_engine() -> None:
+    class FakeProactiveEngine:
+        def __init__(self) -> None:
+            self.feedback = []
+
+        def record_feedback(self, event_id, feedback):
+            self.feedback.append((event_id, feedback))
+            return {"muted_until": 0.0}
+
+    async def scenario() -> None:
+        bridge, desktop, _, _ = create_bridge()
+        engine = FakeProactiveEngine()
+        bridge.proactive_engine = engine
+
+        await bridge.handle_command(make_command(
+            "proactive_feedback",
+            {
+                "event_id": "proactive_visual_demo",
+                "feedback": "dismissed",
+            },
+        ))
+
+        assert engine.feedback == [
+            ("proactive_visual_demo", "dismissed")
+        ]
+        assert desktop.events[-1]["payload"]["success"] is True
+
+    asyncio.run(scenario())
+
+
 def test_proactive_visual_context_becomes_ephemeral_attachment(
     tmp_path,
 ) -> None:

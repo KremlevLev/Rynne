@@ -5,7 +5,7 @@ import {
   NOVA_COMMAND_ACTIONS,
   NOVA_EVENT_TYPES,
 } from "./protocol";
-import { runtimePresentation } from "./App";
+import { eventToItem, runtimePresentation } from "./App";
 
 describe("Nova desktop protocol", () => {
   it("accepts the same JSON event envelope as Python", () => {
@@ -39,6 +39,7 @@ describe("Nova desktop protocol", () => {
     expect(NOVA_EVENT_TYPES).toContain("proactive_suggestion");
     expect(NOVA_EVENT_TYPES).toContain("proactive_status");
     expect(NOVA_COMMAND_ACTIONS).toContain("set_preference");
+    expect(NOVA_COMMAND_ACTIONS).toContain("proactive_feedback");
   });
 
   it("maps Core runtime state into the integrated desktop indicator", () => {
@@ -49,6 +50,28 @@ describe("Nova desktop protocol", () => {
     expect(runtimePresentation("СПИТ")).toEqual({
       label: "Nova готова",
       working: false,
+    });
+  });
+
+  it("keeps proactive identity and one-shot visual context on the card", () => {
+    const item = eventToItem({
+      event_type: "proactive_suggestion",
+      payload: {
+        event_id: "proactive_visual_1",
+        source_key: "visual:fingerprint",
+        title: "Вижу ошибку",
+        message: "Могу проверить.",
+        suggested_request: "Разбери ошибку",
+        action_label: "Разобраться",
+      },
+      created_at: 1,
+    });
+
+    expect(item).toMatchObject({
+      action: "Разбери ошибку",
+      actionLabel: "Разобраться",
+      proactiveEventId: "proactive_visual_1",
+      proactiveContextKey: "visual:fingerprint",
     });
   });
 });

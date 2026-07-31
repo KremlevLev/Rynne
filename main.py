@@ -1616,6 +1616,7 @@ async def async_main() -> None:
         request_proactive_check=(
             proactive_vision_check_requested.set
         ),
+        proactive_engine=proactive_engine,
 
     )
 
