@@ -142,15 +142,14 @@ fn inherited_provider_keys(provider: &str) -> Result<Vec<String>, String> {
 }
 
 fn key_hint(key: &str) -> String {
-    let suffix: String = key
-        .chars()
-        .rev()
-        .take(4)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
+    let characters: Vec<char> = key.chars().collect();
+    let prefix_length = 10.min(characters.len().saturating_sub(6));
+    let suffix_length = 4.min(characters.len().saturating_sub(prefix_length));
+    let prefix: String = characters[..prefix_length].iter().collect();
+    let suffix: String = characters[characters.len() - suffix_length..]
+        .iter()
         .collect();
-    format!("••••{suffix}")
+    format!("{prefix}••••••••{suffix}")
 }
 
 fn provider_env_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -669,7 +668,16 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_provider_keys, split_key_list};
+    use super::{file_provider_keys, key_hint, split_key_list};
+
+    #[test]
+    fn provider_key_hint_keeps_only_safe_edges() {
+        let key = "sk-or-v1-private-middle-A7x2";
+        let hint = key_hint(key);
+
+        assert_eq!(hint, "sk-or-v1-p••••••••A7x2");
+        assert!(!hint.contains("rivate-middle"));
+    }
 
     #[test]
     fn provider_key_list_is_unbounded_and_deduplicated() {

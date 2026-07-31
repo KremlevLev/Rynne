@@ -53,21 +53,21 @@ export const UI_MODE_OPTIONS: ReadonlyArray<{
 }> = [
   {
     key: "aura",
-    label: "Aura · максимум",
-    shortLabel: "Aura",
-    description: "Полный интерфейс с живой активностью, статусами и атмосферными эффектами.",
+    label: "Красивый · максимум",
+    shortLabel: "Красивый",
+    description: "Максимум визуала: живая активность, контекстная панель и атмосферные эффекты.",
   },
   {
     key: "focus",
-    label: "Focus · баланс",
-    shortLabel: "Focus",
+    label: "Сбалансированный · средний",
+    shortLabel: "Средний",
     description: "Компактная навигация и больше места для диалога без правой панели.",
   },
   {
     key: "console",
-    label: "Console · минимум",
-    shortLabel: "Console",
-    description: "Чистая рабочая область в духе CLI: быстро, плотно и без визуального шума.",
+    label: "Лёгкий · минимум",
+    shortLabel: "Лёгкий",
+    description: "Минимальная нагрузка и чистая рабочая область в духе CLI.",
   },
 ];
 
@@ -479,6 +479,7 @@ export function App() {
                     title={option.label}
                   >
                     <Icon size={14} />
+                    <span>{option.shortLabel}</span>
                   </button>
                 );
               })}
@@ -500,7 +501,7 @@ export function App() {
         </header>
 
         {view === "dialog" ? (
-          <>
+          <div className="dialog-view">
             <div className="conversation" ref={conversationRef}>
               <div className="date-divider"><span>Сегодня</span></div>
               {timeline.map((item) => (
@@ -569,15 +570,15 @@ export function App() {
               </div>
               <p>Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием</p>
             </div>
-          </>
+          </div>
         ) : view === "settings" ? (
           <div className="settings-view">
             <div className="settings-card appearance-card">
               <span className="settings-icon"><LayoutDashboard size={22} /></span>
               <div>
                 <span className="eyebrow">ВНЕШНИЙ ВИД</span>
-                <h2>Как Nova занимает экран</h2>
-                <p>Режим сохраняется на этом компьютере и переключается мгновенно, без перезапуска Core.</p>
+                <h2>Три режима интерфейса</h2>
+                <p>Выберите лёгкий, средний или красивый UI. Режим сохраняется на этом компьютере и переключается мгновенно, без перезапуска Core.</p>
               </div>
               <div className="appearance-options">
                 {UI_MODE_OPTIONS.map((option) => (
@@ -603,7 +604,7 @@ export function App() {
               <div>
                 <span className="eyebrow">МОДЕЛЬНЫЕ ПРОВАЙДЕРЫ</span>
                 <h2>Пул API-ключей</h2>
-                <p>Добавляйте сколько угодно ключей Groq, OpenRouter и Gemini. Nova распределяет запросы и переключается при лимитах или ошибках.</p>
+                <p>Добавляйте сколько угодно ключей Groq, OpenRouter и Gemini. Начало и конец каждого ключа видны для проверки, середина скрыта; полный секрет никогда не отправляется в React UI.</p>
               </div>
               <div className="provider-pool">
                 {PROVIDER_OPTIONS.map((option) => {

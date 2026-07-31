@@ -62,6 +62,11 @@ describe("UI modes", () => {
     ]);
     expect(normalizeUiMode("console")).toBe("console");
     expect(normalizeUiMode("broken")).toBe("aura");
+    expect(UI_MODE_OPTIONS.map((option) => option.shortLabel)).toEqual([
+      "Красивый",
+      "Средний",
+      "Лёгкий",
+    ]);
   });
 
   it("persists the selected presentation without involving Core", () => {
