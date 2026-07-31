@@ -76,11 +76,19 @@ class ProactiveSuggestionEngine:
     def _kind_enabled(self, kind: str) -> bool:
         return kind not in self.disabled_kinds
 
-    def can_observe(self, kind: str) -> bool:
+    def can_observe(
+        self,
+        kind: str,
+        *,
+        ignore_quiet_hours: bool = False,
+    ) -> bool:
         """Whether an expensive observer may run right now."""
         return (
             self._kind_enabled(kind)
-            and not self._is_quiet_time()
+            and (
+                ignore_quiet_hours
+                or not self._is_quiet_time()
+            )
         )
 
     def _is_quiet_time(self) -> bool:
@@ -652,9 +660,14 @@ class ProactiveSuggestionEngine:
     def observe_visual_insight(
         self,
         insight: Any,
+        *,
+        ignore_quiet_hours: bool = False,
     ) -> list[ProactiveSuggestion]:
         """Persists a safe vision insight without storing its screenshot."""
-        if self._is_quiet_time():
+        if (
+            self._is_quiet_time()
+            and not ignore_quiet_hours
+        ):
             return []
         kind = "proactive_visual_help"
         if not self._kind_enabled(kind):

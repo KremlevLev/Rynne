@@ -11,11 +11,21 @@ import {
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type EventListener = (event: NovaEvent) => void;
 export type ConnectionListener = (state: ConnectionState) => void;
+export type ProviderName = "groq" | "openrouter" | "gemini";
+export interface ProviderKeySummary {
+  provider: ProviderName;
+  index: number;
+  hint: string;
+  source: "nova" | "environment";
+  removable: boolean;
+}
 
 export interface NovaTransport {
   connect(onEvent: EventListener, onConnection: ConnectionListener): Promise<() => void>;
   send(action: NovaCommandAction, payload?: JsonObject): Promise<void>;
-  configureProvider(provider: string, apiKey: string): Promise<void>;
+  listProviderKeys(): Promise<ProviderKeySummary[]>;
+  addProviderKey(provider: ProviderName, apiKey: string): Promise<void>;
+  removeProviderKey(provider: ProviderName, index: number): Promise<void>;
 }
 
 export class TauriNovaTransport implements NovaTransport {
@@ -91,10 +101,21 @@ export class TauriNovaTransport implements NovaTransport {
     });
   }
 
-  async configureProvider(provider: string, apiKey: string): Promise<void> {
-    await invoke("nova_configure_provider", {
+  async listProviderKeys(): Promise<ProviderKeySummary[]> {
+    return invoke<ProviderKeySummary[]>("nova_list_provider_keys");
+  }
+
+  async addProviderKey(provider: ProviderName, apiKey: string): Promise<void> {
+    await invoke("nova_add_provider_key", {
       provider,
       apiKey,
+    });
+  }
+
+  async removeProviderKey(provider: ProviderName, index: number): Promise<void> {
+    await invoke("nova_remove_provider_key", {
+      provider,
+      index,
     });
   }
 }
@@ -169,7 +190,15 @@ class DemoNovaTransport implements NovaTransport {
     }
   }
 
-  async configureProvider(): Promise<void> {
+  async listProviderKeys(): Promise<ProviderKeySummary[]> {
+    return [];
+  }
+
+  async addProviderKey(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async removeProviderKey(): Promise<void> {
     return Promise.resolve();
   }
 

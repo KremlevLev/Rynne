@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.config import _collect_keys
+
 
 def test_core_config_imports_without_provider_keys() -> None:
     project_root = Path(__file__).resolve().parent.parent
@@ -37,3 +39,27 @@ def test_core_config_imports_without_provider_keys() -> None:
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_collect_keys_has_no_numbered_key_limit(
+    monkeypatch,
+) -> None:
+    prefix = "NOVA_TEST_PROVIDER_KEY"
+    monkeypatch.setenv(
+        "NOVA_TEST_PROVIDER_KEYS",
+        "csv-one,csv-two",
+    )
+    monkeypatch.setenv(prefix, "legacy")
+    monkeypatch.setenv(f"{prefix}_37", "numbered")
+    monkeypatch.setenv(f"{prefix}_999", "csv-one")
+
+    assert _collect_keys(
+        "NOVA_TEST_PROVIDER_KEYS",
+        prefix,
+        prefix,
+    ) == (
+        "csv-one",
+        "csv-two",
+        "legacy",
+        "numbered",
+    )

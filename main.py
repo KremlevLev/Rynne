@@ -1303,9 +1303,13 @@ async def async_main() -> None:
                 .proactive_vision_enabled
                 and preference_snapshot.cloud_enabled
                 and runtime.state
-                == AssistantState.SLEEPING
+                in {
+                    AssistantState.SLEEPING,
+                    AssistantState.LISTENING,
+                }
                 and proactive_engine.can_observe(
-                    "proactive_visual_help"
+                    "proactive_visual_help",
+                    ignore_quiet_hours=True,
                 )
             )
             delay = 2.0
@@ -1319,7 +1323,8 @@ async def async_main() -> None:
                         for suggestion in (
                             proactive_engine
                             .observe_visual_insight(
-                                insight
+                                insight,
+                                ignore_quiet_hours=True,
                             )
                         ):
                             desktop_service.publish(

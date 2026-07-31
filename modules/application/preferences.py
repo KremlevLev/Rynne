@@ -73,6 +73,15 @@ class PreferencesManager:
                 "",
             )
         )
+        continuous_enabled = os.getenv(
+            "NOVA_CONTINUOUS_LISTENING",
+            "false",
+        ).lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
         self._input_mode = (
             InputMode.WAKE_WORD
@@ -80,7 +89,11 @@ class PreferencesManager:
                 wake_enabled
                 and wake_model.is_dir()
             )
-            else InputMode.CONTINUOUS
+            else (
+                InputMode.CONTINUOUS
+                if continuous_enabled
+                else InputMode.SLEEP
+            )
         )
 
         self._assistant_profile = (

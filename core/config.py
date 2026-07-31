@@ -26,7 +26,6 @@ def _collect_keys(
     csv_name: str,
     legacy_name: str,
     numbered_prefix: str,
-    max_numbered_keys: int = 10,
 ) -> tuple[str, ...]:
     collected: list[str] = []
 
@@ -36,14 +35,22 @@ def _collect_keys(
     if legacy_value:
         collected.append(legacy_value)
 
-    for index in range(2, max_numbered_keys + 1):
-        value = os.getenv(
-            f"{numbered_prefix}_{index}",
-            "",
-        ).strip()
-
+    numbered: list[tuple[int, str]] = []
+    prefix = f"{numbered_prefix}_"
+    for name, raw_value in os.environ.items():
+        if not name.startswith(prefix):
+            continue
+        suffix = name[len(prefix):]
+        if not suffix.isdigit():
+            continue
+        value = raw_value.strip()
         if value:
-            collected.append(value)
+            numbered.append((int(suffix), value))
+
+    collected.extend(
+        value
+        for _, value in sorted(numbered)
+    )
 
     # Сохраняем порядок и удаляем дубликаты.
     return tuple(dict.fromkeys(collected))

@@ -5,6 +5,7 @@ import {
   readUiMode,
   scrollConversationToBottom,
   UI_MODE_OPTIONS,
+  PROVIDER_OPTIONS,
   writeUiMode,
 } from "./App";
 
@@ -73,5 +74,15 @@ describe("UI modes", () => {
     writeUiMode(storage, "focus");
 
     expect(readUiMode(storage)).toBe("focus");
+  });
+});
+
+describe("provider key pools", () => {
+  it("offers every supported cloud provider", () => {
+    expect(PROVIDER_OPTIONS.map((option) => option.key)).toEqual([
+      "groq",
+      "openrouter",
+      "gemini",
+    ]);
   });
 });

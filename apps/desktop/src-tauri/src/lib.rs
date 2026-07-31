@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 use std::{
     fs::{create_dir_all, File, OpenOptions},
@@ -33,6 +34,176 @@ struct CoreState {
     generation: AtomicU64,
     last_spawn_attempt: Mutex<Option<Instant>>,
     shutting_down: AtomicBool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderKeySummary {
+    provider: String,
+    index: usize,
+    hint: String,
+    source: String,
+    removable: bool,
+}
+
+fn provider_variables(provider: &str) -> Result<(&'static str, &'static str), String> {
+    match provider.trim().to_lowercase().as_str() {
+        "groq" => Ok(("GROQ_API_KEYS", "GROQ_API_KEY")),
+        "openrouter" => Ok(("OPENROUTER_API_KEYS", "OPENROUTER_API_KEY")),
+        "gemini" => Ok(("GEMINI_API_KEYS", "GEMINI_API_KEY")),
+        _ => Err("Unsupported model provider.".to_owned()),
+    }
+}
+
+fn split_key_list(value: &str) -> Vec<String> {
+    let unquoted = value
+        .trim()
+        .trim_matches(|character| character == '"' || character == '\'');
+    let mut keys = Vec::new();
+    for raw_key in unquoted.split(',') {
+        let key = raw_key.trim();
+        if !key.is_empty() && !keys.iter().any(|existing| existing == key) {
+            keys.push(key.to_owned());
+        }
+    }
+    keys
+}
+
+fn env_value(contents: &str, variable: &str) -> Option<String> {
+    contents.lines().find_map(|line| {
+        let (name, value) = line.split_once('=')?;
+        (name.trim() == variable).then(|| value.trim().to_owned())
+    })
+}
+
+fn numbered_key_values<'a>(
+    pairs: impl Iterator<Item = (&'a str, &'a str)>,
+    prefix: &str,
+) -> Vec<String> {
+    let numbered_prefix = format!("{prefix}_");
+    let mut values: Vec<(usize, String)> = pairs
+        .filter_map(|(name, raw_value)| {
+            let suffix = name.strip_prefix(&numbered_prefix)?;
+            let index = suffix.parse::<usize>().ok()?;
+            let value = raw_value.trim();
+            (!value.is_empty()).then(|| (index, value.to_owned()))
+        })
+        .collect();
+    values.sort_by_key(|(index, _)| *index);
+    values.into_iter().map(|(_, value)| value).collect()
+}
+
+fn file_provider_keys(contents: &str, provider: &str) -> Result<Vec<String>, String> {
+    let (plural, legacy) = provider_variables(provider)?;
+    let mut keys = env_value(contents, plural)
+        .map(|value| split_key_list(&value))
+        .unwrap_or_default();
+    if let Some(value) = env_value(contents, legacy) {
+        for key in split_key_list(&value) {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+    }
+    let pairs = contents.lines().filter_map(|line| line.split_once('='));
+    for key in numbered_key_values(pairs, legacy) {
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    Ok(keys)
+}
+
+fn inherited_provider_keys(provider: &str) -> Result<Vec<String>, String> {
+    let (plural, legacy) = provider_variables(provider)?;
+    let mut keys = std::env::var(plural)
+        .ok()
+        .map(|value| split_key_list(&value))
+        .unwrap_or_default();
+    if let Ok(value) = std::env::var(legacy) {
+        for key in split_key_list(&value) {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+    }
+    let environment: Vec<(String, String)> = std::env::vars().collect();
+    for key in numbered_key_values(
+        environment
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str())),
+        legacy,
+    ) {
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    Ok(keys)
+}
+
+fn key_hint(key: &str) -> String {
+    let suffix: String = key
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+    format!("••••{suffix}")
+}
+
+fn provider_env_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Cannot locate Nova data directory: {error}"))?;
+    create_dir_all(&data_dir)
+        .map_err(|error| format!("Cannot create Nova data directory: {error}"))?;
+    Ok(data_dir.join(".env"))
+}
+
+fn write_provider_keys(env_path: &Path, provider: &str, keys: &[String]) -> Result<(), String> {
+    let (plural, legacy) = provider_variables(provider)?;
+    let current = std::fs::read_to_string(env_path).unwrap_or_default();
+    let mut lines: Vec<String> = current
+        .lines()
+        .filter(|line| {
+            let variable = line
+                .split_once('=')
+                .map(|(name, _)| name.trim())
+                .unwrap_or("");
+            let numbered = variable
+                .strip_prefix(&format!("{legacy}_"))
+                .is_some_and(|suffix| suffix.parse::<usize>().is_ok());
+            variable != plural && variable != legacy && !numbered
+        })
+        .map(str::to_owned)
+        .collect();
+    if !keys.is_empty() {
+        lines.push(format!("{plural}={}", keys.join(",")));
+    }
+    let contents = if lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", lines.join("\n"))
+    };
+    std::fs::write(env_path, contents)
+        .map_err(|error| format!("Cannot save Nova provider settings: {error}"))
+}
+
+fn validate_api_key(api_key: &str) -> Result<&str, String> {
+    let key = api_key.trim();
+    if key.len() < 12
+        || key.len() > 512
+        || key.contains(',')
+        || !key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "_-.".contains(character))
+    {
+        return Err("API key has an invalid format.".to_owned());
+    }
+    Ok(key)
 }
 
 #[tauri::command]
@@ -110,44 +281,98 @@ fn nova_send_command(command: Value, state: State<'_, Arc<CoreState>>) -> Result
 }
 
 #[tauri::command]
+fn nova_list_provider_keys(app: AppHandle) -> Result<Vec<ProviderKeySummary>, String> {
+    let env_path = provider_env_path(&app)?;
+    let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
+    let mut summaries = Vec::new();
+
+    for provider in ["groq", "openrouter", "gemini"] {
+        let file_keys = file_provider_keys(&contents, provider)?;
+        let inherited_keys = inherited_provider_keys(provider)?;
+
+        for (index, key) in file_keys.iter().enumerate() {
+            summaries.push(ProviderKeySummary {
+                provider: provider.to_owned(),
+                index,
+                hint: key_hint(key),
+                source: "nova".to_owned(),
+                removable: true,
+            });
+        }
+        for key in inherited_keys {
+            if file_keys.contains(&key) {
+                continue;
+            }
+            summaries.push(ProviderKeySummary {
+                provider: provider.to_owned(),
+                index: 0,
+                hint: key_hint(&key),
+                source: "environment".to_owned(),
+                removable: false,
+            });
+        }
+    }
+
+    Ok(summaries)
+}
+
+fn add_provider_key(
+    provider: String,
+    api_key: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    provider_variables(&provider)?;
+    let key = validate_api_key(&api_key)?;
+    let env_path = provider_env_path(&app)?;
+    let current = std::fs::read_to_string(&env_path).unwrap_or_default();
+    let mut keys = file_provider_keys(&current, &provider)?;
+    if !keys.iter().any(|existing| existing == key) {
+        keys.push(key.to_owned());
+        write_provider_keys(&env_path, &provider, &keys)?;
+    }
+
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)
+}
+
+#[tauri::command]
+fn nova_add_provider_key(
+    provider: String,
+    api_key: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    add_provider_key(provider, api_key, app, state)
+}
+
+#[tauri::command]
 fn nova_configure_provider(
     provider: String,
     api_key: String,
     app: AppHandle,
     state: State<'_, Arc<CoreState>>,
 ) -> Result<(), String> {
-    let variable = match provider.trim().to_lowercase().as_str() {
-        "groq" => "GROQ_API_KEY",
-        "openrouter" => "OPENROUTER_API_KEY",
-        "gemini" => "GEMINI_API_KEY",
-        _ => return Err("Unsupported model provider.".to_owned()),
-    };
-    let key = api_key.trim();
-    if key.len() < 12
-        || key.len() > 512
-        || !key
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || "_-.".contains(character))
-    {
-        return Err("API key has an invalid format.".to_owned());
-    }
+    add_provider_key(provider, api_key, app, state)
+}
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("Cannot locate Nova data directory: {error}"))?;
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|error| format!("Cannot create Nova data directory: {error}"))?;
-    let env_path = data_dir.join(".env");
+#[tauri::command]
+fn nova_remove_provider_key(
+    provider: String,
+    index: usize,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    provider_variables(&provider)?;
+    let env_path = provider_env_path(&app)?;
     let current = std::fs::read_to_string(&env_path).unwrap_or_default();
-    let mut lines: Vec<String> = current
-        .lines()
-        .filter(|line| !line.trim_start().starts_with(&format!("{variable}=")))
-        .map(str::to_owned)
-        .collect();
-    lines.push(format!("{variable}={key}"));
-    std::fs::write(&env_path, format!("{}\n", lines.join("\n")))
-        .map_err(|error| format!("Cannot save Nova provider settings: {error}"))?;
+    let mut keys = file_provider_keys(&current, &provider)?;
+    if index >= keys.len() {
+        return Err("Provider key was not found.".to_owned());
+    }
+    keys.remove(index);
+    write_provider_keys(&env_path, &provider, &keys)?;
 
     let core_state = state.inner().clone();
     stop_core(&core_state);
@@ -218,11 +443,30 @@ fn core_binary_name() -> PathBuf {
     }
 }
 
+fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<(), String> {
+    let env_path = provider_env_path(app)?;
+    let contents = std::fs::read_to_string(env_path).unwrap_or_default();
+    for provider in ["groq", "openrouter", "gemini"] {
+        let (plural, _) = provider_variables(provider)?;
+        let mut keys = file_provider_keys(&contents, provider)?;
+        for key in inherited_provider_keys(provider)? {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        if !keys.is_empty() {
+            command.env(plural, keys.join(","));
+        }
+    }
+    Ok(())
+}
+
 fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
     if let Ok(mut last_spawn_attempt) = state.last_spawn_attempt.lock() {
         *last_spawn_attempt = Some(Instant::now());
     }
     let mut command = build_core_command(&app)?;
+    apply_provider_environment(&mut command, &app)?;
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -390,7 +634,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             nova_connect,
             nova_send_command,
-            nova_configure_provider
+            nova_configure_provider,
+            nova_list_provider_keys,
+            nova_add_provider_key,
+            nova_remove_provider_key
         ])
         .setup(move |app| {
             let app_handle = app.handle().clone();
@@ -418,4 +665,41 @@ pub fn run() {
             stop_core(&core_state);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{file_provider_keys, split_key_list};
+
+    #[test]
+    fn provider_key_list_is_unbounded_and_deduplicated() {
+        let value = (1..=25)
+            .map(|index| format!("test-key-{index:02}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let keys = split_key_list(&value);
+
+        assert_eq!(keys.len(), 25);
+        assert_eq!(keys[0], "test-key-01");
+        assert_eq!(keys[24], "test-key-25");
+    }
+
+    #[test]
+    fn plural_and_legacy_provider_keys_are_merged() {
+        let contents = concat!(
+            "GROQ_API_KEYS=groq-key-one,groq-key-two\n",
+            "GROQ_API_KEY=groq-key-one\n",
+            "GROQ_API_KEY_37=groq-key-thirty-seven\n",
+            "OPENROUTER_API_KEYS=openrouter-key\n",
+        );
+
+        let groq = file_provider_keys(contents, "groq").unwrap();
+        let openrouter = file_provider_keys(contents, "openrouter").unwrap();
+
+        assert_eq!(
+            groq,
+            vec!["groq-key-one", "groq-key-two", "groq-key-thirty-seven"]
+        );
+        assert_eq!(openrouter, vec!["openrouter-key"]);
+    }
 }

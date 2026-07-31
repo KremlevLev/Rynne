@@ -254,3 +254,40 @@ def test_visual_insight_is_persisted_without_screenshot() -> None:
             engine.journal()
         ).casefold()
         database.close()
+
+
+def test_explicit_visual_mode_works_during_quiet_hours() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        database = Database(Path(directory) / "nova.db")
+        engine = ProactiveSuggestionEngine(
+            database,
+            cooldown_seconds=0,
+            quiet_hours=(22, 8),
+            local_hour=lambda: 23,
+        )
+        insight = ProactiveVisionInsight(
+            should_interrupt=True,
+            title="Нужна помощь?",
+            message="Вижу явную ошибку.",
+            reason="Окно содержит failed state.",
+            suggested_request="Разбери текущую ошибку",
+            action_label="Помочь",
+            confidence=0.9,
+            window_title="Editor",
+            visual_fingerprint="quiet-hours-override",
+        )
+
+        assert not engine.can_observe(
+            "proactive_visual_help"
+        )
+        assert engine.can_observe(
+            "proactive_visual_help",
+            ignore_quiet_hours=True,
+        )
+        suggestions = engine.observe_visual_insight(
+            insight,
+            ignore_quiet_hours=True,
+        )
+
+        assert len(suggestions) == 1
+        database.close()

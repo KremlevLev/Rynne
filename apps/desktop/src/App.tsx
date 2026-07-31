@@ -5,6 +5,7 @@ import {
   Command,
   Cpu,
   History,
+  KeyRound,
   LayoutDashboard,
   MessageSquare,
   Mic,
@@ -17,6 +18,7 @@ import {
   Sparkles,
   Square,
   Terminal,
+  Trash2,
   Workflow,
   Wrench,
 } from "lucide-react";
@@ -26,6 +28,8 @@ import {
   createNovaTransport,
   type ConnectionState,
   type NovaTransport,
+  type ProviderKeySummary,
+  type ProviderName,
 } from "./transport";
 
 type ViewKey = "dialog" | "tasks" | "automations" | "settings";
@@ -64,6 +68,32 @@ export const UI_MODE_OPTIONS: ReadonlyArray<{
     label: "Console · минимум",
     shortLabel: "Console",
     description: "Чистая рабочая область в духе CLI: быстро, плотно и без визуального шума.",
+  },
+];
+
+export const PROVIDER_OPTIONS: ReadonlyArray<{
+  key: ProviderName;
+  label: string;
+  description: string;
+  placeholder: string;
+}> = [
+  {
+    key: "groq",
+    label: "Groq",
+    description: "GPT OSS 120B для текста и tools · Qwen для изображений · Whisper STT",
+    placeholder: "gsk_…",
+  },
+  {
+    key: "openrouter",
+    label: "OpenRouter",
+    description: "Резервные модели и независимые лимиты",
+    placeholder: "sk-or-v1-…",
+  },
+  {
+    key: "gemini",
+    label: "Google Gemini",
+    description: "Дополнительный маршрут для vision и сложных задач",
+    placeholder: "AIza…",
   },
 ];
 
@@ -215,8 +245,13 @@ export function App() {
   const [activeTool, setActiveTool] = useState("Ожидаю задачу");
   const [taskProgress, setTaskProgress] = useState(0);
   const [runtimeState, setRuntimeState] = useState("СПИТ");
-  const [provider, setProvider] = useState("groq");
+  const [inputMode, setInputMode] = useState("sleep");
+  const [voicePending, setVoicePending] = useState(false);
+  const [proactivePending, setProactivePending] = useState(false);
+  const [provider, setProvider] = useState<ProviderName>("groq");
   const [apiKey, setApiKey] = useState("");
+  const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
+  const [providerKeysLoading, setProviderKeysLoading] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState("");
   const [uiMode, setUiMode] = useState<UiMode>(() => (
     readUiMode(typeof window === "undefined" ? null : window.localStorage)
@@ -247,10 +282,25 @@ export function App() {
           }
           if (event.event_type === "preferences") {
             setProactive(event.payload.proactive_vision_enabled === true);
+            const mode = event.payload.input_mode;
+            if (typeof mode === "string") setInputMode(mode);
+            setVoicePending(false);
+            setProactivePending(false);
+            if (event.payload.proactive_vision_enabled === true) {
+              setActiveTool("Nova рядом наблюдает за активным окном");
+            }
           }
           if (event.event_type === "task_progress") {
             const value = event.payload.progress;
             if (typeof value === "number") setTaskProgress(value);
+          }
+          if (event.event_type === "command_result") {
+            const message = text(event.payload, "message");
+            if (event.payload.success === false && message) {
+              setSettingsStatus(message);
+            }
+            setVoicePending(false);
+            setProactivePending(false);
           }
         },
         setConnection,
@@ -270,6 +320,10 @@ export function App() {
   }, [timeline]);
 
   useEffect(() => {
+    if (connection === "connected") void refreshProviderKeys();
+  }, [connection]);
+
+  useEffect(() => {
     writeUiMode(
       typeof window === "undefined" ? null : window.localStorage,
       uiMode,
@@ -285,26 +339,75 @@ export function App() {
 
   async function toggleProactive() {
     const next = !proactive;
-    setProactive(next);
-    await transport.send("set_preference", {
-      key: "proactive_vision_enabled",
-      value: next,
-    });
+    setProactivePending(true);
+    try {
+      await transport.send("set_preference", {
+        key: "proactive_vision_enabled",
+        value: next,
+      });
+    } catch (error) {
+      setProactivePending(false);
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось переключить Nova рядом.",
+      );
+    }
   }
 
-  async function saveProvider() {
-    if (apiKey.trim().length < 12) return;
-    setSettingsStatus("Сохраняю и перезапускаю Nova Core…");
+  async function toggleVoice() {
+    setVoicePending(true);
     try {
-      await transport.configureProvider(provider, apiKey.trim());
+      await transport.send("toggle_voice_mode");
+    } catch (error) {
+      setVoicePending(false);
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось включить микрофон.",
+      );
+    }
+  }
+
+  async function refreshProviderKeys() {
+    setProviderKeysLoading(true);
+    try {
+      setProviderKeys(await transport.listProviderKeys());
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось получить список ключей.",
+      );
+    } finally {
+      setProviderKeysLoading(false);
+    }
+  }
+
+  async function addProviderKey() {
+    if (apiKey.trim().length < 12) return;
+    setSettingsStatus("Добавляю ключ и перезапускаю Nova Core…");
+    try {
+      await transport.addProviderKey(provider, apiKey.trim());
       setApiKey("");
-      setSettingsStatus("Ключ сохранён. Nova Core переподключается.");
+      setSettingsStatus("Ключ добавлен. Nova Core переподключается.");
+      await refreshProviderKeys();
     } catch (error) {
       setSettingsStatus(
         error instanceof Error ? error.message : "Не удалось сохранить API-ключ.",
       );
     }
   }
+
+  async function removeProviderKey(key: ProviderKeySummary) {
+    if (!key.removable) return;
+    setSettingsStatus(`Удаляю ключ ${key.hint}…`);
+    try {
+      await transport.removeProviderKey(key.provider, key.index);
+      setSettingsStatus("Ключ удалён. Nova Core переподключается.");
+      await refreshProviderKeys();
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : "Не удалось удалить API-ключ.",
+      );
+    }
+  }
+
+  const voiceActive = inputMode === "continuous";
 
   return (
     <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
@@ -380,10 +483,17 @@ export function App() {
                 );
               })}
             </div>
-            <button className={proactive ? "proactive active" : "proactive"} onClick={toggleProactive}>
+            <button
+              className={proactive ? "proactive active" : "proactive"}
+              onClick={() => void toggleProactive()}
+              disabled={proactivePending || connection !== "connected"}
+              title={proactive
+                ? "Nova анализирует активное окно и предложит помощь, когда заметит проблему"
+                : "Включить наблюдение за активным окном"}
+            >
               <Radio size={15} />
               Nova рядом
-              <span>{proactive ? "Вкл" : "Выкл"}</span>
+              <span>{proactivePending ? "…" : proactive ? "Вкл" : "Выкл"}</span>
             </button>
             <button className="icon-button" aria-label="Команды"><Command size={18} /></button>
           </div>
@@ -440,7 +550,16 @@ export function App() {
                   rows={1}
                 />
                 <div className="composer-actions">
-                  <button className="attach" aria-label="Голосовой ввод"><Mic size={18} /></button>
+                  <button
+                    className={voiceActive ? "attach voice-active" : "attach"}
+                    onClick={() => void toggleVoice()}
+                    disabled={voicePending || connection !== "connected"}
+                    aria-label={voiceActive ? "Остановить голосовой ввод" : "Включить голосовой ввод"}
+                    aria-pressed={voiceActive}
+                    title={voiceActive ? "Nova слушает · нажмите, чтобы остановить" : "Включить микрофон"}
+                  >
+                    <Mic size={18} />
+                  </button>
                   {busy ? (
                     <button className="send stop" onClick={() => transport.send("cancel_current_request")} aria-label="Остановить"><Square size={14} /></button>
                   ) : (
@@ -479,40 +598,82 @@ export function App() {
                 ))}
               </div>
             </div>
-            <div className="settings-card">
-              <span className="settings-icon"><Settings size={22} /></span>
+            <div className="settings-card provider-card">
+              <span className="settings-icon"><KeyRound size={22} /></span>
               <div>
-                <span className="eyebrow">МОДЕЛЬНЫЙ ПРОВАЙДЕР</span>
-                <h2>Подключить Nova</h2>
-                <p>Ключ хранится только в пользовательских данных Nova на этом компьютере и не попадает в чат.</p>
+                <span className="eyebrow">МОДЕЛЬНЫЕ ПРОВАЙДЕРЫ</span>
+                <h2>Пул API-ключей</h2>
+                <p>Добавляйте сколько угодно ключей Groq, OpenRouter и Gemini. Nova распределяет запросы и переключается при лимитах или ошибках.</p>
               </div>
+              <div className="provider-pool">
+                {PROVIDER_OPTIONS.map((option) => {
+                  const keys = providerKeys.filter((key) => key.provider === option.key);
+                  return (
+                    <section className="provider-group" key={option.key}>
+                      <header>
+                        <span>
+                          <strong>{option.label}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                        <b>{providerKeysLoading ? "…" : keys.length}</b>
+                      </header>
+                      <div className="provider-key-list">
+                        {keys.length === 0 ? (
+                          <p>Ключей пока нет</p>
+                        ) : keys.map((key) => (
+                          <div className="provider-key" key={`${key.provider}-${key.source}-${key.index}-${key.hint}`}>
+                            <span>
+                              <code>{key.hint}</code>
+                              <small>{key.source === "nova" ? "Добавлен в Nova" : "Системная переменная"}</small>
+                            </span>
+                            {key.removable && (
+                              <button
+                                onClick={() => void removeProviderKey(key)}
+                                aria-label={`Удалить ключ ${key.hint}`}
+                                title="Удалить ключ"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+              <div className="provider-add-row">
               <label>
                 Провайдер
-                <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                  <option value="groq">Groq · GPT OSS 120B</option>
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="gemini">Google Gemini</option>
+                <select
+                  value={provider}
+                  onChange={(event) => setProvider(event.target.value as ProviderName)}
+                >
+                  {PROVIDER_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>{option.label}</option>
+                  ))}
                 </select>
               </label>
               <label>
-                API-ключ
+                Новый API-ключ
                 <input
                   type="password"
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") void saveProvider();
+                    if (event.key === "Enter") void addProviderKey();
                   }}
-                  placeholder={provider === "groq" ? "gsk_…" : "Вставьте API-ключ"}
+                  placeholder={PROVIDER_OPTIONS.find((option) => option.key === provider)?.placeholder}
                   autoComplete="off"
                 />
               </label>
+              </div>
               <button
                 className="save-settings"
-                onClick={() => void saveProvider()}
+                onClick={() => void addProviderKey()}
                 disabled={apiKey.trim().length < 12}
               >
-                Сохранить и подключить
+                <Plus size={15} /> Добавить ключ
               </button>
               {settingsStatus && <p className="settings-status">{settingsStatus}</p>}
             </div>

@@ -18,7 +18,7 @@ def test_default_preferences() -> None:
 
     assert snapshot.input_mode in {
         InputMode.WAKE_WORD,
-        InputMode.CONTINUOUS,
+        InputMode.SLEEP,
     }
 
     assert (
@@ -136,4 +136,24 @@ def test_wake_word_default_when_configured(
     assert (
         manager.snapshot().input_mode
         == InputMode.WAKE_WORD
+    )
+
+
+def test_continuous_listening_requires_explicit_opt_in(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv(
+        "NOVA_CONTINUOUS_LISTENING",
+        "true",
+    )
+    monkeypatch.setenv(
+        "NOVA_WAKE_WORD_ENABLED",
+        "false",
+    )
+
+    manager = PreferencesManager()
+
+    assert (
+        manager.snapshot().input_mode
+        == InputMode.CONTINUOUS
     )

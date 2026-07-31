@@ -1,7 +1,7 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 736 tests passed
-cd apps/desktop && npm test  # 10 tests passed
+python -m pytest tests/ -q  # 740 tests passed
+cd apps/desktop && npm test  # 11 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
 
@@ -66,8 +66,13 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   а generation guard не позволяет старому reader отключить новый процесс.
 - ✅ Ошибка инициализации Vosk кешируется на сессию, wake-loop использует
   backoff и больше не раздувает Windows `PATH` повторными DLL-import.
-- ✅ Settings принимает ключ Groq/OpenRouter/Gemini, сохраняет его только в
-  user app-data и перезапускает Core без ручного редактирования `.env`.
+- ✅ Settings управляет неограниченными пулами Groq/OpenRouter/Gemini: показывает только
+  маскированные ключи, добавляет и удаляет управляемые Nova ключи, объединяет их с системными
+  переменными и перезапускает Core без ручного редактирования `.env`; лимит нумерованных ключей снят.
+- ✅ Кнопка микрофона в React реально переключает STT через Core и отображает подтверждённый
+  `input_mode`; фоновое прослушивание по умолчанию выключено и включается только явно.
+- ✅ «Nova рядом» больше не рисует ложное оптимистичное состояние: UI ждёт подтверждение Core,
+  а явно включённый визуальный помощник работает и ночью, сохраняя остальные тихие часы.
 - ✅ Чистая установка запускает Core без API-ключа вместо import-time crash;
   provider помечается `unconfigured`, чтобы UI мог провести onboarding.
 - ⬜ Перенести реальные task/process/settings экраны на React.

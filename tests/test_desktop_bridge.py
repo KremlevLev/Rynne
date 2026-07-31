@@ -346,6 +346,22 @@ class FakeModeManager:
         return preferences.set_input_mode(
             InputMode(mode_name)
         )
+
+    async def toggle_manual_voice(self):
+        from modules.application.preferences import (
+            PreferencesManager,
+        )
+        from modules.input_hub.models import (
+            InputMode,
+        )
+
+        preferences = PreferencesManager()
+        snapshot = preferences.set_input_mode(
+            InputMode.CONTINUOUS
+        )
+        return True, snapshot
+
+
 def test_set_input_mode_command() -> None:
     async def scenario() -> None:
         (
@@ -378,6 +394,33 @@ def test_set_input_mode_command() -> None:
             == "preferences"
             for event in desktop.events
         )
+
+    asyncio.run(scenario())
+
+
+def test_toggle_voice_publishes_actual_input_mode() -> None:
+    async def scenario() -> None:
+        bridge, desktop, _, _ = create_bridge()
+        bridge.mode_manager = FakeModeManager()
+
+        await bridge.handle_command(
+            make_command("toggle_voice_mode")
+        )
+
+        preference_events = [
+            event
+            for event in desktop.events
+            if event["event_type"] == "preferences"
+        ]
+        assert preference_events[-1]["payload"][
+            "input_mode"
+        ] == "continuous"
+        assert desktop.events[-1]["event_type"] == (
+            "command_result"
+        )
+        assert desktop.events[-1]["payload"][
+            "success"
+        ] is True
 
     asyncio.run(scenario())
 

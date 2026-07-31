@@ -873,11 +873,23 @@ class CoreDesktopBridge:
 
             if action == "toggle_voice_mode":
                 if self.mode_manager is not None:
-                    await self.mode_manager.toggle_manual_voice()
+                    active, snapshot = (
+                        await self.mode_manager
+                        .toggle_manual_voice()
+                    )
+                    self.desktop.publish(
+                        "preferences",
+                        snapshot.to_dict(),
+                    )
                     self._publish_command_result(
                         command_id,
                         success=True,
-                        message="Голосовой режим переключён.",
+                        message=(
+                            "Nova слушает микрофон."
+                            if active
+                            else
+                            "Голосовой ввод остановлен."
+                        ),
                     )
                 else:
                     self._publish_command_result(
