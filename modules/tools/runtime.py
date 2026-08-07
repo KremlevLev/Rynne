@@ -101,6 +101,7 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
     "browser_screenshot": RiskLevel.READ_ONLY,
     "browser_status": RiskLevel.READ_ONLY,
     "browser_close": RiskLevel.LOW,
+    "delegate_subagents": RiskLevel.READ_ONLY,
 
     "execute_plan": RiskLevel.EXECUTE,
     "get_plan_status": RiskLevel.READ_ONLY,
@@ -174,6 +175,7 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
     "browser_screenshot": ToolCategory.WEB_READ,
     "browser_status": ToolCategory.WEB_READ,
     "browser_close": ToolCategory.WEB_READ,
+    "delegate_subagents": ToolCategory.DEVELOPMENT,
 
     "execute_plan": ToolCategory.DEVELOPMENT,
     "get_plan_status": ToolCategory.DEVELOPMENT,

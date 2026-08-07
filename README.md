@@ -99,6 +99,15 @@ You do not need to remember tool names or manually assemble command chains. Desc
 - Resume unfinished work after restart without repeating side effects.
 - Create reminders and monitoring rules.
 
+### Split complex work across a model team
+
+- Nova automatically recognizes multi-part engineering and research requests.
+- Independent intent, architecture, and verification workers run in parallel.
+- Concurrency follows healthy independent Groq, OpenRouter, and Gemini key quotas,
+  up to the configurable `NOVA_MAX_SUBAGENTS` limit.
+- A reviewer merges the reports without changing the original request; the primary
+  Nova remains responsible for real tool calls, permissions, and verification.
+
 ```text
 “Remember that my work repositories are in D:\Projects.”
 “Run this in the background: open the project, test it, and prepare a report.”
@@ -452,13 +461,13 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **797 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **806 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 
 ## Project status
 
-Nova is under active development. The Windows tools, durable background plans, MCP layer, React/Tauri desktop app, memory, provider pools, browser profile, and proactive safety model are already implemented. The next major areas are broader proactive scenarios, richer task screens, signed releases, automatic updates, and multi-agent orchestration.
+Nova is under active development. The Windows tools, durable background plans, MCP layer, React/Tauri desktop app, memory, provider pools, browser profile, proactive safety model, and read-only parallel subagent teams are already implemented. The next major areas are isolated worktrees for parallel code-writing agents, broader proactive scenarios, richer task screens, signed releases, and automatic updates.
 
 The detailed backlog and completed milestones live in [`roadmap.md`](roadmap.md).
 

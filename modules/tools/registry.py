@@ -1236,6 +1236,45 @@ browser_tools = [
 ]
 
 ALL_TOOLS.extend(browser_tools)
+subagent_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "delegate_subagents",
+            "description": (
+                "Создаёт временную команду аналитических субагентов для сложной задачи. "
+                "Nova автоматически ограничивает параллелизм числом доступных API-ключей, "
+                "распределяет модели и возвращает reviewer-сводку. Используйте для независимых "
+                "исследований, аудита, архитектуры и проверки перед реальными действиями."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "minLength": 1, "maxLength": 6000},
+                    "subtasks": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 6,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "role": {"type": "string", "maxLength": 80},
+                                "task": {"type": "string", "minLength": 1, "maxLength": 2000},
+                            },
+                            "required": ["task"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "context": {"type": "string", "maxLength": 6000},
+                    "max_agents": {"type": "integer", "minimum": 1, "maximum": 6},
+                },
+                "required": ["goal"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+ALL_TOOLS.extend(subagent_tools)
 planning_tools = [
     {
         "type": "function",

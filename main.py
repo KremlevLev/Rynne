@@ -48,6 +48,7 @@ from core.config import (
     NOVA_DESKTOP_UI,
     NOVA_DESKTOP_TRANSPORT,
     NOVA_PREMIUM_UI,
+    NOVA_MAX_SUBAGENTS,
     NOVA_PROACTIVE_COOLDOWN_SECONDS,
     NOVA_PROACTIVE_BACKUP_CHECK_SECONDS,
     NOVA_PROACTIVE_PACKAGE_CHECK_SECONDS,
@@ -133,6 +134,7 @@ from modules.windows.git_tools import (
 from modules.agent.plan_service import (
     PlanService,
 )
+from modules.agent.subagents import SubagentPool
 from modules.browser.manager import (
     BrowserManager,
 )
@@ -788,6 +790,11 @@ async def async_main() -> None:
         activity_callback=publish_voice_activity("stt"),
     )
     llm = NovaLLM()
+    subagent_pool = SubagentPool(
+        llm,
+        event_handler=(desktop_service.publish if NOVA_DESKTOP_UI else None),
+        max_agents=NOVA_MAX_SUBAGENTS,
+    )
 
     handlers = build_handlers(
         memory,
@@ -873,6 +880,7 @@ async def async_main() -> None:
         ),
         disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
+    handlers["delegate_subagents"] = subagent_pool.delegate_subagents
     proactive_confirmation = ProactiveConfirmationManager()
     website_watch_manager = WebsiteWatchManager(database)
     backup_watch_manager = BackupWatchManager(database)
@@ -1308,6 +1316,7 @@ async def async_main() -> None:
         execution_memory=ExecutionMemory(),
         skill_library=SkillLibrary(),
         isolated_history=True,
+        subagent_pool=subagent_pool,
     )
 
     # =========================================================

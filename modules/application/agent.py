@@ -49,6 +49,7 @@ from modules.tools.selection import (
     get_selected_tool_names,
     request_prefers_interactive_browser,
 )
+from modules.agent.subagents import should_auto_delegate
 from modules.agent.execution_memory import ExecutionMemory
 from modules.agent.goal_ledger import GoalLedger
 from modules.agent.skill_library import SkillBundle, SkillLibrary
@@ -482,6 +483,7 @@ class AgentService:
         execution_memory: ExecutionMemory | None = None,
         skill_library: SkillLibrary | None = None,
         isolated_history: bool = False,
+        subagent_pool=None,
     ) -> None:
         self.llm = llm
         self.registry = registry
@@ -500,6 +502,7 @@ class AgentService:
         )
         self.execution_memory = execution_memory
         self.skill_library = skill_library
+        self.subagent_pool = subagent_pool
         # On-demand tools remain warm for the next turns, but the bounded
         # cache prevents a long session from putting the whole registry back
         # into every model context.
@@ -1049,6 +1052,37 @@ class AgentService:
                 and not has_image
             )
         )
+        delegation_prompt = ""
+        if (
+            self.subagent_pool is not None
+            and action_was_requested
+            and not has_image
+            and should_auto_delegate(selection_text, complexity)
+            and self.subagent_pool.parallel_capacity() >= 2
+        ):
+            try:
+                team_result = await self.subagent_pool.run(
+                    goal=selection_text,
+                    context=(
+                        "Последний ответ Nova:\n" + self._last_message_text(
+                            previous_history,
+                            "assistant",
+                        )
+                        if previous_history
+                        else ""
+                    ),
+                )
+                synthesis = str(team_result.get("synthesis") or "").strip()
+                if synthesis:
+                    delegation_prompt = (
+                        "\n\nКОМАНДА СУБАГЕНТОВ УЖЕ ПРОАНАЛИЗИРОВАЛА ЗАДАЧУ. "
+                        "Используй выводы как внутренний план, но сам реально вызови "
+                        "инструменты и проверь результат. Не проси пользователя повторять "
+                        "исходную цель. Не вызывай delegate_subagents повторно без новой "
+                        "независимой причины.\n" + synthesis
+                    )
+            except Exception:
+                logger.warning("Автоделегирование не удалось.", exc_info=True)
         learned_execution_prompt = ""
         if action_was_requested and self.execution_memory is not None:
             try:
@@ -1076,6 +1110,11 @@ class AgentService:
             execution_decision.required_tools
             & self.registry.names
         )
+        if (
+            complexity in {TaskComplexity.COMPLEX_TOOL, TaskComplexity.ULTRA}
+            and "delegate_subagents" in self.registry.names
+        ):
+            selected_tool_names.add("delegate_subagents")
         selected_tool_names.update(skill_bundle.tools)
         selected_tool_names.update(goal_ledger.tool_hints)
         selected_tool_names.update(
@@ -1201,6 +1240,7 @@ class AgentService:
                     + contextual_prompt
                     + skill_prompt
                     + ledger_prompt
+                    + delegation_prompt
                 ),
             },
             *previous_history,

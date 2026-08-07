@@ -11,8 +11,14 @@
   варианты распознавания «Нова» (`ново`, `нава`, `наува`).
   Во время собственного TTS панель явно показывает паузу микрофона и активную
   echo-защиту вместо ложного состояния «слушаю».
+- ✅ Parallel Subagent Team v1: сложные многосоставные запросы автоматически получают
+  intent-guardian, execution-architect и failure-hunter; параллелизм ограничивается
+  реально доступными независимыми API-ключами/квотами (до 6), запросы распределяются
+  по provider/model lanes, а reviewer возвращает главному агенту единый план. Субагенты
+  аналитические и read-only: реальные действия, permissions и итоговая проверка остаются
+  у главной Nova. В UI видны создание команды, роли, назначенные модели и reviewer-сводка.
 ```bash
-python -m pytest tests/ -q  # 802 tests passed
+python -m pytest tests/ -q  # 806 tests passed
 cd apps/desktop && npm test  # 16 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```

@@ -110,6 +110,7 @@ class KeySlot:
 
     consecutive_failures: int = 0
     successful_requests: int = 0
+    in_flight_requests: int = 0
 
     last_error: str | None = None
     last_success_at: float | None = None
@@ -349,9 +350,15 @@ class ModelGateway:
 
         preferred_index %= len(slots)
 
-        return (
+        rotated = (
             slots[preferred_index:]
             + slots[:preferred_index]
+        )
+        # Concurrent subagents should spread over independent keys instead of
+        # all hitting the last successful slot and sharing its RPM/TPM bucket.
+        return sorted(
+            rotated,
+            key=lambda slot: slot.in_flight_requests,
         )
 
     def _set_preferred_key(
@@ -1282,6 +1289,7 @@ class ModelGateway:
                 )
 
                 try:
+                    slot.in_flight_requests += 1
                     response = await self._request_once(
                         slot=slot,
                         candidate=candidate,
@@ -1346,6 +1354,11 @@ class ModelGateway:
                     )
 
                     return response
+                finally:
+                    slot.in_flight_requests = max(
+                        0,
+                        slot.in_flight_requests - 1,
+                    )
 
             if not usable_route_found:
                 failure_messages.append(
@@ -1389,6 +1402,7 @@ class ModelGateway:
                         "successful_requests": (
                             slot.successful_requests
                         ),
+                        "in_flight_requests": slot.in_flight_requests,
                         "consecutive_failures": (
                             slot.consecutive_failures
                         ),

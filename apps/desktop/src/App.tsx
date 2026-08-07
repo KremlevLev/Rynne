@@ -369,6 +369,44 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
         body: text(payload, "message", tx(locale, "Проверка активного окна завершена.", "Active-window check completed.")),
         status: text(payload, "outcome") === "blocked" ? "error" : "success",
       };
+    case "subagent_team_started":
+      return {
+        id,
+        kind: "tool",
+        title: tx(locale, "Nova собрала команду", "Nova assembled a team"),
+        body: tx(
+          locale,
+          `Параллельных агентов: ${Number(payload.agents ?? 0)} · доступная ёмкость: ${Number(payload.capacity ?? 0)}`,
+          `Parallel agents: ${Number(payload.agents ?? 0)} · available capacity: ${Number(payload.capacity ?? 0)}`,
+        ),
+        status: "working",
+      };
+    case "subagent_started":
+      return {
+        id,
+        kind: "tool",
+        title: `${tx(locale, "Субагент", "Subagent")} · ${text(payload, "role", "specialist")}`,
+        body: text(payload, "task"),
+        status: "working",
+      };
+    case "subagent_completed":
+      return {
+        id,
+        kind: "tool",
+        title: `${text(payload, "role", "specialist")} · ${payload.success === true ? tx(locale, "готов", "ready") : tx(locale, "ошибка", "failed")}`,
+        body: payload.success === true
+          ? `${text(payload, "provider")}:${text(payload, "model")}`
+          : text(payload, "error", tx(locale, "Субагент не ответил.", "Subagent did not respond.")),
+        status: payload.success === true ? "success" : "error",
+      };
+    case "subagent_team_completed":
+      return {
+        id,
+        kind: "assistant",
+        title: tx(locale, "Reviewer команды", "Team reviewer"),
+        body: text(payload, "synthesis", tx(locale, "Командный анализ завершён.", "Team analysis completed.")),
+        status: payload.success === true ? "success" : "error",
+      };
     default:
       return null;
   }

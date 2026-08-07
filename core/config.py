@@ -282,6 +282,11 @@ MAX_TOOL_CALLS = int(
     os.getenv("NOVA_MAX_TOOL_CALLS", "24")
 )
 
+NOVA_MAX_SUBAGENTS = min(
+    6,
+    max(1, int(os.getenv("NOVA_MAX_SUBAGENTS", "6"))),
+)
+
 MAX_CONTEXT_ESTIMATED_TOKENS = int(
     os.getenv("NOVA_MAX_CONTEXT_TOKENS", "12000")
 )

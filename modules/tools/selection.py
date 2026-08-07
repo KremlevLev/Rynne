@@ -74,6 +74,10 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "терминал", "команда", "консоль", "powershell", "pytest", "npm",
     },
     "execute_plan": {"по шагам", "выполни план", "многошаг", "сначала"},
+    "delegate_subagents": {
+        "субагент", "агенты", "команда агентов", "параллельно", "распараллелить",
+        "полный аудит", "архитектура", "весь проект",
+    },
     "start_background_plan": {"в фоне", "фонов", "background", "асинхронно"},
     "retry_background_plan": {
         "продолжи задачу",
@@ -259,6 +263,7 @@ CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ("в фоне", "фонов", "background", "план", "по шагам", "сначала"),
         (
             "execute_plan", "get_plan_status", "cancel_plan",
+            "delegate_subagents",
             "start_background_plan", "get_background_plan_status",
             "list_background_plans", "retry_background_plan",
             "cancel_background_plan",
@@ -308,6 +313,7 @@ FALLBACK_ACTION_TOOLS = (
     "start_process",
     "get_process_status",
     "execute_plan",
+    "delegate_subagents",
     "start_background_plan",
     "retry_background_plan",
     "get_clipboard_content",
