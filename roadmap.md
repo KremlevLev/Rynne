@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 785 tests passed
+python -m pytest tests/ -q  # 790 tests passed
 cd apps/desktop && npm test  # 13 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -148,6 +148,14 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   символов; skills не могут отменять policy/permissions. В Core и installer включены готовые
   Browser Operator, Project Repair и Windows Operator, пользовательские файлы применяются
   сразу без пересборки Nova.
+- ✅ По task/progress ledger из Magentic-One добавлен детерминированный completion gate:
+  составная команда превращается в обязательные outcomes навигации, чтения страницы,
+  изменения workspace, теста/сборки, ввода в приложение, screenshot и Git commit. Ledger
+  добавляет необходимые tools в selector, показывает модели незакрытые postconditions и
+  запускает re-plan, если она преждевременно пишет «готово». Учитываются только успешные
+  tool results; незакрытая цель возвращает честный `GOAL_INCOMPLETE` и не записывается в
+  execution memory как успешный playbook. Детерминированный screenshot gate не дублирует
+  модельный re-plan, а документация проверяется diff без бессмысленного полного test suite.
 - ✅ Feedback loop «Nova рядом» теперь проходит end-to-end: React сохраняет event id и
   одноразовый screenshot context при принятии карточки, показывает настоящее action label
   и кнопку «Не сейчас»; Core учится только на реакции без хранения пользовательского текста,

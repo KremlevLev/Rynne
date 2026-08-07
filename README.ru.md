@@ -480,7 +480,7 @@ npm test
 npm run build
 ```
 
-Текущий regression suite: **785 Python-тестов + 13 desktop-тестов + 8/8 acceptance-сценариев оркестратора**.
+Текущий regression suite: **790 Python-тестов + 13 desktop-тестов + 8/8 acceptance-сценариев оркестратора**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

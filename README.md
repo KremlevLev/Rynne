@@ -438,7 +438,7 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **785 Python tests + 13 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **790 Python tests + 13 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 

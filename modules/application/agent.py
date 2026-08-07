@@ -50,6 +50,7 @@ from modules.tools.selection import (
     request_prefers_interactive_browser,
 )
 from modules.agent.execution_memory import ExecutionMemory
+from modules.agent.goal_ledger import GoalLedger
 from modules.agent.skill_library import SkillBundle, SkillLibrary
 
 
@@ -1016,6 +1017,10 @@ class AgentService:
             use_tools = True
 
         all_tool_schemas = self.registry.schemas()
+        goal_ledger = GoalLedger.from_request(
+            selection_text,
+            self.registry.names,
+        )
         proactive_autonomous_request = bool(
             request_object is not None
             and request_object.metadata.get("proactive_autonomous")
@@ -1072,6 +1077,7 @@ class AgentService:
             & self.registry.names
         )
         selected_tool_names.update(skill_bundle.tools)
+        selected_tool_names.update(goal_ledger.tool_hints)
         selected_tool_names.update(
             set(self._sticky_tool_names)
             & self.registry.names
@@ -1143,6 +1149,11 @@ class AgentService:
             if skill_bundle.prompt
             else ""
         )
+        ledger_prompt = (
+            "\n\n" + goal_ledger.prompt()
+            if goal_ledger.requirements
+            else ""
+        )
 
         # Инициализация бюджета для этого запроса.
         budget_state = (
@@ -1189,6 +1200,7 @@ class AgentService:
                     + interactive_browser_prompt
                     + contextual_prompt
                     + skill_prompt
+                    + ledger_prompt
                 ),
             },
             *previous_history,
@@ -1296,6 +1308,7 @@ class AgentService:
                             + learned_prompt
                             + interactive_browser_prompt
                             + skill_prompt
+                            + ledger_prompt
                         ),
                     },
                     *messages[1:],
@@ -1353,6 +1366,7 @@ class AgentService:
                         + learned_prompt
                         + interactive_browser_prompt
                         + skill_prompt
+                        + ledger_prompt
                     ),
                 },
                 *messages[1:],
@@ -1477,6 +1491,7 @@ class AgentService:
         total_tool_calls = 0
         pending_tool_calls = tool_calls
         budget_exhausted = False
+        completion_gate_attempts = 0
 
         while pending_tool_calls:
             executed_this_round = 0
@@ -1724,6 +1739,7 @@ class AgentService:
                         + learned_prompt
                         + interactive_browser_prompt
                         + skill_prompt
+                        + ledger_prompt
                     ),
                 },
                 *trim_history(self.history),
@@ -1747,6 +1763,58 @@ class AgentService:
             pending_tool_calls = collect_tool_calls(
                 generated
             )
+            unmet_requirements = goal_ledger.unmet(executed_tool_results)
+            gate_requirements = [
+                requirement
+                for requirement in unmet_requirements
+                if requirement.key != "screenshot"
+            ]
+            if (
+                not pending_tool_calls
+                and gate_requirements
+                and completion_gate_attempts < 2
+                and budget_state.logical_model_calls
+                < self.default_budget.max_logical_model_calls
+            ):
+                # Preserve the premature answer as negative context, then ask
+                # once more with the exact missing postconditions. This is a
+                # re-plan, not a fabricated success or deterministic side effect.
+                self.history.append({
+                    "role": "assistant",
+                    "content": generated.text,
+                })
+                completion_gate_attempts += 1
+                self.budget_manager.record_model_call(turn_id)
+                gate_messages = [
+                    {
+                        "role": "system",
+                        "content": (
+                            SYSTEM_PROMPT
+                            + "\n\n"
+                            + TOOL_CONTINUATION_PROMPT
+                            + "\n\n"
+                            + goal_ledger.gate_prompt(gate_requirements)
+                            + execution_prompt
+                            + learned_prompt
+                            + interactive_browser_prompt
+                            + skill_prompt
+                            + ledger_prompt
+                        ),
+                    },
+                    *trim_history(self.history),
+                ]
+                try:
+                    generated = await self._request_model(
+                        complexity=complexity,
+                        messages=gate_messages,
+                        tools=tool_schemas,
+                        allow_tools=True,
+                        has_image=False,
+                    )
+                    pending_tool_calls = collect_tool_calls(generated)
+                except Exception as exc:
+                    logger.warning("Completion gate завершился ошибкой: %s", exc)
+                    break
             executed_tool_names = {
                 str(item.get("name", ""))
                 for item in executed_tool_results
@@ -1792,6 +1860,7 @@ class AgentService:
             executed_tool_results
             and not budget_exhausted
             and self.execution_memory is not None
+            and not goal_ledger.unmet(executed_tool_results)
         ):
             try:
                 await asyncio.to_thread(
@@ -1805,9 +1874,36 @@ class AgentService:
                     exc_info=True,
                 )
 
-        return await self._create_final_report(
+        final_response = await self._create_final_report(
             user_text=user_text,
             tool_results=executed_tool_results,
             original_complexity=complexity,
             budget_exhausted=budget_exhausted,
         )
+        remaining_requirements = goal_ledger.unmet(executed_tool_results)
+        if remaining_requirements:
+            missing_text = "; ".join(
+                item.description
+                for item in remaining_requirements
+            )
+            final_response.success = False
+            final_response.error_code = "GOAL_INCOMPLETE"
+            final_response.display_text += (
+                "\n\nЗадача пока не завершена: " + missing_text
+            )
+            final_response.speech_text = (
+                "Задача пока не завершена. " + missing_text
+            )
+            final_response.data["goal_ledger"] = {
+                "complete": False,
+                "missing": [
+                    item.key
+                    for item in remaining_requirements
+                ],
+            }
+        elif goal_ledger.requirements:
+            final_response.data["goal_ledger"] = {
+                "complete": True,
+                "missing": [],
+            }
+        return final_response
