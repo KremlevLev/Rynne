@@ -177,6 +177,14 @@ The desktop app includes three presentation modes:
 - **Focus** — a compact layout with more room for conversation.
 - **Console** — a clean, dense, CLI-inspired workspace.
 
+The whole desktop interface is available in **English and Russian**. Use the language
+switcher in the top bar or Settings; Nova remembers the choice and even localizes the
+startup screen before React loads. Open **Guide** for an eight-part handbook with real
+commands, voice and Nova Nearby setup, skills, providers, MCP, safety, and troubleshooting.
+
+TTS language and voice selection is the next audio milestone. It will be configured
+independently from the interface language, so an English UI will not force an English voice.
+
 ## Quick start from source
 
 ### 1. Clone Nova
@@ -438,7 +446,7 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **790 Python tests + 13 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **790 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 

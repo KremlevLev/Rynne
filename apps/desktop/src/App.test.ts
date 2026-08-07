@@ -3,11 +3,15 @@ import {
   eventToItem,
   isConversationNearBottom,
   normalizeUiMode,
+  normalizeUiLocale,
+  readUiLocale,
   readUiMode,
   scrollConversationToBottom,
   UI_MODE_OPTIONS,
+  uiModeOptions,
   PROVIDER_OPTIONS,
   writeUiMode,
+  writeUiLocale,
 } from "./App";
 
 describe("eventToItem", () => {
@@ -93,6 +97,35 @@ describe("UI modes", () => {
     writeUiMode(storage, "focus");
 
     expect(readUiMode(storage)).toBe("focus");
+  });
+});
+
+describe("UI language", () => {
+  it("offers a complete English presentation copy", () => {
+    expect(normalizeUiLocale("en")).toBe("en");
+    expect(normalizeUiLocale("unknown")).toBe("ru");
+    expect(uiModeOptions("en").map((option) => option.shortLabel)).toEqual([
+      "Beautiful",
+      "Balanced",
+      "Light",
+    ]);
+    expect(eventToItem({
+      event_type: "request_failed",
+      payload: {},
+      created_at: 3,
+    }, "en")?.body).toBe("The request could not be completed.");
+  });
+
+  it("persists locale without involving Nova Core", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    writeUiLocale(storage, "en");
+
+    expect(readUiLocale(storage)).toBe("en");
   });
 });
 

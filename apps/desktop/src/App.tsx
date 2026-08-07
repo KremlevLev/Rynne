@@ -1,11 +1,13 @@
 import {
   Activity,
+  BookOpen,
   Bot,
   ChevronRight,
   Command,
   Cpu,
   History,
   KeyRound,
+  Languages,
   LayoutDashboard,
   MessageSquare,
   Mic,
@@ -31,9 +33,11 @@ import {
   type ProviderKeySummary,
   type ProviderName,
 } from "./transport";
+import { Guide, type GuideLocale } from "./Guide";
 
-type ViewKey = "dialog" | "tasks" | "automations" | "settings";
+type ViewKey = "dialog" | "tasks" | "automations" | "guide" | "settings";
 export type UiMode = "aura" | "focus" | "console";
+export type UiLocale = GuideLocale;
 type TimelineItem = {
   id: string;
   kind: "user" | "assistant" | "tool" | "suggestion";
@@ -47,6 +51,11 @@ type TimelineItem = {
 };
 
 const UI_MODE_STORAGE_KEY = "nova.ui-mode";
+const UI_LOCALE_STORAGE_KEY = "nova.ui-locale";
+
+function tx(locale: UiLocale, ru: string, en: string): string {
+  return locale === "ru" ? ru : en;
+}
 
 export const UI_MODE_OPTIONS: ReadonlyArray<{
   key: UiMode;
@@ -74,6 +83,30 @@ export const UI_MODE_OPTIONS: ReadonlyArray<{
   },
 ];
 
+export function uiModeOptions(locale: UiLocale) {
+  if (locale === "ru") return UI_MODE_OPTIONS;
+  return [
+    {
+      key: "aura" as const,
+      label: "Beautiful · maximum",
+      shortLabel: "Beautiful",
+      description: "Full visual experience with live activity, context panel, and atmospheric effects.",
+    },
+    {
+      key: "focus" as const,
+      label: "Balanced · medium",
+      shortLabel: "Balanced",
+      description: "Compact navigation and more room for the conversation without the right panel.",
+    },
+    {
+      key: "console" as const,
+      label: "Light · minimum",
+      shortLabel: "Light",
+      description: "Minimum resource use and a clean CLI-inspired workspace.",
+    },
+  ];
+}
+
 export const PROVIDER_OPTIONS: ReadonlyArray<{
   key: ProviderName;
   label: string;
@@ -99,6 +132,40 @@ export const PROVIDER_OPTIONS: ReadonlyArray<{
     placeholder: "AIza…",
   },
 ];
+
+function providerOptions(locale: UiLocale) {
+  if (locale === "ru") return PROVIDER_OPTIONS;
+  return [
+    { ...PROVIDER_OPTIONS[0], description: "GPT OSS 120B for text and tools · Qwen for images · Whisper STT" },
+    { ...PROVIDER_OPTIONS[1], description: "Fallback models and independent rate limits" },
+    { ...PROVIDER_OPTIONS[2], description: "Additional route for vision and complex tasks" },
+  ];
+}
+
+export function normalizeUiLocale(value: unknown): UiLocale {
+  return value === "en" ? "en" : "ru";
+}
+
+export function readUiLocale(
+  storage: Pick<Storage, "getItem"> | null = null,
+): UiLocale {
+  try {
+    return normalizeUiLocale(storage?.getItem(UI_LOCALE_STORAGE_KEY));
+  } catch {
+    return "ru";
+  }
+}
+
+export function writeUiLocale(
+  storage: Pick<Storage, "setItem"> | null,
+  locale: UiLocale,
+): void {
+  try {
+    storage?.setItem(UI_LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Locale is a presentation preference and must not break the UI.
+  }
+}
 
 export function normalizeUiMode(value: unknown): UiMode {
   return UI_MODE_OPTIONS.some((option) => option.key === value)
@@ -127,7 +194,7 @@ export function writeUiMode(
   }
 }
 
-const runtimeLabels: Record<string, string> = {
+const runtimeLabelsRu: Record<string, string> = {
   "СПИТ": "Nova готова",
   "СЛУШАЕТ": "Nova слушает",
   "РАСПОЗНАЕТ": "Распознаю речь",
@@ -139,13 +206,26 @@ const runtimeLabels: Record<string, string> = {
   "ЗАВЕРШАЕТ РАБОТУ": "Nova завершает работу",
 };
 
-export function runtimePresentation(state: unknown): {
+const runtimeLabelsEn: Record<string, string> = {
+  "СПИТ": "Nova is ready",
+  "СЛУШАЕТ": "Nova is listening",
+  "РАСПОЗНАЕТ": "Recognizing speech",
+  "ДУМАЕТ": "Nova is thinking",
+  "ЖДЕТ РАЗРЕШЕНИЕ": "Confirmation required",
+  "ВЫПОЛНЯЕТ": "Nova is working",
+  "ГОВОРИТ": "Nova is speaking",
+  "ОШИБКА": "Check required",
+  "ЗАВЕРШАЕТ РАБОТУ": "Nova is shutting down",
+};
+
+export function runtimePresentation(state: unknown, locale: UiLocale = "ru"): {
   label: string;
   working: boolean;
 } {
   const value = typeof state === "string" ? state : "СПИТ";
   return {
-    label: runtimeLabels[value] ?? "Nova готова",
+    label: (locale === "ru" ? runtimeLabelsRu : runtimeLabelsEn)[value]
+      ?? tx(locale, "Nova готова", "Nova is ready"),
     working: !["СПИТ", "ОШИБКА", "ЗАВЕРШАЕТ РАБОТУ"].includes(value),
   };
 }
@@ -167,34 +247,41 @@ export function isConversationNearBottom(
   return element.scrollHeight - element.scrollTop - element.clientHeight <= threshold;
 }
 
-const nav = [
-  { key: "dialog" as const, label: "Диалог", icon: MessageSquare },
-  { key: "tasks" as const, label: "Задачи", icon: Activity },
-  { key: "automations" as const, label: "Автоматизации", icon: Workflow },
-  { key: "settings" as const, label: "Настройки", icon: Settings },
-];
+function navigation(locale: UiLocale) {
+  return [
+    { key: "dialog" as const, label: tx(locale, "Диалог", "Chat"), icon: MessageSquare },
+    { key: "tasks" as const, label: tx(locale, "Задачи", "Tasks"), icon: Activity },
+    { key: "automations" as const, label: tx(locale, "Автоматизации", "Automations"), icon: Workflow },
+    { key: "guide" as const, label: tx(locale, "Памятка", "Guide"), icon: BookOpen },
+    { key: "settings" as const, label: tx(locale, "Настройки", "Settings"), icon: Settings },
+  ];
+}
 
-const initialTimeline: TimelineItem[] = [
+function initialTimeline(locale: UiLocale): TimelineItem[] { return [
   {
     id: "welcome",
     kind: "assistant",
     title: "Nova",
-    body: "Я рядом. Поставь задачу — найду нужные инструменты, выполню и покажу проверяемый результат.",
+    body: tx(
+      locale,
+      "Я рядом. Поставь задачу — найду нужные инструменты, выполню и покажу проверяемый результат.",
+      "I'm here. Give me a task — I'll find the right tools, execute it, and show a verifiable result.",
+    ),
     status: "success",
   },
-];
+]};
 
 function text(payload: JsonObject, key: string, fallback = ""): string {
   const value = payload[key];
   return typeof value === "string" ? value : fallback;
 }
 
-export function eventToItem(event: NovaEvent): TimelineItem | null {
+export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): TimelineItem | null {
   const id = `${event.event_type}_${event.created_at}_${Math.random()}`;
   const payload = event.payload;
   switch (event.event_type) {
     case "user_message":
-      return { id, kind: "user", title: "Вы", body: text(payload, "text") };
+      return { id, kind: "user", title: tx(locale, "Вы", "You"), body: text(payload, "text") };
     case "assistant_message":
       return {
         id,
@@ -212,14 +299,14 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
         id,
         kind: "assistant",
         title: "Nova",
-        body: text(payload, "error", "Не удалось выполнить запрос."),
+        body: text(payload, "error", tx(locale, "Не удалось выполнить запрос.", "The request could not be completed.")),
         status: "error",
       };
     case "tool_started":
       return {
         id,
         kind: "tool",
-        title: text(payload, "description", "Запускаю инструмент"),
+        title: text(payload, "description", tx(locale, "Запускаю инструмент", "Running tool")),
         body: text(payload, "tool_name"),
         status: "working",
       };
@@ -227,7 +314,9 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
       return {
         id,
         kind: "tool",
-        title: payload.success === false ? "Инструмент завершился с ошибкой" : "Действие выполнено",
+        title: payload.success === false
+          ? tx(locale, "Инструмент завершился с ошибкой", "Tool failed")
+          : tx(locale, "Действие выполнено", "Action completed"),
         body: text(payload, "tool_name"),
         status: payload.success === false ? "error" : "success",
       };
@@ -235,10 +324,10 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
       return {
         id,
         kind: "suggestion",
-        title: text(payload, "title", "Nova заметила кое-что"),
+        title: text(payload, "title", tx(locale, "Nova заметила кое-что", "Nova noticed something")),
         body: text(payload, "message"),
         action: text(payload, "suggested_request"),
-        actionLabel: text(payload, "action_label", "Помочь с этим"),
+        actionLabel: text(payload, "action_label", tx(locale, "Помочь с этим", "Help with this")),
         proactiveEventId: text(payload, "event_id"),
         proactiveContextKey: text(payload, "source_key"),
       };
@@ -246,8 +335,8 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
       return {
         id,
         kind: "assistant",
-        title: "Nova рядом",
-        body: text(payload, "message", "Проверка активного окна завершена."),
+        title: tx(locale, "Nova рядом", "Nova Nearby"),
+        body: text(payload, "message", tx(locale, "Проверка активного окна завершена.", "Active-window check completed.")),
         status: text(payload, "outcome") === "blocked" ? "error" : "success",
       };
     default:
@@ -257,19 +346,22 @@ export function eventToItem(event: NovaEvent): TimelineItem | null {
 
 export function App() {
   const transport = useMemo<NovaTransport>(() => createNovaTransport(), []);
+  const [locale, setLocale] = useState<UiLocale>(() => (
+    readUiLocale(typeof window === "undefined" ? null : window.localStorage)
+  ));
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [view, setView] = useState<ViewKey>("dialog");
-  const [timeline, setTimeline] = useState<TimelineItem[]>(initialTimeline);
+  const [timeline, setTimeline] = useState<TimelineItem[]>(() => initialTimeline(locale));
   const [composer, setComposer] = useState("");
   const [busy, setBusy] = useState(false);
   const [proactive, setProactive] = useState(false);
-  const [activeTool, setActiveTool] = useState("Ожидаю задачу");
+  const [activeTool, setActiveTool] = useState(() => tx(locale, "Ожидаю задачу", "Waiting for a task"));
   const [taskProgress, setTaskProgress] = useState(0);
   const [runtimeState, setRuntimeState] = useState("СПИТ");
   const [inputMode, setInputMode] = useState("sleep");
   const [voicePending, setVoicePending] = useState(false);
   const [proactivePending, setProactivePending] = useState(false);
-  const [proactiveStatus, setProactiveStatus] = useState("Выключено");
+  const [proactiveStatus, setProactiveStatus] = useState(() => tx(locale, "Выключено", "Off"));
   const [proactivePhase, setProactivePhase] = useState("idle");
   const [wakeWordAvailable, setWakeWordAvailable] = useState(false);
   const [wakeWord, setWakeWord] = useState("Нова");
@@ -283,11 +375,15 @@ export function App() {
     readUiMode(typeof window === "undefined" ? null : window.localStorage)
   ));
   const conversationRef = useRef<HTMLDivElement>(null);
+  const localeRef = useRef(locale);
   const followConversationRef = useRef(true);
   const [followingConversation, setFollowingConversation] = useState(true);
   const [voiceStatus, setVoiceStatus] = useState("");
   const [confirmingSuggestionId, setConfirmingSuggestionId] = useState<string | null>(null);
-  const runtime = runtimePresentation(runtimeState);
+  const runtime = runtimePresentation(runtimeState, locale);
+  const nav = navigation(locale);
+  const modes = uiModeOptions(locale);
+  const providers = providerOptions(locale);
 
   useEffect(() => {
     let dispose: () => void = () => undefined;
@@ -296,7 +392,7 @@ export function App() {
       .connect(
         (event) => {
           if (!mounted) return;
-          const item = eventToItem(event);
+          const item = eventToItem(event, localeRef.current);
           if (item) setTimeline((current) => [...current, item]);
           if (event.event_type === "request_started") setBusy(true);
           if (event.event_type === "runtime") {
@@ -305,7 +401,7 @@ export function App() {
           }
           if (event.event_type === "assistant_message" || event.event_type === "request_failed") {
             setBusy(false);
-            setActiveTool("Ожидаю задачу");
+            setActiveTool(tx(localeRef.current, "Ожидаю задачу", "Waiting for a task"));
           }
           if (event.event_type === "tool_started") {
             setActiveTool(text(event.payload, "description", text(event.payload, "tool_name")));
@@ -324,20 +420,22 @@ export function App() {
             setVoicePending(false);
             setProactivePending(false);
             if (event.payload.proactive_vision_enabled === true) {
-              setActiveTool("Nova рядом наблюдает за активным окном");
-              setProactiveStatus((current) => current === "Выключено" ? "Запускаю…" : current);
+              setActiveTool(tx(localeRef.current, "Nova рядом наблюдает за активным окном", "Nova Nearby is observing the active window"));
+              setProactiveStatus((current) => ["Выключено", "Off"].includes(current)
+                ? tx(localeRef.current, "Запускаю…", "Starting…")
+                : current);
             } else {
-              setProactiveStatus("Выключено");
+              setProactiveStatus(tx(localeRef.current, "Выключено", "Off"));
               setProactivePhase("idle");
             }
           }
           if (event.event_type === "proactive_status") {
             const phase = text(event.payload, "phase", "idle");
-            const message = text(event.payload, "message", "Nova рядом работает");
+            const message = text(event.payload, "message", tx(localeRef.current, "Nova рядом работает", "Nova Nearby is running"));
             setProactivePhase(phase);
             setProactiveStatus(message);
             if (phase === "scanning") setActiveTool(message);
-            if (phase === "checked") setActiveTool("Ожидаю задачу");
+            if (phase === "checked") setActiveTool(tx(localeRef.current, "Ожидаю задачу", "Waiting for a task"));
           }
           if (event.event_type === "proactive_confirmation_resolved") {
             const eventId = text(event.payload, "event_id");
@@ -406,6 +504,20 @@ export function App() {
     );
   }, [uiMode]);
 
+  useEffect(() => {
+    localeRef.current = locale;
+    writeUiLocale(
+      typeof window === "undefined" ? null : window.localStorage,
+      locale,
+    );
+    if (typeof document !== "undefined") document.documentElement.lang = locale;
+    if (!busy) setActiveTool(tx(locale, "Ожидаю задачу", "Waiting for a task"));
+    if (!proactive) setProactiveStatus(tx(locale, "Выключено", "Off"));
+    setTimeline((current) => current.map((item) => (
+      item.id === "welcome" ? initialTimeline(locale)[0] : item
+    )));
+  }, [locale]);
+
   async function send(request = composer) {
     const value = request.trim();
     if (!value || busy || connection !== "connected") return;
@@ -424,7 +536,7 @@ export function App() {
     } catch (error) {
       setProactivePending(false);
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось переключить Nova рядом.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось переключить Nova рядом.", "Could not toggle Nova Nearby."),
       );
     }
   }
@@ -451,7 +563,7 @@ export function App() {
       });
     } catch (error) {
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось сохранить реакцию.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось сохранить реакцию.", "Could not save feedback."),
       );
     }
   }
@@ -463,20 +575,22 @@ export function App() {
     } catch (error) {
       setVoicePending(false);
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось включить микрофон.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось включить микрофон.", "Could not enable the microphone."),
       );
     }
   }
 
   async function selectInputMode(mode: "wake_word" | "continuous" | "sleep") {
     setVoicePending(true);
-    setVoiceStatus(mode === "wake_word" ? `Включаю ожидание «${wakeWord}»…` : "Переключаю микрофон…");
+    setVoiceStatus(mode === "wake_word"
+      ? tx(locale, `Включаю ожидание «${wakeWord}»…`, `Enabling wake word “${wakeWord}”…`)
+      : tx(locale, "Переключаю микрофон…", "Switching microphone mode…"));
     try {
       await transport.send("set_input_mode", { input_mode: mode });
     } catch (error) {
       setVoicePending(false);
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось переключить голосовой режим.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось переключить голосовой режим.", "Could not switch voice mode."),
       );
     }
   }
@@ -488,20 +602,20 @@ export function App() {
       await transport.send("set_wake_word_sensitivity", { value: normalized });
     } catch (error) {
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось изменить чувствительность.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось изменить чувствительность.", "Could not update sensitivity."),
       );
     }
   }
 
   async function runProactiveCheck() {
-    setProactiveStatus("Переключитесь на нужное окно — снимок через 3 секунды…");
+    setProactiveStatus(tx(locale, "Переключитесь на нужное окно — снимок через 3 секунды…", "Switch to the target window — capture starts in 3 seconds…"));
     setProactivePhase("scanning");
     try {
       await transport.send("run_proactive_check");
     } catch (error) {
       setProactivePhase("error");
       setProactiveStatus(
-        error instanceof Error ? error.message : "Не удалось запустить проверку.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось запустить проверку.", "Could not start the check."),
       );
     }
   }
@@ -512,7 +626,7 @@ export function App() {
       setProviderKeys(await transport.listProviderKeys());
     } catch (error) {
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось получить список ключей.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось получить список ключей.", "Could not load provider keys."),
       );
     } finally {
       setProviderKeysLoading(false);
@@ -521,29 +635,29 @@ export function App() {
 
   async function addProviderKey() {
     if (apiKey.trim().length < 12) return;
-    setSettingsStatus("Добавляю ключ и перезапускаю Nova Core…");
+    setSettingsStatus(tx(locale, "Добавляю ключ и перезапускаю Nova Core…", "Adding the key and restarting Nova Core…"));
     try {
       await transport.addProviderKey(provider, apiKey.trim());
       setApiKey("");
-      setSettingsStatus("Ключ добавлен. Nova Core переподключается.");
+      setSettingsStatus(tx(locale, "Ключ добавлен. Nova Core переподключается.", "Key added. Nova Core is reconnecting."));
       await refreshProviderKeys();
     } catch (error) {
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось сохранить API-ключ.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось сохранить API-ключ.", "Could not save the API key."),
       );
     }
   }
 
   async function removeProviderKey(key: ProviderKeySummary) {
     if (!key.removable) return;
-    setSettingsStatus(`Удаляю ключ ${key.hint}…`);
+    setSettingsStatus(tx(locale, `Удаляю ключ ${key.hint}…`, `Removing key ${key.hint}…`));
     try {
       await transport.removeProviderKey(key.provider, key.index);
-      setSettingsStatus("Ключ удалён. Nova Core переподключается.");
+      setSettingsStatus(tx(locale, "Ключ удалён. Nova Core переподключается.", "Key removed. Nova Core is reconnecting."));
       await refreshProviderKeys();
     } catch (error) {
       setSettingsStatus(
-        error instanceof Error ? error.message : "Не удалось удалить API-ключ.",
+        error instanceof Error ? error.message : tx(locale, "Не удалось удалить API-ключ.", "Could not remove the API key."),
       );
     }
   }
@@ -553,14 +667,14 @@ export function App() {
   const proactiveBadge = proactivePending
     ? "…"
     : !proactive
-      ? "Выкл"
+      ? tx(locale, "Выкл", "Off")
       : proactivePhase === "scanning"
-        ? "Смотрю"
+        ? tx(locale, "Смотрю", "Scanning")
         : proactivePhase === "investigating"
-          ? "Исследую"
+          ? tx(locale, "Исследую", "Investigating")
           : proactivePhase === "error"
-            ? "Ошибка"
-            : "Вкл";
+            ? tx(locale, "Ошибка", "Error")
+            : tx(locale, "Вкл", "On");
 
   return (
     <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
@@ -572,20 +686,20 @@ export function App() {
             <span>
               <i className={`status-dot ${connection}`} />
               {connection === "connected"
-                ? "На связи"
+                ? tx(locale, "На связи", "Connected")
                 : connection === "connecting"
-                  ? "Core запускается…"
-                  : "Core не отвечает"}
+                  ? tx(locale, "Core запускается…", "Core is starting…")
+                  : tx(locale, "Core не отвечает", "Core is not responding")}
             </span>
           </div>
         </div>
 
         <button className="new-task" onClick={() => transport.send("new_task")}>
-          <Plus size={16} /> <span>Новая задача</span> <kbd>Ctrl N</kbd>
+          <Plus size={16} /> <span>{tx(locale, "Новая задача", "New task")}</span> <kbd>Ctrl N</kbd>
         </button>
 
         <nav>
-          <p className="eyebrow">Рабочее пространство</p>
+          <p className="eyebrow">{tx(locale, "Рабочее пространство", "Workspace")}</p>
           {nav.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -604,17 +718,17 @@ export function App() {
             <span><Cpu size={15} /> Nova Core</span>
             <small>GPT OSS 120B</small>
           </div>
-          <button className="profile"><span>ЛК</span><div><strong>Lev</strong><small>Локальный профиль</small></div></button>
+          <button className="profile"><span>ЛК</span><div><strong>Lev</strong><small>{tx(locale, "Локальный профиль", "Local profile")}</small></div></button>
         </div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">ПЕРСОНАЛЬНЫЙ АГЕНТ</span>
+            <span className="eyebrow">{tx(locale, "ПЕРСОНАЛЬНЫЙ АГЕНТ", "PERSONAL AGENT")}</span>
             <h1>{nav.find((item) => item.key === view)?.label}</h1>
           </div>
-          <nav className="compact-nav" aria-label="Разделы Nova">
+          <nav className="compact-nav" aria-label={tx(locale, "Разделы Nova", "Nova sections")}>
             {nav.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -629,8 +743,8 @@ export function App() {
             ))}
           </nav>
           <div className="top-actions">
-            <div className="mode-switcher" aria-label="Режим интерфейса">
-              {UI_MODE_OPTIONS.map((option) => {
+            <div className="mode-switcher" aria-label={tx(locale, "Режим интерфейса", "Interface mode")}>
+              {modes.map((option) => {
                 const Icon = option.key === "aura"
                   ? LayoutDashboard
                   : option.key === "focus"
@@ -651,19 +765,24 @@ export function App() {
                 );
               })}
             </div>
+            <div className="language-switcher" aria-label={tx(locale, "Язык интерфейса", "Interface language")}>
+              <Languages size={14} />
+              <button className={locale === "ru" ? "active" : ""} onClick={() => setLocale("ru")}>RU</button>
+              <button className={locale === "en" ? "active" : ""} onClick={() => setLocale("en")}>EN</button>
+            </div>
             <button
               className={proactive ? "proactive active" : "proactive"}
               onClick={() => void toggleProactive()}
               disabled={proactivePending || connection !== "connected"}
               title={proactive
                 ? proactiveStatus
-                : "Включить наблюдение за активным окном"}
+                : tx(locale, "Включить наблюдение за активным окном", "Enable active-window observation")}
             >
               <Radio size={15} />
-              Nova рядом
+              {tx(locale, "Nova рядом", "Nova Nearby")}
               <span>{proactiveBadge}</span>
             </button>
-            <button className="icon-button" aria-label="Команды"><Command size={18} /></button>
+            <button className="icon-button" aria-label={tx(locale, "Команды", "Commands")} onClick={() => setView("guide")}><Command size={18} /></button>
           </div>
         </header>
 
@@ -674,9 +793,9 @@ export function App() {
               ref={conversationRef}
               onScroll={handleConversationScroll}
               tabIndex={0}
-              aria-label="История диалога"
+              aria-label={tx(locale, "История диалога", "Conversation history")}
             >
-              <div className="date-divider"><span>Сегодня</span></div>
+              <div className="date-divider"><span>{tx(locale, "Сегодня", "Today")}</span></div>
               {timeline.map((item) => (
                 <article key={item.id} className={`timeline ${item.kind}`}>
                   <div className="timeline-rail">
@@ -687,8 +806,8 @@ export function App() {
                   <div className="timeline-content">
                     <div className="message-meta">
                       <strong>{item.title}</strong>
-                      {item.status === "working" && <span className="working-label">выполняется</span>}
-                      {item.status === "success" && item.kind === "tool" && <span className="success-label">готово</span>}
+                      {item.status === "working" && <span className="working-label">{tx(locale, "выполняется", "working")}</span>}
+                      {item.status === "success" && item.kind === "tool" && <span className="success-label">{tx(locale, "готово", "done")}</span>}
                     </div>
                     {item.body && <p>{item.body}</p>}
                     {item.kind === "tool" && <small className="tool-id">{item.body}</small>}
@@ -697,21 +816,21 @@ export function App() {
                         {item.action && (
                           confirmingSuggestionId === item.id ? (
                             <button className="suggestion-action confirm" onClick={() => void acceptSuggestion(item)}>
-                              Да, выполнить <ChevronRight size={15} />
+                              {tx(locale, "Да, выполнить", "Yes, run it")} <ChevronRight size={15} />
                             </button>
                           ) : (
                             <button className="suggestion-action" onClick={() => setConfirmingSuggestionId(item.id)}>
-                              {item.actionLabel ?? "Помочь с этим"} <ChevronRight size={15} />
+                              {item.actionLabel ?? tx(locale, "Помочь с этим", "Help with this")} <ChevronRight size={15} />
                             </button>
                           )
                         )}
                         <button className="suggestion-dismiss" onClick={() => void dismissSuggestion(item)}>
-                          Не сейчас
+                          {tx(locale, "Не сейчас", "Not now")}
                         </button>
                       </div>
                     )}
                     {item.kind === "suggestion" && confirmingSuggestionId === item.id && (
-                      <small className="voice-confirm-hint">Или скажите: «Нова, давай»</small>
+                      <small className="voice-confirm-hint">{tx(locale, "Или скажите: «Нова, давай»", "Or say: “Nova, go ahead”")}</small>
                     )}
                   </div>
                 </article>
@@ -720,7 +839,7 @@ export function App() {
 
             {!followingConversation && (
               <button className="jump-to-latest" onClick={resumeConversationFollow}>
-                К новым сообщениям
+                {tx(locale, "К новым сообщениям", "Jump to latest")}
                 <ChevronRight size={14} />
               </button>
             )}
@@ -738,10 +857,10 @@ export function App() {
                   }}
                   placeholder={
                     connection === "connected"
-                      ? "Попроси Nova или поставь задачу…"
+                      ? tx(locale, "Попроси Nova или поставь задачу…", "Ask Nova or delegate a task…")
                       : connection === "connecting"
-                        ? "Nova Core запускается…"
-                        : "Core не отвечает — Nova продолжает переподключение…"
+                        ? tx(locale, "Nova Core запускается…", "Nova Core is starting…")
+                        : tx(locale, "Core не отвечает — Nova продолжает переподключение…", "Core is not responding — Nova keeps reconnecting…")
                   }
                   disabled={connection !== "connected"}
                   rows={1}
@@ -751,56 +870,84 @@ export function App() {
                     className={voiceActive ? "attach voice-active" : "attach"}
                     onClick={() => void toggleVoice()}
                     disabled={voicePending || connection !== "connected"}
-                    aria-label={voiceActive ? "Остановить голосовой ввод" : "Включить голосовой ввод"}
+                    aria-label={voiceActive ? tx(locale, "Остановить голосовой ввод", "Stop voice input") : tx(locale, "Включить голосовой ввод", "Start voice input")}
                     aria-pressed={voiceActive}
-                    title={voiceActive ? "Nova слушает · нажмите, чтобы остановить" : "Включить микрофон"}
+                    title={voiceActive ? tx(locale, "Nova слушает · нажмите, чтобы остановить", "Nova is listening · click to stop") : tx(locale, "Включить микрофон", "Enable microphone")}
                   >
                     <Mic size={18} />
                   </button>
                   {busy ? (
-                    <button className="send stop" onClick={() => transport.send("cancel_current_request")} aria-label="Остановить"><Square size={14} /></button>
+                    <button className="send stop" onClick={() => transport.send("cancel_current_request")} aria-label={tx(locale, "Остановить", "Stop")}><Square size={14} /></button>
                   ) : (
-                    <button className="send" onClick={() => void send()} disabled={!composer.trim()} aria-label="Отправить"><Send size={17} /></button>
+                    <button className="send" onClick={() => void send()} disabled={!composer.trim()} aria-label={tx(locale, "Отправить", "Send")}><Send size={17} /></button>
                   )}
                 </div>
               </div>
               {(voiceActive || wakeWordActive) && (
                 <div className="voice-status" role="status">
-                  <span />{voiceStatus || (wakeWordActive ? `Жду «${wakeWord}» · Vosk локально` : "Слушаю микрофон…")}
+                  <span />{voiceStatus || (wakeWordActive
+                    ? tx(locale, `Жду «${wakeWord}» · Vosk локально`, `Waiting for “${wakeWord}” · local Vosk`)
+                    : tx(locale, "Слушаю микрофон…", "Listening…"))}
                 </div>
               )}
-              <div className="composer-voice-modes" aria-label="Режим микрофона">
+              <div className="composer-voice-modes" aria-label={tx(locale, "Режим микрофона", "Microphone mode")}>
                 <button
                   className={wakeWordActive ? "active" : ""}
                   onClick={() => void selectInputMode("wake_word")}
                   disabled={voicePending || !wakeWordAvailable || connection !== "connected"}
-                  title={`Ждать обращение «${wakeWord}»`}
+                  title={tx(locale, `Ждать обращение «${wakeWord}»`, `Wait for “${wakeWord}”`)}
                 ><Radio size={12} /> Wake «{wakeWord}»</button>
                 <button
                   className={voiceActive ? "active" : ""}
                   onClick={() => void selectInputMode("continuous")}
                   disabled={voicePending || connection !== "connected"}
-                ><Mic size={12} /> Слушать</button>
+                ><Mic size={12} /> {tx(locale, "Слушать", "Listen")}</button>
                 <button
                   className={inputMode === "sleep" ? "active" : ""}
                   onClick={() => void selectInputMode("sleep")}
                   disabled={voicePending || connection !== "connected"}
-                ><Square size={10} /> Выкл.</button>
+                ><Square size={10} /> {tx(locale, "Выкл.", "Off")}</button>
               </div>
-              <p>Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием</p>
+              <p>{tx(
+                locale,
+                "Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием",
+                "Enter — send · Shift Enter — new line · Nova asks for confirmation before risky actions",
+              )}</p>
             </div>
           </div>
+        ) : view === "guide" ? (
+          <Guide locale={locale} />
         ) : view === "settings" ? (
           <div className="settings-view">
+            <div className="settings-card language-card">
+              <span className="settings-icon"><Languages size={22} /></span>
+              <div>
+                <span className="eyebrow">{tx(locale, "ЯЗЫК", "LANGUAGE")}</span>
+                <h2>{tx(locale, "Язык интерфейса", "Interface language")}</h2>
+                <p>{tx(
+                  locale,
+                  "Переключение применяется мгновенно и сохраняется на этом компьютере. Ответы Nova остаются на языке вашего запроса.",
+                  "The change applies immediately and is saved on this computer. Nova still answers in the language of your request.",
+                )}</p>
+              </div>
+              <div className="locale-options">
+                <button className={locale === "ru" ? "active" : ""} onClick={() => setLocale("ru")}><strong>Русский</strong><small>RU</small></button>
+                <button className={locale === "en" ? "active" : ""} onClick={() => setLocale("en")}><strong>English</strong><small>EN</small></button>
+              </div>
+              <div className="tts-roadmap-note">
+                <Mic size={16} />
+                <span><strong>{tx(locale, "Следом: язык и голос TTS", "Next: TTS language and voice")}</strong><small>{tx(locale, "Отдельные настройки RU/EN голоса появятся здесь и не будут зависеть от языка UI.", "Separate RU/EN voice controls will live here and remain independent from the UI language.")}</small></span>
+              </div>
+            </div>
             <div className="settings-card appearance-card">
               <span className="settings-icon"><LayoutDashboard size={22} /></span>
               <div>
-                <span className="eyebrow">ВНЕШНИЙ ВИД</span>
-                <h2>Три режима интерфейса</h2>
-                <p>Выберите лёгкий, средний или красивый UI. Режим сохраняется на этом компьютере и переключается мгновенно, без перезапуска Core.</p>
+                <span className="eyebrow">{tx(locale, "ВНЕШНИЙ ВИД", "APPEARANCE")}</span>
+                <h2>{tx(locale, "Три режима интерфейса", "Three interface modes")}</h2>
+                <p>{tx(locale, "Выберите лёгкий, средний или красивый UI. Режим сохраняется на этом компьютере и переключается мгновенно, без перезапуска Core.", "Choose a light, balanced, or beautiful UI. The mode is saved on this computer and switches instantly without restarting Core.")}</p>
               </div>
               <div className="appearance-options">
-                {UI_MODE_OPTIONS.map((option) => (
+                {modes.map((option) => (
                   <button
                     key={option.key}
                     className={uiMode === option.key ? "appearance-option active" : "appearance-option"}
@@ -821,9 +968,9 @@ export function App() {
             <div className="settings-card voice-card">
               <span className="settings-icon"><Mic size={22} /></span>
               <div>
-                <span className="eyebrow">ГОЛОС И WAKE WORD</span>
-                <h2>Позови Nova без кнопки</h2>
-                <p>Vosk локально слушает только короткое слово «{wakeWord}». После него Nova записывает команду и передаёт её обычному STT.</p>
+                <span className="eyebrow">{tx(locale, "ГОЛОС И WAKE WORD", "VOICE AND WAKE WORD")}</span>
+                <h2>{tx(locale, "Позови Nova без кнопки", "Call Nova without pressing a button")}</h2>
+                <p>{tx(locale, `Vosk локально слушает только короткое слово «${wakeWord}». После него Nova записывает команду и передаёт её обычному STT.`, `Vosk listens locally only for the short word “${wakeWord}”. Nova then records the command and passes it to regular STT.`)}</p>
               </div>
               <div className="voice-mode-options">
                 <button
@@ -832,7 +979,7 @@ export function App() {
                   disabled={voicePending || !wakeWordAvailable}
                 >
                   <Radio size={16} />
-                  <span><strong>Wake word</strong><small>{wakeWordAvailable ? `Всегда жду «${wakeWord}»` : "Vosk-модель не установлена"}</small></span>
+                  <span><strong>Wake word</strong><small>{wakeWordAvailable ? tx(locale, `Всегда жду «${wakeWord}»`, `Always wait for “${wakeWord}”`) : tx(locale, "Vosk-модель не установлена", "Vosk model is not installed")}</small></span>
                 </button>
                 <button
                   className={voiceActive ? "active" : ""}
@@ -840,7 +987,7 @@ export function App() {
                   disabled={voicePending}
                 >
                   <Mic size={16} />
-                  <span><strong>Непрерывно</strong><small>Слушать речь без ключевого слова</small></span>
+                  <span><strong>{tx(locale, "Непрерывно", "Continuous")}</strong><small>{tx(locale, "Слушать речь без ключевого слова", "Listen without a wake word")}</small></span>
                 </button>
                 <button
                   className={inputMode === "sleep" ? "active" : ""}
@@ -848,15 +995,15 @@ export function App() {
                   disabled={voicePending}
                 >
                   <Square size={15} />
-                  <span><strong>Выключено</strong><small>Не использовать микрофон</small></span>
+                  <span><strong>{tx(locale, "Выключено", "Off")}</strong><small>{tx(locale, "Не использовать микрофон", "Do not use the microphone")}</small></span>
                 </button>
               </div>
               {!wakeWordAvailable && (
-                <p className="settings-status">Для dev-режима выполните: <code>python -m vosk_install</code>, затем перезапустите Core.</p>
+                <p className="settings-status">{tx(locale, "Для dev-режима выполните", "In development, run")}: <code>python -m vosk_install</code>, {tx(locale, "затем перезапустите Core.", "then restart Core.")}</p>
               )}
               {wakeWordAvailable && (
                 <label className="wake-sensitivity">
-                  <span><strong>Чувствительность</strong><small>{Math.round(wakeSensitivity * 100)}% · выше — легче услышать обращение</small></span>
+                  <span><strong>{tx(locale, "Чувствительность", "Sensitivity")}</strong><small>{Math.round(wakeSensitivity * 100)}% · {tx(locale, "выше — легче услышать обращение", "higher values detect the wake word more easily")}</small></span>
                   <input
                     type="range"
                     min="0.35"
@@ -873,26 +1020,26 @@ export function App() {
             <div className="settings-card proactive-card">
               <span className="settings-icon"><Radio size={22} /></span>
               <div>
-                <span className="eyebrow">NOVA РЯДОМ</span>
-                <h2>Понятная проверка активного окна</h2>
-                <p>Режим делает локальный снимок активного окна, ищет видимую проблему и предлагает действие. Ничего не нажимает и не отправляет без вашего подтверждения.</p>
+                <span className="eyebrow">{tx(locale, "NOVA РЯДОМ", "NOVA NEARBY")}</span>
+                <h2>{tx(locale, "Понятная проверка активного окна", "Transparent active-window checks")}</h2>
+                <p>{tx(locale, "Режим делает локальный снимок активного окна, ищет видимую проблему и предлагает действие. Ничего не нажимает и не отправляет без вашего подтверждения.", "The mode captures the active window locally, detects visible problems, and suggests an action. It never clicks or submits without your confirmation.")}</p>
               </div>
               <div className="proactive-test">
-                <span className={`proactive-phase ${proactivePhase}`}><i />{proactive ? proactiveStatus : "Режим выключен"}</span>
+                <span className={`proactive-phase ${proactivePhase}`}><i />{proactive ? proactiveStatus : tx(locale, "Режим выключен", "Mode is off")}</span>
                 <button onClick={() => void runProactiveCheck()} disabled={!proactive || ["scanning", "investigating"].includes(proactivePhase) || connection !== "connected"}>
-                  Проверить сейчас
+                  {tx(locale, "Проверить сейчас", "Check now")}
                 </button>
               </div>
             </div>
             <div className="settings-card provider-card">
               <span className="settings-icon"><KeyRound size={22} /></span>
               <div>
-                <span className="eyebrow">МОДЕЛЬНЫЕ ПРОВАЙДЕРЫ</span>
-                <h2>Пул API-ключей</h2>
-                <p>Добавляйте сколько угодно ключей Groq, OpenRouter и Gemini. Начало и конец каждого ключа видны для проверки, середина скрыта; полный секрет никогда не отправляется в React UI.</p>
+                <span className="eyebrow">{tx(locale, "МОДЕЛЬНЫЕ ПРОВАЙДЕРЫ", "MODEL PROVIDERS")}</span>
+                <h2>{tx(locale, "Пул API-ключей", "API key pool")}</h2>
+                <p>{tx(locale, "Добавляйте сколько угодно ключей Groq, OpenRouter и Gemini. Начало и конец каждого ключа видны для проверки, середина скрыта; полный секрет никогда не отправляется в React UI.", "Add any number of Groq, OpenRouter, and Gemini keys. The prefix and suffix remain visible while the middle is masked; the full secret never enters the React UI.")}</p>
               </div>
               <div className="provider-pool">
-                {PROVIDER_OPTIONS.map((option) => {
+                {providers.map((option) => {
                   const keys = providerKeys.filter((key) => key.provider === option.key);
                   return (
                     <section className="provider-group" key={option.key}>
@@ -905,18 +1052,18 @@ export function App() {
                       </header>
                       <div className="provider-key-list">
                         {keys.length === 0 ? (
-                          <p>Ключей пока нет</p>
+                          <p>{tx(locale, "Ключей пока нет", "No keys yet")}</p>
                         ) : keys.map((key) => (
                           <div className="provider-key" key={`${key.provider}-${key.source}-${key.index}-${key.hint}`}>
                             <span>
                               <code>{key.hint}</code>
-                              <small>{key.source === "nova" ? "Добавлен в Nova" : "Системная переменная"}</small>
+                              <small>{key.source === "nova" ? tx(locale, "Добавлен в Nova", "Added in Nova") : tx(locale, "Системная переменная", "System environment variable")}</small>
                             </span>
                             {key.removable && (
                               <button
                                 onClick={() => void removeProviderKey(key)}
-                                aria-label={`Удалить ключ ${key.hint}`}
-                                title="Удалить ключ"
+                                aria-label={tx(locale, `Удалить ключ ${key.hint}`, `Remove key ${key.hint}`)}
+                                title={tx(locale, "Удалить ключ", "Remove key")}
                               >
                                 <Trash2 size={13} />
                               </button>
@@ -930,18 +1077,18 @@ export function App() {
               </div>
               <div className="provider-add-row">
               <label>
-                Провайдер
+                {tx(locale, "Провайдер", "Provider")}
                 <select
                   value={provider}
                   onChange={(event) => setProvider(event.target.value as ProviderName)}
                 >
-                  {PROVIDER_OPTIONS.map((option) => (
+                  {providers.map((option) => (
                     <option key={option.key} value={option.key}>{option.label}</option>
                   ))}
                 </select>
               </label>
               <label>
-                Новый API-ключ
+                {tx(locale, "Новый API-ключ", "New API key")}
                 <input
                   type="password"
                   value={apiKey}
@@ -949,7 +1096,7 @@ export function App() {
                   onKeyDown={(event) => {
                     if (event.key === "Enter") void addProviderKey();
                   }}
-                  placeholder={PROVIDER_OPTIONS.find((option) => option.key === provider)?.placeholder}
+                  placeholder={providers.find((option) => option.key === provider)?.placeholder}
                   autoComplete="off"
                 />
               </label>
@@ -959,7 +1106,7 @@ export function App() {
                 onClick={() => void addProviderKey()}
                 disabled={apiKey.trim().length < 12}
               >
-                <Plus size={15} /> Добавить ключ
+                <Plus size={15} /> {tx(locale, "Добавить ключ", "Add key")}
               </button>
               {settingsStatus && <p className="settings-status">{settingsStatus}</p>}
             </div>
@@ -968,15 +1115,15 @@ export function App() {
           <div className="view-placeholder">
             <span><History size={26} /></span>
             <h2>{nav.find((item) => item.key === view)?.label}</h2>
-            <p>Экран подключается к существующим событиям Nova Core следующим инкрементом.</p>
-            <button onClick={() => setView("dialog")}>Вернуться в диалог</button>
+            <p>{tx(locale, "Экран подключается к существующим событиям Nova Core следующим инкрементом.", "This screen will connect to existing Nova Core events in the next increment.")}</p>
+            <button onClick={() => setView("dialog")}>{tx(locale, "Вернуться в диалог", "Return to chat")}</button>
           </div>
         )}
       </section>
 
       <aside className="context-panel">
         <div className="context-header">
-          <div><span className="live-pulse" />Живая активность</div>
+          <div><span className="live-pulse" />{tx(locale, "Живая активность", "Live activity")}</div>
           <button className="icon-button"><ChevronRight size={17} /></button>
         </div>
 
@@ -985,37 +1132,37 @@ export function App() {
             <span />
             <Sparkles size={23} />
           </div>
-          <strong>{busy ? "Nova работает" : runtime.label}</strong>
+          <strong>{busy ? tx(locale, "Nova работает", "Nova is working") : runtime.label}</strong>
           <p>{activeTool}</p>
         </section>
 
         <section className="context-card">
-          <header><span><Activity size={15} />Текущая задача</span><small>{taskProgress || (busy ? 42 : 0)}%</small></header>
+          <header><span><Activity size={15} />{tx(locale, "Текущая задача", "Current task")}</span><small>{taskProgress || (busy ? 42 : 0)}%</small></header>
           <div className="progress"><i style={{ width: `${taskProgress || (busy ? 42 : 0)}%` }} /></div>
           <ul>
-            <li className="done"><ShieldCheck size={14} />Контекст собран</li>
-            <li className={busy ? "active" : ""}><span />Выполнение инструментов</li>
-            <li><span />Проверка результата</li>
+            <li className="done"><ShieldCheck size={14} />{tx(locale, "Контекст собран", "Context collected")}</li>
+            <li className={busy ? "active" : ""}><span />{tx(locale, "Выполнение инструментов", "Running tools")}</li>
+            <li><span />{tx(locale, "Проверка результата", "Verifying outcome")}</li>
           </ul>
         </section>
 
         <section className="context-card compact">
-          <header><span><Radio size={15} />Nova рядом</span><small>{proactiveBadge}</small></header>
+          <header><span><Radio size={15} />{tx(locale, "Nova рядом", "Nova Nearby")}</span><small>{proactiveBadge}</small></header>
           <div className={`nearby-status ${proactivePhase}`}>
             <i />
-            <span>{proactive ? proactiveStatus : "Наблюдение выключено"}</span>
+            <span>{proactive ? proactiveStatus : tx(locale, "Наблюдение выключено", "Observation is off")}</span>
           </div>
           <button
             className="nearby-check"
             onClick={() => void runProactiveCheck()}
             disabled={!proactive || ["scanning", "investigating"].includes(proactivePhase) || connection !== "connected"}
           >
-            Проверить через 3 секунды
+            {tx(locale, "Проверить через 3 секунды", "Check in 3 seconds")}
           </button>
         </section>
 
         <section className="context-card compact">
-          <header><span><Wrench size={15} />Возможности</span></header>
+          <header><span><Wrench size={15} />{tx(locale, "Возможности", "Capabilities")}</span></header>
           <div className="capabilities">
             <span>Windows</span><span>Browser</span><span>Files</span><span>MCP</span><span>Vision</span>
           </div>

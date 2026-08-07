@@ -21,7 +21,16 @@
     </style>
   </head>
   <body>
-    <div id="root"><div class="boot"><div class="boot-inner"><div class="boot-orb"></div><div class="boot-copy"><strong>Nova запускается</strong><span>Подключаю Core и голосовые сервисы…</span></div><div class="boot-line"></div></div></div></div>
+    <div id="root"><div class="boot"><div class="boot-inner"><div class="boot-orb"></div><div class="boot-copy"><strong id="boot-title">Nova запускается</strong><span id="boot-status">Подключаю Core и голосовые сервисы…</span></div><div class="boot-line"></div></div></div></div>
+    <script>
+      try {
+        if (localStorage.getItem("nova.ui-locale") === "en") {
+          document.documentElement.lang = "en";
+          document.getElementById("boot-title").textContent = "Nova is starting";
+          document.getElementById("boot-status").textContent = "Connecting Core and voice services…";
+        }
+      } catch (_) {}
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
