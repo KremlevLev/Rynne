@@ -588,3 +588,82 @@ def test_enable_proactive_vision_command() -> None:
         ] is True
 
     asyncio.run(scenario())
+
+
+def test_tts_settings_command_updates_core_and_publishes_snapshot(monkeypatch) -> None:
+    class Settings:
+        language = "en"
+        speed = 1.2
+
+        def to_dict(self):
+            return {
+                "language": "en",
+                "ru_voice": "baya",
+                "en_voice": "diana",
+                "speed": 1.2,
+                "style": "warm",
+            }
+
+    captured = {}
+
+    def fake_update(**changes):
+        captured.update(changes)
+        return Settings()
+
+    monkeypatch.setattr("modules.ui.core_bridge.update_tts_settings", fake_update)
+    monkeypatch.setattr("modules.ui.core_bridge.get_tts_settings", lambda: Settings())
+
+    async def scenario() -> None:
+        bridge, desktop, _, _ = create_bridge()
+        await bridge.handle_command(make_command(
+            "set_tts_settings",
+            {
+                "language": "en",
+                "en_voice": "diana",
+                "speed": 1.2,
+                "style": "warm",
+            },
+        ))
+
+        assert captured["en_voice"] == "diana"
+        assert captured["speed"] == 1.2
+        preference_events = [
+            event for event in desktop.events
+            if event["event_type"] == "preferences"
+        ]
+        assert preference_events[-1]["payload"]["tts_settings"]["style"] == "warm"
+        assert desktop.events[-1]["payload"]["success"] is True
+
+    asyncio.run(scenario())
+
+
+def test_tts_preview_command_runs_selected_voice(monkeypatch) -> None:
+    captured = {}
+
+    def fake_preview(**options):
+        captured.update(options)
+        return True
+
+    monkeypatch.setattr("modules.ui.core_bridge.preview_tts", fake_preview)
+
+    async def scenario() -> None:
+        bridge, desktop, _, _ = create_bridge()
+        await bridge.handle_command(make_command(
+            "preview_tts",
+            {
+                "language": "ru",
+                "voice": "xenia",
+                "speed": 0.9,
+                "style": "neutral",
+            },
+        ))
+
+        assert captured == {
+            "language": "ru",
+            "voice": "xenia",
+            "speed": 0.9,
+            "style": "neutral",
+        }
+        assert desktop.events[-1]["payload"]["success"] is True
+
+    asyncio.run(scenario())

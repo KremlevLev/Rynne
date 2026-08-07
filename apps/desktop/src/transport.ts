@@ -143,6 +143,29 @@ class DemoNovaTransport implements NovaTransport {
         wake_word_available: true,
         wake_word: "Нова",
         wake_word_sensitivity: 0.78,
+        tts_settings: {
+          language: "auto",
+          ru_voice: "baya",
+          en_voice: "autumn",
+          speed: 1,
+          style: "neutral",
+        },
+        tts_catalog: {
+          languages: ["auto", "ru", "en"],
+          styles: ["neutral", "warm", "cheerful", "professional", "confident"],
+          voices: [
+            ...[
+              ["aidar", "Aidar", "male"], ["baya", "Baya", "female"],
+              ["kseniya", "Kseniya", "female"], ["xenia", "Xenia", "female"],
+              ["eugene", "Eugene", "male"],
+            ].map(([id, name, gender]) => ({ id, name, gender, language: "ru", engine: "silero", model: "v5_ru", online: false, available: true })),
+            ...[
+              ["autumn", "Autumn", "female"], ["diana", "Diana", "female"],
+              ["hannah", "Hannah", "female"], ["austin", "Austin", "male"],
+              ["daniel", "Daniel", "male"], ["troy", "Troy", "male"],
+            ].map(([id, name, gender]) => ({ id, name, gender, language: "en", engine: "groq", model: "canopylabs/orpheus-v1-english", online: true, available: true })),
+          ],
+        },
       });
       this.push("processes", {
         processes: [

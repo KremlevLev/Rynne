@@ -182,8 +182,11 @@ switcher in the top bar or Settings; Nova remembers the choice and even localize
 startup screen before React loads. Open **Guide** for an eight-part handbook with real
 commands, voice and Nova Nearby setup, skills, providers, MCP, safety, and troubleshooting.
 
-TTS language and voice selection is the next audio milestone. It will be configured
-independently from the interface language, so an English UI will not force an English voice.
+Voice output is configured independently from the interface language. Settings includes
+Auto/Russian/English routing, a 0.7–1.6× speed control, five offline Russian Silero voices,
+six English Groq Orpheus voices, expressive styles, and a preview button for every voice.
+The lightweight split is deliberate: Russian speech stays local, while English synthesis
+uses the existing Groq key pool without loading a second neural model into laptop memory.
 
 ## Quick start from source
 
@@ -446,7 +449,7 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **790 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **796 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 

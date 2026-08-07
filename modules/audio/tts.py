@@ -6,6 +6,14 @@ import time
 import sounddevice as sd
 import re
 import asyncio
+import io
+import json
+import wave
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
+
+import numpy as np
+import requests
 from modules.ui.overlay import update_status
 logger = logging.getLogger("TTS")
 
@@ -16,7 +24,151 @@ logger = logging.getLogger("TTS")
 # ---------------------------------------------------------------------------
 _tts_playing = False
 _tts_playing_lock = threading.Lock()
+_tts_output_lock = threading.Lock()
 _tts_last_finished_at = float("-inf")
+
+
+SILERO_VOICES = (
+    {"id": "aidar", "name": "Aidar", "gender": "male"},
+    {"id": "baya", "name": "Baya", "gender": "female"},
+    {"id": "kseniya", "name": "Kseniya", "gender": "female"},
+    {"id": "xenia", "name": "Xenia", "gender": "female"},
+    {"id": "eugene", "name": "Eugene", "gender": "male"},
+)
+GROQ_ORPHEUS_VOICES = (
+    {"id": "autumn", "name": "Autumn", "gender": "female"},
+    {"id": "diana", "name": "Diana", "gender": "female"},
+    {"id": "hannah", "name": "Hannah", "gender": "female"},
+    {"id": "austin", "name": "Austin", "gender": "male"},
+    {"id": "daniel", "name": "Daniel", "gender": "male"},
+    {"id": "troy", "name": "Troy", "gender": "male"},
+)
+TTS_STYLES = ("neutral", "warm", "cheerful", "professional", "confident")
+TTS_SETTINGS_PATH = Path(
+    os.getenv("NOVA_TTS_SETTINGS_PATH", "data/tts-settings.json")
+)
+_tts_settings_lock = threading.RLock()
+
+
+@dataclass(frozen=True, slots=True)
+class TTSSettings:
+    language: str = "auto"
+    ru_voice: str = "baya"
+    en_voice: str = "autumn"
+    speed: float = 1.0
+    style: str = "neutral"
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def _validated_tts_settings(settings: TTSSettings) -> TTSSettings:
+    language = str(settings.language).strip().lower()
+    if language not in {"auto", "ru", "en"}:
+        raise ValueError("TTS language must be auto, ru or en.")
+    ru_voices = {voice["id"] for voice in SILERO_VOICES}
+    en_voices = {voice["id"] for voice in GROQ_ORPHEUS_VOICES}
+    ru_voice = str(settings.ru_voice).strip().lower()
+    en_voice = str(settings.en_voice).strip().lower()
+    if ru_voice not in ru_voices:
+        raise ValueError("Unknown Silero voice.")
+    if en_voice not in en_voices:
+        raise ValueError("Unknown Groq Orpheus voice.")
+    speed = float(settings.speed)
+    if not 0.7 <= speed <= 1.6:
+        raise ValueError("TTS speed must be between 0.7 and 1.6.")
+    style = str(settings.style).strip().lower()
+    if style not in TTS_STYLES:
+        raise ValueError("Unknown TTS speaking style.")
+    return replace(
+        settings,
+        language=language,
+        ru_voice=ru_voice,
+        en_voice=en_voice,
+        speed=speed,
+        style=style,
+    )
+
+
+def _load_tts_settings() -> TTSSettings:
+    try:
+        raw = json.loads(TTS_SETTINGS_PATH.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("TTS settings must be an object.")
+        return _validated_tts_settings(TTSSettings(
+            language=str(raw.get("language", "auto")),
+            ru_voice=str(raw.get("ru_voice", "baya")),
+            en_voice=str(raw.get("en_voice", "autumn")),
+            speed=float(raw.get("speed", 1.0)),
+            style=str(raw.get("style", "neutral")),
+        ))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return TTSSettings()
+
+
+_tts_settings = _load_tts_settings()
+
+
+def get_tts_settings() -> TTSSettings:
+    with _tts_settings_lock:
+        return replace(_tts_settings)
+
+
+def update_tts_settings(**changes: object) -> TTSSettings:
+    global _tts_settings
+    allowed = {"language", "ru_voice", "en_voice", "speed", "style"}
+    unknown = set(changes) - allowed
+    if unknown:
+        raise ValueError(f"Unknown TTS settings: {', '.join(sorted(unknown))}")
+    with _tts_settings_lock:
+        candidate = replace(_tts_settings, **changes)
+        candidate = _validated_tts_settings(candidate)
+        TTS_SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = TTS_SETTINGS_PATH.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(candidate.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(TTS_SETTINGS_PATH)
+        _tts_settings = candidate
+        return replace(candidate)
+
+
+def get_tts_catalog() -> dict[str, object]:
+    try:
+        from core.config import GROQ_API_KEYS
+        groq_available = bool(GROQ_API_KEYS)
+    except Exception:
+        groq_available = False
+    return {
+        "languages": ["auto", "ru", "en"],
+        "styles": list(TTS_STYLES),
+        "voices": [
+            *(
+                {
+                    **voice,
+                    "language": "ru",
+                    "engine": "silero",
+                    "model": "v5_ru",
+                    "online": False,
+                    "available": True,
+                }
+                for voice in SILERO_VOICES
+            ),
+            *(
+                {
+                    **voice,
+                    "language": "en",
+                    "engine": "groq",
+                    "model": "canopylabs/orpheus-v1-english",
+                    "online": True,
+                    "available": groq_available,
+                }
+                for voice in GROQ_ORPHEUS_VOICES
+            ),
+        ],
+        "speed": {"min": 0.7, "max": 1.6, "step": 0.05},
+    }
 
 
 def is_tts_playing() -> bool:
@@ -85,7 +237,113 @@ def warm_up_tts() -> bool:
     return _get_silero_engine() is not None
 
 
-def speak(text: str, speaker: str = "baya") -> bool:
+def _detect_tts_language(text: str) -> str:
+    cyrillic = sum("а" <= char.lower() <= "я" or char.lower() == "ё" for char in text)
+    latin = sum("a" <= char.lower() <= "z" for char in text)
+    return "ru" if cyrillic >= latin else "en"
+
+
+def _time_stretch(audio: np.ndarray, speed: float) -> np.ndarray:
+    """Lightweight overlap-add time stretching without another ML model."""
+    samples = np.asarray(audio, dtype=np.float32).reshape(-1)
+    if samples.size < 2048 or abs(speed - 1.0) < 0.01:
+        return samples
+    frame_size = 1024
+    synthesis_hop = 256
+    analysis_hop = synthesis_hop * speed
+    frame_count = max(1, int((samples.size - frame_size) / analysis_hop) + 1)
+    output_size = synthesis_hop * (frame_count - 1) + frame_size
+    output = np.zeros(output_size, dtype=np.float32)
+    weights = np.zeros(output_size, dtype=np.float32)
+    window = np.hanning(frame_size).astype(np.float32)
+    for index in range(frame_count):
+        source_start = min(
+            int(round(index * analysis_hop)),
+            max(0, samples.size - frame_size),
+        )
+        target_start = index * synthesis_hop
+        frame = samples[source_start:source_start + frame_size]
+        output[target_start:target_start + frame_size] += frame * window
+        weights[target_start:target_start + frame_size] += window
+    valid = weights > 1e-5
+    output[valid] /= weights[valid]
+    return output
+
+
+def _play_audio(audio: np.ndarray, sample_rate: int) -> bool:
+    global _tts_playing, _tts_last_finished_at
+    with _tts_output_lock:
+        with _tts_playing_lock:
+            _tts_playing = True
+        try:
+            sd.play(audio, sample_rate)
+            sd.wait()
+        finally:
+            with _tts_playing_lock:
+                _tts_playing = False
+                _tts_last_finished_at = time.monotonic()
+    return True
+
+
+def _groq_keys() -> tuple[str, ...]:
+    try:
+        from core.config import GROQ_API_KEYS
+        return tuple(GROQ_API_KEYS)
+    except Exception:
+        return ()
+
+
+def _speak_groq(text: str, *, voice: str, speed: float, style: str) -> bool:
+    keys = _groq_keys()
+    if not keys:
+        raise RuntimeError("Groq API key is required for English TTS.")
+    spoken_text = text if style == "neutral" else f"[{style}] {text}"
+    last_error = "Groq TTS request failed."
+    for api_key in keys:
+        try:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/audio/speech",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "canopylabs/orpheus-v1-english",
+                    "input": spoken_text,
+                    "voice": voice,
+                    "response_format": "wav",
+                    "sample_rate": 24000,
+                    "speed": speed,
+                },
+                timeout=35,
+            )
+            if response.status_code >= 400:
+                last_error = f"Groq TTS returned HTTP {response.status_code}."
+                continue
+            with wave.open(io.BytesIO(response.content), "rb") as audio_file:
+                channels = audio_file.getnchannels()
+                sample_width = audio_file.getsampwidth()
+                sample_rate = audio_file.getframerate()
+                frames = audio_file.readframes(audio_file.getnframes())
+            if sample_width != 2:
+                raise RuntimeError("Groq returned an unsupported WAV sample width.")
+            audio = np.frombuffer(frames, dtype=np.int16)
+            if channels > 1:
+                audio = audio.reshape(-1, channels)
+            return _play_audio(audio, sample_rate)
+        except (OSError, ValueError, requests.RequestException) as exc:
+            last_error = f"Groq TTS failed: {exc}"
+    raise RuntimeError(last_error)
+
+
+def speak(
+    text: str,
+    speaker: str | None = None,
+    *,
+    language: str | None = None,
+    speed: float | None = None,
+    style: str | None = None,
+) -> bool:
     """Синтезирует и озвучивает текст через Silero v5 напрямую в ОЗУ с поддержкой прерывания"""
     if not text:
         return False
@@ -109,6 +367,20 @@ def speak(text: str, speaker: str = "baya") -> bool:
 
     # Печатаем реплику только если она действительно будет озвучена
     print(f"\n[🔊 Nova Говорит]: {cleaned_text}")
+    settings = get_tts_settings()
+    selected_language = language or settings.language
+    if selected_language == "auto":
+        selected_language = _detect_tts_language(cleaned_text)
+    selected_speed = float(speed if speed is not None else settings.speed)
+    selected_style = style or settings.style
+    if selected_language == "en":
+        return _speak_groq(
+            cleaned_text,
+            voice=speaker or settings.en_voice,
+            speed=selected_speed,
+            style=selected_style,
+        )
+
     phonetic_text = convert_english_to_russian_phonetic(cleaned_text)
     model = _get_silero_engine()
     if not model:
@@ -125,7 +397,7 @@ def speak(text: str, speaker: str = "baya") -> bool:
         # Генерация аудио
         audio = model.apply_tts(
             text=phonetic_text,
-            speaker=speaker,
+            speaker=speaker or settings.ru_voice,
             sample_rate=sample_rate,
             put_accent=True,      # Автоматическое расставление ударений
             put_yo=True           # Автоматическая замена 'е' на 'ё'
@@ -135,24 +407,33 @@ def speak(text: str, speaker: str = "baya") -> bool:
         if _speech_interrupted:
             return False
             
-        audio_data = audio.numpy()
-        global _tts_playing, _tts_last_finished_at
-        # Флаг сообщает VoiceListener (STT), что сейчас играет TTS,
-        # чтобы микрофон не захватывал собственный голос Nova.
-        with _tts_playing_lock:
-            _tts_playing = True
-        try:
-            sd.play(audio_data, sample_rate)
-            sd.wait()  # При вызове sd.stop() в другом потоке этот метод мгновенно разблокируется
-        finally:
-            with _tts_playing_lock:
-                _tts_playing = False
-                _tts_last_finished_at = time.monotonic()
-        return True
+        audio_data = _time_stretch(audio.numpy(), selected_speed)
+        return _play_audio(audio_data, sample_rate)
         
     except Exception as e:
         logger.error(f"Ошибка во время синтеза или воспроизведения Silero: {e}")
         return False
+
+
+def preview_tts(
+    *,
+    language: str,
+    voice: str,
+    speed: float,
+    style: str = "neutral",
+) -> bool:
+    sample = (
+        "Привет! Я Nova. Так будет звучать мой голос."
+        if language == "ru"
+        else "Hello! I'm Nova. This is how my voice will sound."
+    )
+    return speak(
+        sample,
+        speaker=voice,
+        language=language,
+        speed=speed,
+        style=style,
+    )
 
 
 

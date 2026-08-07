@@ -17,6 +17,12 @@ from modules.ui.desktop_protocol import (
 from modules.application.preferences import (
     PreferencesManager,
 )
+from modules.audio.tts import (
+    get_tts_catalog,
+    get_tts_settings,
+    preview_tts,
+    update_tts_settings,
+)
 from modules.input_hub.coordinator import (
     InputCoordinator,
 )
@@ -106,6 +112,8 @@ class CoreDesktopBridge:
             else None
         )
         payload = current.to_dict() if current is not None else {}
+        payload["tts_settings"] = get_tts_settings().to_dict()
+        payload["tts_catalog"] = get_tts_catalog()
         if self.mode_manager is not None:
             payload["wake_word_available"] = bool(
                 getattr(
@@ -538,6 +546,62 @@ class CoreDesktopBridge:
                 command_id,
                 success=True,
                 message=f"Настройка {key} обновлена.",
+            )
+            return
+
+        if action == "set_tts_settings":
+            try:
+                allowed = {"language", "ru_voice", "en_voice", "speed", "style"}
+                changes = {
+                    key: value
+                    for key, value in payload.items()
+                    if key in allowed
+                }
+                settings = update_tts_settings(**changes)
+            except (OSError, TypeError, ValueError) as exc:
+                self._publish_command_result(
+                    command_id,
+                    success=False,
+                    message=str(exc),
+                )
+                return
+            self.desktop.publish(
+                "preferences",
+                self._preferences_payload(),
+            )
+            self._publish_command_result(
+                command_id,
+                success=True,
+                message=f"TTS settings updated: {settings.language}, {settings.speed:.2f}x.",
+            )
+            return
+
+        if action == "preview_tts":
+            try:
+                language = str(payload.get("language", "ru"))
+                voice = str(payload.get("voice", "baya"))
+                speed = float(payload.get("speed", 1.0))
+                style = str(payload.get("style", "neutral"))
+                played = await asyncio.to_thread(
+                    preview_tts,
+                    language=language,
+                    voice=voice,
+                    speed=speed,
+                    style=style,
+                )
+                if not played:
+                    raise RuntimeError("TTS preview could not be played.")
+            except Exception as exc:
+                self._publish_command_result(
+                    command_id,
+                    success=False,
+                    message=str(exc),
+                )
+                return
+            self._publish_command_result(
+                command_id,
+                success=True,
+                message="TTS preview finished.",
             )
             return
 

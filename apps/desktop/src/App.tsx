@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Mic,
   PanelLeftClose,
+  Play,
   Plus,
   Radio,
   Send,
@@ -21,6 +22,7 @@ import {
   Square,
   Terminal,
   Trash2,
+  Volume2,
   Workflow,
   Wrench,
 } from "lucide-react";
@@ -48,6 +50,34 @@ type TimelineItem = {
   actionLabel?: string;
   proactiveEventId?: string;
   proactiveContextKey?: string;
+};
+
+type TtsLanguage = "auto" | "ru" | "en";
+type TtsStyle = "neutral" | "warm" | "cheerful" | "professional" | "confident";
+type TtsSettings = {
+  language: TtsLanguage;
+  ru_voice: string;
+  en_voice: string;
+  speed: number;
+  style: TtsStyle;
+};
+type TtsVoice = {
+  id: string;
+  name: string;
+  gender: "female" | "male";
+  language: "ru" | "en";
+  engine: "silero" | "groq";
+  model: string;
+  online: boolean;
+  available: boolean;
+};
+
+const DEFAULT_TTS_SETTINGS: TtsSettings = {
+  language: "auto",
+  ru_voice: "baya",
+  en_voice: "autumn",
+  speed: 1,
+  style: "neutral",
 };
 
 const UI_MODE_STORAGE_KEY = "nova.ui-mode";
@@ -371,6 +401,10 @@ export function App() {
   const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
   const [providerKeysLoading, setProviderKeysLoading] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState("");
+  const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
+  const [ttsVoices, setTtsVoices] = useState<TtsVoice[]>([]);
+  const [ttsPending, setTtsPending] = useState(false);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>(() => (
     readUiMode(typeof window === "undefined" ? null : window.localStorage)
   ));
@@ -417,6 +451,27 @@ export function App() {
             }
             const sensitivity = event.payload.wake_word_sensitivity;
             if (typeof sensitivity === "number") setWakeSensitivity(sensitivity);
+            const receivedTtsSettings = event.payload.tts_settings;
+            if (receivedTtsSettings && typeof receivedTtsSettings === "object" && !Array.isArray(receivedTtsSettings)) {
+              const value = receivedTtsSettings as Record<string, unknown>;
+              setTtsSettings({
+                language: ["auto", "ru", "en"].includes(String(value.language))
+                  ? String(value.language) as TtsLanguage
+                  : "auto",
+                ru_voice: typeof value.ru_voice === "string" ? value.ru_voice : "baya",
+                en_voice: typeof value.en_voice === "string" ? value.en_voice : "autumn",
+                speed: typeof value.speed === "number" ? value.speed : 1,
+                style: ["neutral", "warm", "cheerful", "professional", "confident"].includes(String(value.style))
+                  ? String(value.style) as TtsStyle
+                  : "neutral",
+              });
+              setTtsPending(false);
+            }
+            const receivedCatalog = event.payload.tts_catalog;
+            if (receivedCatalog && typeof receivedCatalog === "object" && !Array.isArray(receivedCatalog)) {
+              const voices = (receivedCatalog as Record<string, unknown>).voices;
+              if (Array.isArray(voices)) setTtsVoices(voices as unknown as TtsVoice[]);
+            }
             setVoicePending(false);
             setProactivePending(false);
             if (event.payload.proactive_vision_enabled === true) {
@@ -659,6 +714,41 @@ export function App() {
       setSettingsStatus(
         error instanceof Error ? error.message : tx(locale, "Не удалось удалить API-ключ.", "Could not remove the API key."),
       );
+    }
+  }
+
+  async function saveTtsSettings(patch: Partial<TtsSettings>) {
+    const next = { ...ttsSettings, ...patch };
+    setTtsSettings(next);
+    setTtsPending(true);
+    setSettingsStatus(tx(locale, "Сохраняю настройки голоса…", "Saving voice settings…"));
+    try {
+      await transport.send("set_tts_settings", next);
+      setSettingsStatus(tx(locale, "Голос Nova настроен.", "Nova's voice is configured."));
+    } catch (error) {
+      setTtsPending(false);
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось сохранить настройки TTS.", "Could not save TTS settings."),
+      );
+    }
+  }
+
+  async function previewTtsVoice(voice: TtsVoice) {
+    setPreviewingVoice(voice.id);
+    setSettingsStatus(tx(locale, `Слушаем ${voice.name}…`, `Playing ${voice.name}…`));
+    try {
+      await transport.send("preview_tts", {
+        language: voice.language,
+        voice: voice.id,
+        speed: ttsSettings.speed,
+        style: ttsSettings.style,
+      });
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось воспроизвести пример.", "Could not play the preview."),
+      );
+    } finally {
+      window.setTimeout(() => setPreviewingVoice(null), 5_000);
     }
   }
 
@@ -935,8 +1025,8 @@ export function App() {
                 <button className={locale === "en" ? "active" : ""} onClick={() => setLocale("en")}><strong>English</strong><small>EN</small></button>
               </div>
               <div className="tts-roadmap-note">
-                <Mic size={16} />
-                <span><strong>{tx(locale, "Следом: язык и голос TTS", "Next: TTS language and voice")}</strong><small>{tx(locale, "Отдельные настройки RU/EN голоса появятся здесь и не будут зависеть от языка UI.", "Separate RU/EN voice controls will live here and remain independent from the UI language.")}</small></span>
+                <Volume2 size={16} />
+                <span><strong>{tx(locale, "Язык UI и голос независимы", "UI and voice languages are independent")}</strong><small>{tx(locale, "Ниже можно отдельно выбрать Auto/RU/EN, движок, голос, стиль и скорость.", "Choose Auto/RU/EN, engine, voice, style, and speed independently below.")}</small></span>
               </div>
             </div>
             <div className="settings-card appearance-card">
@@ -964,6 +1054,105 @@ export function App() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="settings-card tts-card">
+              <span className="settings-icon"><Volume2 size={22} /></span>
+              <div>
+                <span className="eyebrow">TEXT TO SPEECH</span>
+                <h2>{tx(locale, "Выбери, как говорит Nova", "Choose how Nova speaks")}</h2>
+                <p>{tx(
+                  locale,
+                  "Русские голоса работают локально через Silero. Английские голоса Orpheus работают через Groq API и не нагружают ноутбук моделью в памяти.",
+                  "Russian voices run locally with Silero. English Orpheus voices use the Groq API and do not keep another model in laptop memory.",
+                )}</p>
+              </div>
+              <div className="tts-language-options" aria-label={tx(locale, "Язык озвучки", "Speech language")}>
+                {(["auto", "ru", "en"] as const).map((language) => (
+                  <button
+                    key={language}
+                    className={ttsSettings.language === language ? "active" : ""}
+                    onClick={() => void saveTtsSettings({ language })}
+                    disabled={ttsPending}
+                  >
+                    <strong>{language === "auto" ? "Auto" : language.toUpperCase()}</strong>
+                    <small>{language === "auto"
+                      ? tx(locale, "По тексту ответа", "Detect from reply")
+                      : language === "ru"
+                        ? tx(locale, "Локально", "Local")
+                        : "Groq API"}</small>
+                  </button>
+                ))}
+              </div>
+              <div className="tts-controls">
+                <label>
+                  <span><strong>{tx(locale, "Скорость речи", "Speech speed")}</strong><small>{ttsSettings.speed.toFixed(2)}×</small></span>
+                  <input
+                    type="range"
+                    min="0.7"
+                    max="1.6"
+                    step="0.05"
+                    value={ttsSettings.speed}
+                    onChange={(event) => setTtsSettings((current) => ({ ...current, speed: Number(event.target.value) }))}
+                    onPointerUp={(event) => void saveTtsSettings({ speed: Number(event.currentTarget.value) })}
+                    onKeyUp={(event) => void saveTtsSettings({ speed: Number(event.currentTarget.value) })}
+                  />
+                </label>
+                <label>
+                  <span><strong>{tx(locale, "Манера английской речи", "English speaking style")}</strong><small>Orpheus</small></span>
+                  <select
+                    value={ttsSettings.style}
+                    onChange={(event) => void saveTtsSettings({ style: event.target.value as TtsStyle })}
+                  >
+                    {(["neutral", "warm", "cheerful", "professional", "confident"] as const).map((style) => (
+                      <option key={style} value={style}>{tx(
+                        locale,
+                        ({ neutral: "Обычная", warm: "Тёплая", cheerful: "Весёлая", professional: "Профессиональная", confident: "Уверенная" })[style],
+                        style[0].toUpperCase() + style.slice(1),
+                      )}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {(["ru", "en"] as const).map((language) => (
+                <section className="tts-voice-section" key={language}>
+                  <div className="tts-section-title">
+                    <strong>{language === "ru" ? tx(locale, "Русские · Silero", "Russian · Silero") : tx(locale, "Английские · Groq Orpheus", "English · Groq Orpheus")}</strong>
+                    <small>{language === "ru" ? tx(locale, "Работают без интернета", "Works offline") : tx(locale, "6 выразительных голосов", "6 expressive voices")}</small>
+                  </div>
+                  <div className="tts-voice-grid">
+                    {ttsVoices.filter((voice) => voice.language === language).map((voice) => {
+                      const selected = language === "ru"
+                        ? ttsSettings.ru_voice === voice.id
+                        : ttsSettings.en_voice === voice.id;
+                      return (
+                        <div className={selected ? "tts-voice active" : "tts-voice"} key={`${voice.engine}-${voice.id}`}>
+                          <button
+                            className="tts-voice-select"
+                            onClick={() => void saveTtsSettings(language === "ru" ? { ru_voice: voice.id } : { en_voice: voice.id })}
+                            aria-pressed={selected}
+                          >
+                            <span className="voice-avatar">{voice.name.slice(0, 1)}</span>
+                            <span><strong>{voice.name}</strong><small>{voice.gender === "female" ? tx(locale, "Женский", "Female") : tx(locale, "Мужской", "Male")} · {voice.engine}</small></span>
+                          </button>
+                          <button
+                            className="tts-preview"
+                            onClick={() => void previewTtsVoice(voice)}
+                            disabled={!voice.available || previewingVoice !== null}
+                            title={!voice.available ? tx(locale, "Добавьте Groq API-ключ", "Add a Groq API key") : tx(locale, "Послушать пример", "Play sample")}
+                          >
+                            {previewingVoice === voice.id ? <Activity size={14} /> : <Play size={14} />}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+              <p className="tts-footnote">{tx(
+                locale,
+                "Скорость применяется ко всем ответам. Для Auto язык определяется отдельно для каждого фрагмента.",
+                "Speed applies to every reply. Auto detects the language for each spoken fragment.",
+              )}</p>
             </div>
             <div className="settings-card voice-card">
               <span className="settings-icon"><Mic size={22} /></span>

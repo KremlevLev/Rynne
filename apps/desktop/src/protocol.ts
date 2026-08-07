@@ -41,6 +41,8 @@ export const NOVA_COMMAND_ACTIONS = [
   "retry_last",
   "set_input_mode",
   "set_preference",
+  "set_tts_settings",
+  "preview_tts",
   "set_wake_word_sensitivity",
   "run_proactive_check",
   "proactive_feedback",
