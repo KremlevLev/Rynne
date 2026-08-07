@@ -43,7 +43,7 @@ from modules.brain.tool_calls import (
     deduplicate_tool_calls,
     extract_xml_tool_calls,
 )
-from modules.domain.results import AssistantResponse
+from modules.domain.results import AssistantResponse, ToolResult
 from modules.tools.runtime import ToolRegistry, ToolRunner
 from modules.tools.selection import (
     get_selected_tool_names,
@@ -163,6 +163,33 @@ CONTEXTUAL COMMAND CONTINUATION:
 заново. Продолжи незавершённую цель реальными tool calls; если предыдущий шаг
 уже выполнен, переходи к следующему проверяемому шагу.
 """.strip()
+
+DYNAMIC_TOOL_DISCOVERY_NAME = "discover_tools"
+DYNAMIC_TOOL_DISCOVERY_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": DYNAMIC_TOOL_DISCOVERY_NAME,
+        "description": (
+            "Ищет и подгружает недоступные сейчас инструменты Nova из полного "
+            "локального и MCP-каталога. Используй, когда среди показанных tools "
+            "нет возможности для следующего шага задачи."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": (
+                        "Конкретная требуемая возможность или действие, а не "
+                        "повтор всего запроса пользователя."
+                    ),
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
 
@@ -469,6 +496,10 @@ class AgentService:
             DeterministicIntentRouter()
         )
         self.execution_memory = execution_memory
+        # On-demand tools remain warm for the next turns, but the bounded
+        # cache prevents a long session from putting the whole registry back
+        # into every model context.
+        self._sticky_tool_names: list[str] = []
 
     @staticmethod
     def _last_message_text(
@@ -1018,6 +1049,10 @@ class AgentService:
             execution_decision.required_tools
             & self.registry.names
         )
+        selected_tool_names.update(
+            set(self._sticky_tool_names)
+            & self.registry.names
+        )
 
         # Ambient diagnostics receive only non-mutating capabilities. Policy
         # repeats the same restriction at execution time as defence in depth.
@@ -1043,8 +1078,20 @@ class AgentService:
                     str(name) for name in explicitly_allowed
                 )
 
+        dynamic_discovery_enabled = bool(
+            use_tools
+            and not proactive_autonomous_request
+            and (self.registry.names - selected_tool_names)
+        )
+
+        def schemas_for_model(names: set[str]) -> list[dict[str, Any]]:
+            schemas = self.registry.schemas(names)
+            if dynamic_discovery_enabled:
+                schemas.append(DYNAMIC_TOOL_DISCOVERY_SCHEMA)
+            return schemas
+
         tool_schemas = (
-            self.registry.schemas(
+            schemas_for_model(
                 selected_tool_names
             )
             if use_tools
@@ -1154,7 +1201,12 @@ class AgentService:
             native_tool_calls = response.tool_calls
             xml_tool_calls = extract_xml_tool_calls(
                 response.text,
-                self.registry.names,
+                self.registry.names
+                | (
+                    {DYNAMIC_TOOL_DISCOVERY_NAME}
+                    if dynamic_discovery_enabled
+                    else set()
+                ),
             )
             return deduplicate_tool_calls(
                 native_tool_calls + xml_tool_calls
@@ -1200,7 +1252,7 @@ class AgentService:
                     expanded_tool_names.intersection_update(
                         str(name) for name in explicitly_allowed
                     )
-            expanded_tool_schemas = self.registry.schemas(
+            expanded_tool_schemas = schemas_for_model(
                 expanded_tool_names
             )
 
@@ -1451,6 +1503,62 @@ class AgentService:
                     tool_call["function"]["name"],
                 )
 
+                tool_name = str(
+                    tool_call.get("function", {}).get("name", "")
+                )
+                if (
+                    tool_name == DYNAMIC_TOOL_DISCOVERY_NAME
+                    and dynamic_discovery_enabled
+                ):
+                    arguments = self._parse_tool_arguments(tool_call)
+                    query = str(arguments.get("query") or "").strip()
+                    deferred_names = self.registry.names - selected_tool_names
+                    discovered_names = (
+                        get_selected_tool_names(
+                            query,
+                            deferred_names,
+                            has_image=has_image,
+                            max_tools=10,
+                            tool_schemas=all_tool_schemas,
+                            broaden=False,
+                        )
+                        if query and deferred_names
+                        else set()
+                    )
+                    if discovered_names:
+                        selected_tool_names.update(discovered_names)
+                        for discovered_name in sorted(discovered_names):
+                            if discovered_name in self._sticky_tool_names:
+                                self._sticky_tool_names.remove(discovered_name)
+                            self._sticky_tool_names.append(discovered_name)
+                        del self._sticky_tool_names[:-16]
+                        tool_schemas = schemas_for_model(selected_tool_names)
+                        result = ToolResult.ok(
+                            "Подгружены инструменты: "
+                            + ", ".join(sorted(discovered_names))
+                            + ". Выбери подходящий и продолжи исходную задачу."
+                        )
+                    else:
+                        result = ToolResult.failure(
+                            "TOOL_DISCOVERY_EMPTY",
+                            "Новых инструментов по этому описанию не найдено. "
+                            "Переформулируй требуемую возможность или используй "
+                            "уже доступные tools.",
+                        )
+
+                    total_tool_calls += 1
+                    executed_this_round += 1
+                    round_had_failure = round_had_failure or not result.success
+                    self.history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call["id"],
+                            "name": DYNAMIC_TOOL_DISCOVERY_NAME,
+                            "content": result.to_model_content(),
+                        }
+                    )
+                    continue
+
                 proactive_autonomous = bool(
                     request_object
                     and request_object.metadata.get(
@@ -1558,7 +1666,7 @@ class AgentService:
                 selected_tool_names = (
                     recovery_tool_names
                 )
-                tool_schemas = self.registry.schemas(
+                tool_schemas = schemas_for_model(
                     recovery_tool_names
                 )
 

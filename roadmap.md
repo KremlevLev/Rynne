@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 778 tests passed
+python -m pytest tests/ -q  # 779 tests passed
 cd apps/desktop && npm test  # 13 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -135,6 +135,12 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   предыдущей задачи и специальный continuation contract. Selector объединяет прошлую цель
   с текущей репликой, поэтому `OpenRouter → там моя активность` остаётся браузерной задачей,
   а последнее распознанное слово больше не запускается как случайное имя приложения.
+- ✅ По образцу on-demand tool search из сильных agent harness Nova получила встроенный
+  `discover_tools`: первоначальный prompt остаётся компактным, но модель может сама найти
+  нужную возможность во всём локальном/MCP registry по имени, описанию и параметрам,
+  подгрузить её схему прямо в текущий agent-loop и сразу выполнить. Найденные tools остаются
+  тёплыми между репликами в ограниченном кеше из 16 имён; proactive-autonomous контур не
+  получает discovery, поэтому фоновая диагностика не может расширить свои read-only права.
 - ✅ Feedback loop «Nova рядом» теперь проходит end-to-end: React сохраняет event id и
   одноразовый screenshot context при принятии карточки, показывает настоящее action label
   и кнопку «Не сейчас»; Core учится только на реакции без хранения пользовательского текста,

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from modules.application.agent import AgentService, is_contextual_follow_up
+from modules.application.agent import (
+    AgentService,
+    DYNAMIC_TOOL_DISCOVERY_NAME,
+    is_contextual_follow_up,
+)
 from modules.agent.execution_memory import ExecutionMemory
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
@@ -181,6 +185,107 @@ def test_agent_continues_elliptical_browser_command_from_history() -> None:
 
     assert response.success
     assert opened == ["https://openrouter.ai/activity"]
+
+
+class DynamicToolDiscoveryLLM:
+    def __init__(self) -> None:
+        self.history: list[dict] = []
+        self.calls: list[dict] = []
+
+    async def complete(self, **kwargs) -> ModelResponse:
+        self.calls.append(kwargs)
+        tool_names = {
+            schema["function"]["name"]
+            for schema in (kwargs.get("tools") or [])
+        }
+        if len(self.calls) == 1:
+            assert DYNAMIC_TOOL_DISCOVERY_NAME in tool_names
+            assert "quantum_operation" not in tool_names
+            return ModelResponse(
+                provider="fake",
+                model="fake",
+                key_label="test",
+                text="",
+                tool_calls=[{
+                    "id": "discover_quantum",
+                    "type": "function",
+                    "function": {
+                        "name": DYNAMIC_TOOL_DISCOVERY_NAME,
+                        "arguments": '{"query":"quantum flux capacitor"}',
+                    },
+                }],
+            )
+        if len(self.calls) == 2:
+            assert "quantum_operation" in tool_names
+            assert any(
+                message.get("role") == "tool"
+                and message.get("name") == DYNAMIC_TOOL_DISCOVERY_NAME
+                and "quantum_operation" in message.get("content", "")
+                for message in kwargs["messages"]
+            )
+            return ModelResponse(
+                provider="fake",
+                model="fake",
+                key_label="test",
+                text="",
+                tool_calls=[{
+                    "id": "run_quantum",
+                    "type": "function",
+                    "function": {
+                        "name": "quantum_operation",
+                        "arguments": "{}",
+                    },
+                }],
+            )
+        return ModelResponse(
+            provider="fake",
+            model="fake",
+            key_label="test",
+            text="Операция выполнена.",
+            tool_calls=[],
+        )
+
+
+def test_agent_discovers_and_executes_deferred_tool() -> None:
+    schemas = []
+    handlers = {}
+    for index in range(35):
+        name = f"decoy_operation_{index:02d}"
+        schemas.append({
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": "Выполняет служебную операцию.",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        })
+        handlers[name] = lambda: ToolResult.ok("Служебная операция.")
+    schemas.append({
+        "type": "function",
+        "function": {
+            "name": "quantum_operation",
+            "description": (
+                "Выполняет служебную quantum flux capacitor операцию."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    })
+    executed: list[str] = []
+    handlers["quantum_operation"] = lambda: (
+        executed.append("quantum_operation")
+        or ToolResult.ok("Quantum операция выполнена.")
+    )
+
+    registry = ToolRegistry.from_legacy(schemas, handlers)
+    llm = DynamicToolDiscoveryLLM()
+    agent = AgentService(llm, registry, ToolRunner(registry))
+
+    response = asyncio.run(agent.run("Выполни служебную операцию"))
+
+    assert response.success
+    assert executed == ["quantum_operation"]
+    assert len(llm.calls) == 3
+    assert "quantum_operation" in agent._sticky_tool_names
 
 
 class TwoPromisesThenToolLLM(RefusalThenToolLLM):
