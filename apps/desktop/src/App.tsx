@@ -418,6 +418,9 @@ export function App() {
   const followConversationRef = useRef(true);
   const [followingConversation, setFollowingConversation] = useState(true);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [voicePhase, setVoicePhase] = useState("idle");
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const [voiceSource, setVoiceSource] = useState("stt");
   const [confirmingSuggestionId, setConfirmingSuggestionId] = useState<string | null>(null);
   const runtime = runtimePresentation(runtimeState, locale);
   const nav = navigation(locale);
@@ -514,7 +517,17 @@ export function App() {
           }
           if (event.event_type === "voice_status") {
             setVoiceStatus(text(event.payload, "message"));
+            const status = text(event.payload, "status");
+            if (status) setVoicePhase(status);
             setVoicePending(false);
+          }
+          if (event.event_type === "voice_activity") {
+            const phase = text(event.payload, "phase", "idle");
+            const source = text(event.payload, "source", "stt");
+            const level = event.payload.level;
+            setVoicePhase(phase);
+            setVoiceSource(source);
+            setVoiceLevel(typeof level === "number" ? Math.min(1, Math.max(0, level)) : 0);
           }
           if (event.event_type === "task_progress") {
             const value = event.payload.progress;
@@ -767,6 +780,20 @@ export function App() {
 
   const voiceActive = inputMode === "continuous";
   const wakeWordActive = inputMode === "wake_word";
+  const voiceCaptureVisible = voiceActive || [
+    "recording",
+    "transcribing",
+    "wake_detected",
+    "wake_word_detected",
+    "paused_tts",
+  ].includes(voicePhase);
+  const voiceCaptureTitle = voicePhase === "paused_tts"
+    ? tx(locale, "Микрофон на паузе, пока Nova говорит", "Microphone paused while Nova speaks")
+    : voicePhase === "transcribing" || voicePhase === "wake_word_detected"
+    ? tx(locale, "Распознаю речь…", "Transcribing speech…")
+    : voicePhase === "recording" || voicePhase === "wake_detected"
+      ? tx(locale, "Слышу тебя", "I can hear you")
+      : tx(locale, "Слушаю…", "Listening…");
   const proactiveBadge = proactivePending
     ? "…"
     : !proactive
@@ -948,6 +975,32 @@ export function App() {
             )}
 
             <div className="composer-wrap">
+              {voiceCaptureVisible && (
+                <div className={`voice-capture-panel phase-${voicePhase}`} role="status" aria-live="polite">
+                  <div className="voice-capture-orb"><Mic size={17} /></div>
+                  <div className="voice-capture-copy">
+                    <strong>{voiceCaptureTitle}</strong>
+                    <small>{voicePhase === "paused_tts"
+                      ? tx(locale, "Защита от самопрослушивания включена", "Echo protection is active")
+                      : voiceSource === "wake_word"
+                      ? tx(locale, `Wake «${wakeWord}» · звук остаётся на устройстве`, `Wake “${wakeWord}” · audio stays on device`)
+                      : tx(locale, "Голосовой ввод активен", "Voice input is active")}</small>
+                  </div>
+                  <div className="voice-wave" aria-hidden="true">
+                    {Array.from({ length: 17 }, (_, index) => {
+                      const shape = 0.35 + Math.sin((index + 1) * 1.7) * 0.18 + (index % 3) * 0.08;
+                      const height = 4 + Math.max(0.06, voiceLevel) * shape * 34;
+                      return <i key={index} style={{ height: `${height}px` }} />;
+                    })}
+                  </div>
+                  <button
+                    className="voice-capture-stop"
+                    onClick={() => void selectInputMode("sleep")}
+                    aria-label={tx(locale, "Остановить голосовой ввод", "Stop voice input")}
+                    title={tx(locale, "Остановить", "Stop")}
+                  ><Square size={12} /></button>
+                </div>
+              )}
               <div className={busy ? "composer busy" : "composer"}>
                 <textarea
                   value={composer}

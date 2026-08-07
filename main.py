@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 import time
+import threading
 
 from modules.windows.process_manager import (
     ProcessManager
@@ -770,7 +771,22 @@ async def async_main() -> None:
     app_launcher = await asyncio.to_thread(
         WindowsAppIndexer
     )
-    listener = VoiceListener()
+    def publish_voice_activity(source: str):
+        def publish(phase: str, level: float) -> None:
+            if NOVA_DESKTOP_UI:
+                desktop_service.publish(
+                    "voice_activity",
+                    {
+                        "source": source,
+                        "phase": phase,
+                        "level": round(level, 3),
+                    },
+                )
+        return publish
+
+    listener = VoiceListener(
+        activity_callback=publish_voice_activity("stt"),
+    )
     llm = NovaLLM()
 
     handlers = build_handlers(
@@ -1676,7 +1692,9 @@ async def async_main() -> None:
         ),
         name="nova-request-service",
     )
-    wake_detector = WakeWordDetector()
+    wake_detector = WakeWordDetector(
+        activity_callback=publish_voice_activity("wake_word"),
+    )
 
     wake_runtime = WakeWordRuntime(
         detector=wake_detector,
@@ -1759,6 +1777,8 @@ async def async_main() -> None:
     )
     loop = asyncio.get_running_loop()
     hotkey_handles: list[Any] = []
+    hotkey_toggle_lock = threading.Lock()
+    last_hotkey_toggle = 0.0
 
     def schedule_toggle() -> None:
         async def toggle() -> None:
@@ -1792,6 +1812,14 @@ async def async_main() -> None:
         asyncio.create_task(toggle())
 
     def toggle_callback() -> None:
+        nonlocal last_hotkey_toggle
+        # Suppress keyboard auto-repeat: queued double toggles used to switch
+        # manual STT on and immediately hand the microphone back to Vosk.
+        now = time.monotonic()
+        with hotkey_toggle_lock:
+            if now - last_hotkey_toggle < 0.65:
+                return
+            last_hotkey_toggle = now
         loop.call_soon_threadsafe(schedule_toggle)
 
     def interrupt_callback() -> None:

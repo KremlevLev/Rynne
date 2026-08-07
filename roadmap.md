@@ -1,6 +1,18 @@
 ## Тесты
+
+- ✅ Voice input arbitration: Vosk wake word и обычный STT теперь используют
+  единственную эксклюзивную microphone lease; смена режима ждёт закрытия прежнего
+  PortAudio stream, а Ctrl+Shift+Space игнорирует автоповтор клавиатуры. Wake word
+  и ручной голосовой ввод больше не могут самопроизвольно переключать друг друга.
+- ✅ Live voice UX: Core передаёт React UI живой уровень микрофона и фазы
+  `waiting / recording / transcribing`; над composer появилась Siri-подобная
+  waveform-панель с явным индикатором записи и кнопкой остановки. Обычный STT
+  больше не съедает первые слова секундной калибровкой, а Vosk понимает частые
+  варианты распознавания «Нова» (`ново`, `нава`, `наува`).
+  Во время собственного TTS панель явно показывает паузу микрофона и активную
+  echo-защиту вместо ложного состояния «слушаю».
 ```bash
-python -m pytest tests/ -q  # 797 tests passed
+python -m pytest tests/ -q  # 802 tests passed
 cd apps/desktop && npm test  # 16 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```

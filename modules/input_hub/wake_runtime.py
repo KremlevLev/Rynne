@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
-
 from modules.application.preferences import (
     PreferencesManager,
 )
@@ -148,6 +146,10 @@ class WakeWordRuntime:
             )
 
             if not capture.success:
+                switching_modes = (
+                    capture.error
+                    == "Микрофон переключается между голосовыми режимами."
+                )
                 if (
                     capture.error
                     and "отмен" not in (
@@ -164,7 +166,7 @@ class WakeWordRuntime:
 
                 await self._sleep_or_shutdown(
                     shutdown_event,
-                    2.0,
+                    0.1 if switching_modes else 2.0,
                 )
                 continue
 

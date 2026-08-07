@@ -142,6 +142,7 @@ class VoiceListener:
     def __init__(
         self,
         input_device: int | str | None = None,
+        activity_callback: Callable[[str, float], None] | None = None,
     ) -> None:
         logger.info("Инициализация захвата звука.")
 
@@ -162,8 +163,14 @@ class VoiceListener:
         self.pre_roll_duration = 0.8
 
         self.input_device = input_device
-        self.energy_threshold: float | None = None
-        self.noise_floor: float = 0.0
+        # Start immediately after the user presses the microphone. The old
+        # one-second calibration window silently discarded the first words.
+        # The threshold keeps adapting while no speech is detected.
+        self.energy_threshold: float | None = 0.008
+        self.noise_floor: float = 0.003
+        self.activity_callback = activity_callback
+        self._last_activity_at = 0.0
+        self._last_activity_phase = ""
 
         self._preferred_key_index = 0
         self._key_cooldowns: dict[int, float] = {}
@@ -177,6 +184,32 @@ class VoiceListener:
         self.last_error: str | None = None
 
         self._log_audio_device()
+
+    def _emit_activity(
+        self,
+        phase: str,
+        rms: float = 0.0,
+        *,
+        force: bool = False,
+    ) -> None:
+        callback = self.activity_callback
+        if callback is None:
+            return
+        now = time.monotonic()
+        if (
+            not force
+            and phase == self._last_activity_phase
+            and now - self._last_activity_at < 0.10
+        ):
+            return
+        threshold = max(float(self.energy_threshold or 0.008), 0.004)
+        level = min(1.0, max(0.0, float(rms) / threshold * 0.72))
+        self._last_activity_at = now
+        self._last_activity_phase = phase
+        try:
+            callback(phase, level)
+        except Exception:
+            logger.debug("Не удалось опубликовать уровень микрофона.", exc_info=True)
 
     def _log_audio_device(self) -> None:
         try:
@@ -343,6 +376,7 @@ class VoiceListener:
                     return None
 
             assert self.energy_threshold is not None
+            self._emit_activity("listening", force=True)
 
             print(
                 "[🎤] Слушаю "
@@ -412,6 +446,7 @@ class VoiceListener:
                 # Пропускаем блоки, пока TTS воспроизводит аудио,
                 # чтобы избежать обратной связи микрофона.
                 if is_tts_capture_blocked():
+                    self._emit_activity("paused_tts")
                     pre_roll.clear()
                     if started_speaking:
                         logger.info("Запись отменена: началось воспроизведение TTS.")
@@ -441,6 +476,10 @@ class VoiceListener:
                         if started_speaking
                         else start_threshold
                     )
+                )
+                self._emit_activity(
+                    "recording" if (started_speaking or is_voice) else "listening",
+                    rms,
                 )
 
                 if is_voice:
@@ -782,6 +821,28 @@ class VoiceListener:
         self,
         should_abort: Callable[[], bool] | None = None,
     ) -> str:
+        """Record one utterance with exclusive microphone ownership."""
+        from modules.input_hub.voice_owner import get_voice_owner_lock
+
+        self.last_error = None
+        voice_lock = get_voice_owner_lock()
+        owner_name = f"voice_listener:{id(self)}"
+        if not voice_lock.acquire(owner_name, allow_reentrant=False):
+            logger.debug(
+                "VoiceListener ждёт освобождения микрофона владельцем %s.",
+                voice_lock.owner,
+            )
+            return ""
+
+        try:
+            return self._listen_owned(should_abort)
+        finally:
+            voice_lock.release(owner_name)
+
+    def _listen_owned(
+        self,
+        should_abort: Callable[[], bool] | None = None,
+    ) -> str:
         self.last_error = None
         try:
             audio = self._record(should_abort)
@@ -802,6 +863,7 @@ class VoiceListener:
             return ""
 
         if audio is None or audio.size == 0:
+            self._emit_activity("idle", force=True)
             return ""
 
         temp_directory = Path("data/temp")
@@ -845,6 +907,7 @@ class VoiceListener:
             if should_abort and should_abort():
                 return ""
 
+            self._emit_activity("transcribing", force=True)
             text = self._transcribe(temporary_path)
 
             if not text:
@@ -865,6 +928,7 @@ class VoiceListener:
             return text
 
         finally:
+            self._emit_activity("idle", force=True)
             if temporary_path is not None:
                 try:
                     temporary_path.unlink(

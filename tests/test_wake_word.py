@@ -41,6 +41,8 @@ def test_repeated_and_latin_wake_words_are_not_commands() -> None:
     assert contains_wake_word(
         "ново"
     )
+    assert contains_wake_word("нава")
+    assert contains_wake_word("наува")
 
 
 def test_does_not_match_part_of_word() -> None:

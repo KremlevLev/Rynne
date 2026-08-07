@@ -185,7 +185,7 @@ def contains_wake_word(
     aliases = {normalized_wake}
     if normalized_wake == "нова":
         # Small Russian Vosk models sometimes finalize «Нова» as «ново».
-        aliases.add("ново")
+        aliases.update({"ново", "нава", "наува"})
     return any(
         re.search(rf"\b{re.escape(alias)}\b", normalized)
         for alias in aliases
@@ -267,6 +267,7 @@ class WakeWordDetector:
     def __init__(
         self,
         config: WakeWordConfig | None = None,
+        activity_callback: Callable[[str, float], None] | None = None,
     ) -> None:
         self.config = (
             config
@@ -278,6 +279,29 @@ class WakeWordDetector:
         self._initialization_error: str | None = None
 
         self._stop_event = threading.Event()
+        self.activity_callback = activity_callback
+        self._last_activity_at = 0.0
+
+    def _emit_activity(
+        self,
+        phase: str,
+        rms: float = 0.0,
+        threshold: float = 0.008,
+        *,
+        force: bool = False,
+    ) -> None:
+        callback = self.activity_callback
+        if callback is None:
+            return
+        now = time.monotonic()
+        if not force and now - self._last_activity_at < 0.12:
+            return
+        self._last_activity_at = now
+        level = min(1.0, max(0.0, float(rms) / max(threshold, 0.004) * 0.72))
+        try:
+            callback(phase, level)
+        except Exception:
+            logger.debug("Не удалось опубликовать wake-уровень.", exc_info=True)
 
     @property
     def available(self) -> bool:
@@ -352,6 +376,30 @@ class WakeWordDetector:
             bool,
         ] | None = None,
     ) -> WakeCapture:
+        """Capture one wake utterance with exclusive microphone ownership."""
+        from modules.input_hub.voice_owner import get_voice_owner_lock
+
+        voice_lock = get_voice_owner_lock()
+        owner_name = f"wake_word:{id(self)}"
+        if not voice_lock.acquire(owner_name, allow_reentrant=False):
+            return WakeCapture(
+                detected=False,
+                error="Микрофон переключается между голосовыми режимами.",
+            )
+
+        try:
+            return self._wait_for_command_owned(should_abort)
+        finally:
+            self._emit_activity("idle", force=True)
+            voice_lock.release(owner_name)
+
+    def _wait_for_command_owned(
+        self,
+        should_abort: Callable[
+            [],
+            bool,
+        ] | None = None,
+    ) -> WakeCapture:
         if not self.available:
             return WakeCapture(
                 detected=False,
@@ -397,6 +445,8 @@ class WakeWordDetector:
                 if self.config.wake_word == "нова"
                 else self.config.wake_word
             ),
+            "нава" if self.config.wake_word == "нова" else self.config.wake_word,
+            "наува" if self.config.wake_word == "нова" else self.config.wake_word,
             "[unk]",
         ]
         recognizer = KaldiRecognizer(
@@ -512,6 +562,10 @@ class WakeWordDetector:
                         )
 
                     if is_tts_capture_blocked():
+                        self._emit_activity(
+                            "paused_tts",
+                            force=not tts_was_blocked,
+                        )
                         # Never feed Nova's own voice or its acoustic tail to
                         # Vosk. Reset partial text so it cannot survive the
                         # playback boundary and become a false wake word.
@@ -534,6 +588,11 @@ class WakeWordDetector:
 
                     rms = _rms_from_bytes(
                         raw_bytes
+                    )
+                    self._emit_activity(
+                        "recording" if wake_detected else "waiting_wake_word",
+                        rms,
+                        threshold,
                     )
 
                     if not wake_detected:
@@ -590,6 +649,12 @@ class WakeWordDetector:
                     if just_detected:
                         wake_detected = True
                         wake_text = recognized_text
+                        self._emit_activity(
+                            "wake_detected",
+                            rms,
+                            threshold,
+                            force=True,
+                        )
 
                         captured_audio.extend(
                             list(pre_roll)

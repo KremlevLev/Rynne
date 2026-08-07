@@ -11,6 +11,7 @@ from modules.application.preferences import (
 )
 from modules.domain.state import RuntimeState
 from modules.input_hub.models import InputMode
+from modules.input_hub.voice_owner import get_voice_owner_lock
 
 
 logger = logging.getLogger("InteractionModes")
@@ -235,6 +236,11 @@ class InteractionModeManager:
             # CONTINUOUS — единственный режим, в котором обычный
             # VoiceListener должен непрерывно слушать микрофон.
             if mode == InputMode.CONTINUOUS:
+                if mode_changed:
+                    await asyncio.to_thread(
+                        get_voice_owner_lock().wait_until_free,
+                        1.5,
+                    )
                 if not self.runtime.is_active:
                     await self.runtime.activate()
 
@@ -249,6 +255,12 @@ class InteractionModeManager:
                     # Даже при уже неактивном runtime обновляем
                     # визуальное состояние на СПИТ.
                     await self.runtime.sleep()
+
+                if mode_changed:
+                    await asyncio.to_thread(
+                        get_voice_owner_lock().wait_until_free,
+                        1.5,
+                    )
 
             return snapshot
 

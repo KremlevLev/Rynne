@@ -12,8 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 from contextlib import asynccontextmanager
-from enum import Enum, auto
 from typing import Callable
 
 
@@ -36,7 +36,12 @@ class VoiceOwnerLock:
         self._owner_count = 0
         self._async_lock = asyncio.Lock()
         
-    def acquire(self, owner_name: str) -> bool:
+    def acquire(
+        self,
+        owner_name: str,
+        *,
+        allow_reentrant: bool = True,
+    ) -> bool:
         """Пытается захватить микрофон. Возвращает True если успешно."""
         with self._lock:
             if self._owner is None:
@@ -45,7 +50,7 @@ class VoiceOwnerLock:
                 logger.debug("Voice lock захвачен: %s", owner_name)
                 return True
             
-            if self._owner == owner_name:
+            if self._owner == owner_name and allow_reentrant:
                 # Тот же owner может "перезахватить" (reenqueue)
                 self._owner_count += 1
                 logger.debug(
@@ -61,6 +66,18 @@ class VoiceOwnerLock:
                 owner_name,
             )
             return False
+
+    def wait_until_free(
+        self,
+        timeout: float = 1.0,
+    ) -> bool:
+        """Wait briefly for the active recorder to release the device."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        while time.monotonic() < deadline:
+            if self.is_free:
+                return True
+            time.sleep(0.02)
+        return self.is_free
     
     def release(self, owner_name: str) -> None:
         """Освобождает микрофон."""
@@ -87,11 +104,13 @@ class VoiceOwnerLock:
     
     @property
     def owner(self) -> str | None:
-        return self._owner if self._owner_count > 0 else None
+        with self._lock:
+            return self._owner if self._owner_count > 0 else None
     
     @property
     def is_free(self) -> bool:
-        return self._owner is None
+        with self._lock:
+            return self._owner is None
 
 
 # Глобальный lock для всего процесса

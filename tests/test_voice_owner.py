@@ -2,8 +2,6 @@
 """Тесты для Voice Ownership Manager."""
 from __future__ import annotations
 
-import pytest
-
 from modules.input_hub.voice_owner import (
     VoiceOwnerLock,
     PushToTalkHotkey,
@@ -42,6 +40,12 @@ class TestVoiceOwnerLock:
         result = lock.acquire("continuous")
         assert result is False
         assert lock.owner == "wake_word"
+
+    def test_non_reentrant_recorder_lease_rejects_duplicate_stream(self) -> None:
+        lock = VoiceOwnerLock()
+        assert lock.acquire("wake_word", allow_reentrant=False)
+        assert not lock.acquire("wake_word", allow_reentrant=False)
+        assert lock._owner_count == 1
         
     def test_release(self) -> None:
         lock = VoiceOwnerLock()
