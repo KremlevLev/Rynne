@@ -327,6 +327,28 @@ NOVA_MCP_AUTO_DISCOVERY=false
 
 After the handshake, tools receive risk/category metadata and join the shared capability router. `${ENV_NAME}` values are substituted locally and never added to the prompt.
 
+## Teach Nova a workflow without rebuilding it
+
+Nova loads contextual Markdown skills on demand from `%USERPROFILE%\.nova\skills`,
+`<workspace>\.nova\skills`, and the compatible `<workspace>\.agents\skills` path.
+Create `SKILL.md` in a subdirectory:
+
+```markdown
+---
+name: Release Project
+triggers: [release, publish version]
+paths: [package.json, pyproject.toml]
+tools: [read_text_file, apply_text_patch, run_project_tests, git_commit]
+---
+Read the current version, run the closest tests, update the changelog, then
+create a commit. Never publish when tests fail.
+```
+
+Only matching skills enter the model context. Project skills override global
+ones with the same name and update immediately after saving; declared tools are
+loaded from the capability registry. Skills cannot override Nova's policy,
+permissions, confirmations, or the user's explicit goal.
+
 ## Control and safety
 
 An OS agent should be capable, but it must remain predictable.
@@ -416,7 +438,7 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **740 Python tests + 11 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **785 Python tests + 13 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 

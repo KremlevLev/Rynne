@@ -23,7 +23,7 @@ CORE_RESOURCE_DIR = TAURI_ROOT / "resources" / "nova-core"
 CORE_BUILD_MANIFEST = TAURI_ROOT / "resources" / "nova-core.build.json"
 PYINSTALLER_ROOT = PROJECT_ROOT / "build" / "pyinstaller"
 CORE_ENTRY_POINT = PROJECT_ROOT / "nova_sidecar.py"
-BUILD_RECIPE_VERSION = 1
+BUILD_RECIPE_VERSION = 2
 
 
 def run(command: list[str], *, cwd: Path = PROJECT_ROOT) -> None:
@@ -76,6 +76,7 @@ def source_fingerprint() -> str:
         PROJECT_ROOT / "requirements.txt",
         *sorted((PROJECT_ROOT / "core").rglob("*.py")),
         *sorted((PROJECT_ROOT / "modules").rglob("*.py")),
+        *sorted((PROJECT_ROOT / "data" / "skills").rglob("*.md")),
     ]
     for path in sources:
         relative = path.relative_to(PROJECT_ROOT).as_posix()
@@ -142,6 +143,8 @@ def build_core(*, force: bool = False) -> Path:
         str(PYINSTALLER_ROOT),
         "--paths",
         str(PROJECT_ROOT),
+        "--add-data",
+        f"{PROJECT_ROOT / 'data' / 'skills'};data/skills",
         # The Tauri process owns the UI. These legacy presentation packages
         # must not add hundreds of megabytes to the headless Core.
         "--exclude-module",

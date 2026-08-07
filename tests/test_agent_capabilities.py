@@ -8,6 +8,7 @@ from modules.application.agent import (
     is_contextual_follow_up,
 )
 from modules.agent.execution_memory import ExecutionMemory
+from modules.agent.skill_library import SkillLibrary
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
 from modules.tools.runtime import ToolRegistry, ToolRunner
@@ -286,6 +287,89 @@ def test_agent_discovers_and_executes_deferred_tool() -> None:
     assert executed == ["quantum_operation"]
     assert len(llm.calls) == 3
     assert "quantum_operation" in agent._sticky_tool_names
+
+
+class SkillAwareLLM:
+    def __init__(self) -> None:
+        self.history: list[dict] = []
+        self.calls = 0
+
+    async def complete(self, **kwargs) -> ModelResponse:
+        self.calls += 1
+        if self.calls == 1:
+            assert "Skill: Light Control" in kwargs["messages"][0]["content"]
+            assert "Проверь состояние лампы" in kwargs["messages"][0]["content"]
+            return ModelResponse(
+                provider="fake",
+                model="fake",
+                key_label="test",
+                text="",
+                tool_calls=[{
+                    "id": "light_on",
+                    "type": "function",
+                    "function": {
+                        "name": "control_light",
+                        "arguments": "{}",
+                    },
+                }],
+            )
+        return ModelResponse(
+            provider="fake",
+            model="fake",
+            key_label="test",
+            text="Свет включён.",
+            tool_calls=[],
+        )
+
+
+def test_agent_injects_workspace_skill_into_execution_loop(tmp_path) -> None:
+    skill_dir = tmp_path / ".nova" / "skills" / "light"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        """---
+name: Light Control
+triggers: [лампа, свет]
+tools: [control_light]
+---
+Проверь состояние лампы, затем переключи её.
+""",
+        encoding="utf-8",
+    )
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "control_light",
+            "description": "Управляет светом.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+    executed: list[str] = []
+    registry = ToolRegistry.from_legacy(
+        [schema],
+        {"control_light": lambda: (
+            executed.append("control_light") or ToolResult.ok("Включено.")
+        )},
+    )
+    llm = SkillAwareLLM()
+    agent = AgentService(
+        llm,
+        registry,
+        ToolRunner(registry),
+        skill_library=SkillLibrary(
+            tmp_path / "global",
+            tmp_path / "no-builtins",
+        ),
+    )
+    from modules.input_hub.models import UserRequest
+    request = UserRequest.from_text(
+        "Включи свет",
+        metadata={"workspace_path": str(tmp_path)},
+    )
+
+    response = asyncio.run(agent.run(request))
+
+    assert response.success
+    assert executed == ["control_light"]
 
 
 class TwoPromisesThenToolLLM(RefusalThenToolLLM):

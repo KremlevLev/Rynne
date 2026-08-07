@@ -1283,12 +1283,14 @@ async def async_main() -> None:
     # =========================================================
 
     from modules.agent.execution_memory import ExecutionMemory
+    from modules.agent.skill_library import SkillLibrary
 
     agent = AgentService(
         llm,
         registry,
         runner,
         execution_memory=ExecutionMemory(),
+        skill_library=SkillLibrary(),
         isolated_history=True,
     )
 

@@ -50,6 +50,7 @@ from modules.tools.selection import (
     request_prefers_interactive_browser,
 )
 from modules.agent.execution_memory import ExecutionMemory
+from modules.agent.skill_library import SkillBundle, SkillLibrary
 
 
 logger = logging.getLogger("AgentService")
@@ -478,6 +479,7 @@ class AgentService:
         *,
         session_id: str | None = None,
         execution_memory: ExecutionMemory | None = None,
+        skill_library: SkillLibrary | None = None,
         isolated_history: bool = False,
     ) -> None:
         self.llm = llm
@@ -496,6 +498,7 @@ class AgentService:
             DeterministicIntentRouter()
         )
         self.execution_memory = execution_memory
+        self.skill_library = skill_library
         # On-demand tools remain warm for the next turns, but the bounded
         # cache prevents a long session from putting the whole registry back
         # into every model context.
@@ -1013,6 +1016,25 @@ class AgentService:
             use_tools = True
 
         all_tool_schemas = self.registry.schemas()
+        proactive_autonomous_request = bool(
+            request_object is not None
+            and request_object.metadata.get("proactive_autonomous")
+        )
+        workspace_path = (
+            str(request_object.metadata.get("workspace_path") or "").strip()
+            if request_object is not None
+            else ""
+        )
+        skill_bundle = SkillBundle()
+        if self.skill_library is not None and not proactive_autonomous_request:
+            try:
+                skill_bundle = self.skill_library.match(
+                    selection_text,
+                    workspace_path or None,
+                    self.registry.names,
+                )
+            except Exception:
+                logger.warning("Не удалось загрузить contextual skills.", exc_info=True)
         action_was_requested = (
             request_requires_action(user_text)
             or contextual_follow_up
@@ -1049,6 +1071,7 @@ class AgentService:
             execution_decision.required_tools
             & self.registry.names
         )
+        selected_tool_names.update(skill_bundle.tools)
         selected_tool_names.update(
             set(self._sticky_tool_names)
             & self.registry.names
@@ -1056,10 +1079,6 @@ class AgentService:
 
         # Ambient diagnostics receive only non-mutating capabilities. Policy
         # repeats the same restriction at execution time as defence in depth.
-        proactive_autonomous_request = bool(
-            request_object is not None
-            and request_object.metadata.get("proactive_autonomous")
-        )
         if proactive_autonomous_request:
             selected_tool_names = {
                 name
@@ -1119,6 +1138,11 @@ class AgentService:
             if contextual_follow_up
             else ""
         )
+        skill_prompt = (
+            "\n\n" + skill_bundle.prompt
+            if skill_bundle.prompt
+            else ""
+        )
 
         # Инициализация бюджета для этого запроса.
         budget_state = (
@@ -1164,6 +1188,7 @@ class AgentService:
                     + learned_prompt
                     + interactive_browser_prompt
                     + contextual_prompt
+                    + skill_prompt
                 ),
             },
             *previous_history,
@@ -1270,6 +1295,7 @@ class AgentService:
                             + execution_prompt
                             + learned_prompt
                             + interactive_browser_prompt
+                            + skill_prompt
                         ),
                     },
                     *messages[1:],
@@ -1326,6 +1352,7 @@ class AgentService:
                         + execution_prompt
                         + learned_prompt
                         + interactive_browser_prompt
+                        + skill_prompt
                     ),
                 },
                 *messages[1:],
@@ -1696,6 +1723,7 @@ class AgentService:
                         + execution_prompt
                         + learned_prompt
                         + interactive_browser_prompt
+                        + skill_prompt
                     ),
                 },
                 *trim_history(self.history),

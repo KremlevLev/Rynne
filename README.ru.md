@@ -372,6 +372,28 @@ NOVA_MCP_AUTO_DISCOVERY=false
 общем capability routing. Значения `${ENV_NAME}` подставляются локально и не
 добавляются в prompt.
 
+## Научите Nova новому workflow без пересборки
+
+Nova по требованию загружает контекстные Markdown-skills из
+`%USERPROFILE%\.nova\skills`, `<workspace>\.nova\skills` и совместимого пути
+`<workspace>\.agents\skills`. Создайте в подпапке файл `SKILL.md`:
+
+```markdown
+---
+name: Release Project
+triggers: [релиз, опубликуй версию]
+paths: [package.json, pyproject.toml]
+tools: [read_text_file, apply_text_patch, run_project_tests, git_commit]
+---
+Прочитай текущую версию, запусти ближайшие тесты, обнови changelog и создай
+коммит. Никогда не публикуй релиз, если тесты упали.
+```
+
+В контекст попадают только подходящие skills. Проектное правило переопределяет
+глобальное с тем же именем и обновляется сразу после сохранения; перечисленные
+tools подгружаются из общего registry. Skill не может отменить policy,
+permissions, подтверждения Nova или явную цель пользователя.
+
 ## Контроль и безопасность
 
 OS-агент не должен быть «магией», которой приходится слепо доверять.
@@ -458,7 +480,7 @@ npm test
 npm run build
 ```
 
-Текущий regression suite: **740 Python-тестов + 11 desktop-тестов + 8/8 acceptance-сценариев оркестратора**.
+Текущий regression suite: **785 Python-тестов + 13 desktop-тестов + 8/8 acceptance-сценариев оркестратора**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 779 tests passed
+python -m pytest tests/ -q  # 785 tests passed
 cd apps/desktop && npm test  # 13 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -141,6 +141,13 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   подгрузить её схему прямо в текущий agent-loop и сразу выполнить. Найденные tools остаются
   тёплыми между репликами в ограниченном кеше из 16 имён; proactive-autonomous контур не
   получает discovery, поэтому фоновая диагностика не может расширить свои read-only права.
+- ✅ По MIT-паттернам OpenHands microagents и Deep Agents skills добавлена hot-reload
+  библиотека `SKILL.md`: keyword/path triggers, обязательные tools, глобальные правила в
+  `%USERPROFILE%\.nova\skills`, project overrides в `.nova/skills` и совместимость с
+  `.agents/skills`. В prompt попадают максимум три релевантные процедуры и не более 12K
+  символов; skills не могут отменять policy/permissions. В Core и installer включены готовые
+  Browser Operator, Project Repair и Windows Operator, пользовательские файлы применяются
+  сразу без пересборки Nova.
 - ✅ Feedback loop «Nova рядом» теперь проходит end-to-end: React сохраняет event id и
   одноразовый screenshot context при принятии карточки, показывает настоящее action label
   и кнопку «Не сейчас»; Core учится только на реакции без хранения пользовательского текста,
