@@ -36,6 +36,10 @@ class FakeAgent:
     def __init__(self) -> None:
         self.calls = []
         self.external_turns = []
+        self.contextual_follow_ups = False
+
+    def can_resolve_contextual_follow_up(self, text):
+        return self.contextual_follow_ups
 
     def record_external_turn(
         self,
@@ -187,5 +191,24 @@ def test_clarification_does_not_call_agent() -> None:
             == "CLARIFICATION_REQUIRED"
         )
         assert agent.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_contextual_follow_up_bypasses_local_clarification() -> None:
+    async def scenario() -> None:
+        dispatcher, agent = create_dispatcher()
+        agent.contextual_follow_ups = True
+
+        response = await dispatcher.dispatch(
+            UserRequest.from_text(
+                "так запусти все приложения"
+            )
+        )
+
+        assert response.success
+        assert len(agent.calls) == 1
+        assert agent.calls[0]["use_tools"] is True
+        assert agent.external_turns == []
 
     asyncio.run(scenario())

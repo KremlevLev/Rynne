@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from modules.application.agent import AgentService
+from modules.application.agent import AgentService, is_contextual_follow_up
 from modules.agent.execution_memory import ExecutionMemory
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
@@ -96,6 +96,91 @@ def test_action_refusal_retries_with_real_tools() -> None:
         and message.get("content") == "Проверь время"
         for message in llm.history
     ) == 1
+
+
+def test_contextual_follow_up_detection_is_conservative() -> None:
+    assert is_contextual_follow_up("а теперь там мою активность?")
+    assert is_contextual_follow_up("так открой его")
+    assert is_contextual_follow_up("что на этой странице?")
+    assert not is_contextual_follow_up("Запусти все приложения")
+    assert not is_contextual_follow_up("Расскажи про квантовую физику")
+
+
+class ContextualBrowserLLM:
+    def __init__(self) -> None:
+        self.history: list[dict] = []
+        self.calls: list[dict] = []
+
+    async def complete(self, **kwargs) -> ModelResponse:
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            tool_names = {
+                schema["function"]["name"]
+                for schema in (kwargs.get("tools") or [])
+            }
+            assert "browser_open_url" in tool_names
+            assert "CONTEXTUAL COMMAND CONTINUATION" in (
+                kwargs["messages"][0]["content"]
+            )
+            return ModelResponse(
+                provider="fake",
+                model="fake",
+                key_label="test",
+                text="",
+                tool_calls=[{
+                    "id": "open_activity",
+                    "type": "function",
+                    "function": {
+                        "name": "browser_open_url",
+                        "arguments": (
+                            '{"url":"https://openrouter.ai/activity"}'
+                        ),
+                    },
+                }],
+            )
+        return ModelResponse(
+            provider="fake",
+            model="fake",
+            key_label="test",
+            text="Страница активности открыта.",
+            tool_calls=[],
+        )
+
+
+def test_agent_continues_elliptical_browser_command_from_history() -> None:
+    opened: list[str] = []
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "browser_open_url",
+            "description": "Открывает URL в браузере.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+        },
+    }
+    registry = ToolRegistry.from_legacy(
+        [schema],
+        {"browser_open_url": lambda url: (
+            opened.append(url) or ToolResult.ok("Открыто.")
+        )},
+    )
+    llm = ContextualBrowserLLM()
+    agent = AgentService(llm, registry, ToolRunner(registry))
+    agent.history.extend([
+        {"role": "user", "content": "Включи браузер"},
+        {"role": "assistant", "content": "Браузер открыт."},
+    ])
+
+    response = asyncio.run(
+        agent.run("а теперь там открой мою активность")
+    )
+
+    assert response.success
+    assert opened == ["https://openrouter.ai/activity"]
 
 
 class TwoPromisesThenToolLLM(RefusalThenToolLLM):

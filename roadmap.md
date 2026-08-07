@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 775 tests passed
+python -m pytest tests/ -q  # 778 tests passed
 cd apps/desktop && npm test  # 13 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -130,6 +130,11 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - ✅ Actionable-фразы «зайди / перейди / посмотри / чекни / open / check» распознаются как
   действия; если модель дважды обещает выполнить задачу без tool call, последний repair-ход
   требует реальный первый вызов вместо сообщений «сейчас сделаю / ожидаю результат».
+- ✅ Короткие продолжения команд больше не теряют исходную цель: «а теперь там», «в нём?»,
+  «так открой его» обходят преждевременный локальный `CLARIFY/CHAT`, получают tools из
+  предыдущей задачи и специальный continuation contract. Selector объединяет прошлую цель
+  с текущей репликой, поэтому `OpenRouter → там моя активность` остаётся браузерной задачей,
+  а последнее распознанное слово больше не запускается как случайное имя приложения.
 - ✅ Feedback loop «Nova рядом» теперь проходит end-to-end: React сохраняет event id и
   одноразовый screenshot context при принятии карточки, показывает настоящее action label
   и кнопку «Не сейчас»; Core учится только на реакции без хранения пользовательского текста,

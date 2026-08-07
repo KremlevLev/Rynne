@@ -108,6 +108,15 @@ class RequestDispatcher:
         decision = self.intent_router.route(
             request
         )
+        contextual_resolver = getattr(
+            self.agent,
+            "can_resolve_contextual_follow_up",
+            None,
+        )
+        contextual_follow_up = bool(
+            callable(contextual_resolver)
+            and contextual_resolver(request.text)
+        )
 
         logger.info(
             (
@@ -155,6 +164,7 @@ class RequestDispatcher:
         if (
             decision.strategy
             == ExecutionStrategy.CLARIFY
+            and not contextual_follow_up
         ):
             question = (
                 decision.clarification_question
@@ -217,7 +227,10 @@ class RequestDispatcher:
         try:
             response = await self.agent.run(
                 request,
-                use_tools=decision.needs_tools,
+                use_tools=(
+                    decision.needs_tools
+                    or contextual_follow_up
+                ),
                 has_image=request.has_image,
             )
 

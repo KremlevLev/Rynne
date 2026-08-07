@@ -155,6 +155,15 @@ INTERACTIVE BROWSER:
 навигации и проверки страницы. Не вызывай open_application для браузерной задачи.
 """.strip()
 
+CONTEXTUAL_FOLLOW_UP_PROMPT = """
+CONTEXTUAL COMMAND CONTINUATION:
+Текущая фраза продолжает предыдущую пользовательскую цель. Разреши слова вроде
+«там», «в нём», «это», «теперь» и пропущенные объекты по истории диалога. Не
+воспринимай последнее слово как имя отдельного приложения и не начинай задачу
+заново. Продолжи незавершённую цель реальными tool calls; если предыдущий шаг
+уже выполнен, переходи к следующему проверяемому шагу.
+""".strip()
+
 MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024
 
 
@@ -164,6 +173,31 @@ def request_requires_action(text: str) -> bool:
     return any(
         re.search(pattern, lowered)
         for pattern in ACTION_PATTERNS
+    )
+
+
+CONTEXTUAL_FOLLOW_UP_RE = re.compile(
+    r"^(?:а\s+)?(?:теперь|тогда|дальше|потом|так|там|туда|здесь|сюда|"
+    r"в\s+н[её]м|на\s+н[её]м|с\s+н[и]м|это|этот|эту|тот|его|е[её]|их)\b",
+    re.IGNORECASE,
+)
+CONTEXTUAL_REFERENCE_RE = re.compile(
+    r"\b(?:там|туда|оттуда|в\s+н[её]м|на\s+н[её]м|с\s+н[и]м|его|е[её]|их|"
+    r"этот|эту|это|дальше|сайт|страниц[ауе])\b",
+    re.IGNORECASE,
+)
+
+
+def is_contextual_follow_up(text: str) -> bool:
+    """Распознаёт короткую реплику, смысл которой находится в прошлом ходе."""
+    normalized = " ".join(str(text).strip().split())
+    if not normalized:
+        return False
+    if CONTEXTUAL_FOLLOW_UP_RE.search(normalized):
+        return True
+    return (
+        len(normalized.split()) <= 10
+        and CONTEXTUAL_REFERENCE_RE.search(normalized) is not None
     )
 
 
@@ -435,6 +469,32 @@ class AgentService:
             DeterministicIntentRouter()
         )
         self.execution_memory = execution_memory
+
+    @staticmethod
+    def _last_message_text(
+        history: list[dict[str, Any]],
+        role: str,
+    ) -> str:
+        for message in reversed(history):
+            if message.get("role") == role:
+                return content_to_text(message.get("content"))
+        return ""
+
+    def can_resolve_contextual_follow_up(self, text: str) -> bool:
+        """True, когда неоднозначную короткую команду можно раскрыть из истории."""
+        if not self.history or not is_contextual_follow_up(text):
+            return False
+
+        previous_user = self._last_message_text(self.history, "user")
+        previous_assistant = self._last_message_text(self.history, "assistant")
+        return bool(
+            previous_user
+            and (
+                request_requires_action(previous_user)
+                or previous_assistant.rstrip().endswith(("?", "？"))
+                or any(message.get("role") == "tool" for message in self.history)
+            )
+        )
 
     def record_external_turn(
         self,
@@ -814,6 +874,13 @@ class AgentService:
             self.history
         )
         previous_history = list(self.history)
+        contextual_follow_up = self.can_resolve_contextual_follow_up(user_text)
+        previous_user_text = self._last_message_text(previous_history, "user")
+        selection_text = (
+            f"Предыдущая цель: {previous_user_text}\nПродолжение: {user_text}"
+            if contextual_follow_up and previous_user_text
+            else user_text
+        )
         history_user_content = content_to_text(
             actual_user_content
         )
@@ -861,6 +928,7 @@ class AgentService:
         if (
             execution_decision.strategy
             == ExecutionStrategy.CLARIFY
+            and not contextual_follow_up
         ):
             question = (
                 execution_decision
@@ -906,15 +974,17 @@ class AgentService:
         if (
             execution_decision.strategy
             == ExecutionStrategy.CHAT
+            and not contextual_follow_up
         ):
             use_tools = False
 
-        elif execution_decision.required_tools:
+        elif execution_decision.required_tools or contextual_follow_up:
             use_tools = True
 
         all_tool_schemas = self.registry.schemas()
         action_was_requested = (
             request_requires_action(user_text)
+            or contextual_follow_up
             or (
                 use_tools
                 and execution_decision.needs_tools
@@ -934,7 +1004,7 @@ class AgentService:
                     exc_info=True,
                 )
         selected_tool_names = get_selected_tool_names(
-            user_text,
+            selection_text,
             self.registry.names,
             has_image=has_image,
             max_tools=28 if action_was_requested else 20,
@@ -983,7 +1053,7 @@ class AgentService:
         interactive_browser_prompt = (
             "\n\n" + INTERACTIVE_BROWSER_PROMPT
             if request_prefers_interactive_browser(
-                user_text
+                selection_text
             )
             else ""
         )
@@ -995,6 +1065,11 @@ class AgentService:
         learned_prompt = (
             "\n\n" + learned_execution_prompt
             if learned_execution_prompt
+            else ""
+        )
+        contextual_prompt = (
+            "\n\n" + CONTEXTUAL_FOLLOW_UP_PROMPT
+            if contextual_follow_up
             else ""
         )
 
@@ -1041,6 +1116,7 @@ class AgentService:
                     + execution_prompt
                     + learned_prompt
                     + interactive_browser_prompt
+                    + contextual_prompt
                 ),
             },
             *previous_history,
@@ -1097,7 +1173,7 @@ class AgentService:
             < self.default_budget.max_logical_model_calls
         ):
             expanded_tool_names = get_selected_tool_names(
-                user_text,
+                selection_text,
                 self.registry.names,
                 has_image=has_image,
                 max_tools=28,
@@ -1468,7 +1544,7 @@ class AgentService:
             if round_had_failure:
                 recovery_tool_names = (
                     get_selected_tool_names(
-                        user_text,
+                        selection_text,
                         self.registry.names,
                         has_image=has_image,
                         max_tools=32,
