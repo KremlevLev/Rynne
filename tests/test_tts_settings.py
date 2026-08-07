@@ -49,15 +49,40 @@ def test_tts_settings_are_validated_and_persisted(monkeypatch, tmp_path) -> None
     assert '"professional"' in settings_path.read_text(encoding="utf-8")
 
 
-def test_local_time_stretch_changes_duration_without_another_model() -> None:
-    source = np.sin(np.linspace(0, 20, 12000, dtype=np.float32))
+def test_silero_speed_uses_native_ssml_instead_of_audio_postprocessing(monkeypatch) -> None:
+    captured: dict[str, object] = {}
 
-    faster = tts._time_stretch(source, 1.3)
-    slower = tts._time_stretch(source, 0.8)
+    class Audio:
+        def numpy(self):
+            return np.zeros(240, dtype=np.float32)
 
-    assert len(faster) < len(source)
-    assert len(slower) > len(source)
-    assert np.isfinite(faster).all()
+    class Model:
+        def apply_tts(self, **options):
+            captured.update(options)
+            return Audio()
+
+    monkeypatch.setattr(tts, "_get_silero_engine", lambda: Model())
+    monkeypatch.setattr(tts, "_play_audio", lambda audio, sample_rate: True)
+    monkeypatch.setattr(tts, "_speech_interrupted", False)
+
+    assert tts.speak(
+        "Привет & добро пожаловать",
+        speaker="xenia",
+        language="ru",
+        speed=1.3,
+    )
+
+    assert "text" not in captured
+    assert 'rate="fast"' in captured["ssml_text"]
+    assert "&amp;" in captured["ssml_text"]
+
+
+def test_silero_speed_scale_maps_to_natural_presets() -> None:
+    assert tts._silero_prosody_rate(0.7) == "x-slow"
+    assert tts._silero_prosody_rate(0.85) == "slow"
+    assert tts._silero_prosody_rate(1.0) is None
+    assert tts._silero_prosody_rate(1.25) == "fast"
+    assert tts._silero_prosody_rate(1.55) == "x-fast"
 
 
 def test_groq_orpheus_uses_selected_voice_speed_and_style(monkeypatch) -> None:

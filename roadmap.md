@@ -1,6 +1,6 @@
 ## Тесты
 ```bash
-python -m pytest tests/ -q  # 796 tests passed
+python -m pytest tests/ -q  # 797 tests passed
 cd apps/desktop && npm test  # 16 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
@@ -15,7 +15,11 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
   безопасность и диагностика. Для каждого раздела есть реальные примеры команд на RU/EN.
 - ✅ Добавлен независимый от языка интерфейса каталог TTS: Auto/RU/EN, скорость 0.7–1.6×,
   пять локальных русских голосов Silero v5 и шесть английских Groq Orpheus, стиль речи,
-  предпрослушивание и сохранение в пользовательском `data/tts-settings.json`.
+  предпрослушивание и сохранение в пользовательском `data/tts-settings.json`. Скорость Groq
+  передаётся нативным коэффициентом API, а Silero использует естественные SSML-ступени
+  `x-slow/slow/normal/fast/x-fast`: готовая запись больше не растягивается и не становится
+  роботизированной. Ползунки захватывают указатель, сохраняются после отпускания и не
+  сбрасываются входящими снимками настроек Core во время движения.
 - ⬜ Добавить потоковую генерацию Groq TTS, кэш коротких фраз и дополнительные локальные
   ONNX-голоса после замера качества/размера и проверки лицензий для installer.
 

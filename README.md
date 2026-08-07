@@ -185,8 +185,11 @@ commands, voice and Nova Nearby setup, skills, providers, MCP, safety, and troub
 Voice output is configured independently from the interface language. Settings includes
 Auto/Russian/English routing, a 0.7–1.6× speed control, five offline Russian Silero voices,
 six English Groq Orpheus voices, expressive styles, and a preview button for every voice.
-The lightweight split is deliberate: Russian speech stays local, while English synthesis
-uses the existing Groq key pool without loading a second neural model into laptop memory.
+Groq receives its native numeric speed parameter; local Silero uses native SSML prosody
+steps (`x-slow` through `x-fast`). Nova never speeds up an already rendered recording, so
+changing the rate does not introduce the metallic post-processing effect. The lightweight
+split is deliberate: Russian speech stays local, while English synthesis uses the existing
+Groq key pool without loading a second neural model into laptop memory.
 
 ## Quick start from source
 
@@ -449,7 +452,7 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **796 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **797 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 

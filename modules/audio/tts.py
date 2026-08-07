@@ -7,6 +7,7 @@ import sounddevice as sd
 import re
 import asyncio
 import io
+import html
 import json
 import wave
 from dataclasses import asdict, dataclass, replace
@@ -243,31 +244,17 @@ def _detect_tts_language(text: str) -> str:
     return "ru" if cyrillic >= latin else "en"
 
 
-def _time_stretch(audio: np.ndarray, speed: float) -> np.ndarray:
-    """Lightweight overlap-add time stretching without another ML model."""
-    samples = np.asarray(audio, dtype=np.float32).reshape(-1)
-    if samples.size < 2048 or abs(speed - 1.0) < 0.01:
-        return samples
-    frame_size = 1024
-    synthesis_hop = 256
-    analysis_hop = synthesis_hop * speed
-    frame_count = max(1, int((samples.size - frame_size) / analysis_hop) + 1)
-    output_size = synthesis_hop * (frame_count - 1) + frame_size
-    output = np.zeros(output_size, dtype=np.float32)
-    weights = np.zeros(output_size, dtype=np.float32)
-    window = np.hanning(frame_size).astype(np.float32)
-    for index in range(frame_count):
-        source_start = min(
-            int(round(index * analysis_hop)),
-            max(0, samples.size - frame_size),
-        )
-        target_start = index * synthesis_hop
-        frame = samples[source_start:source_start + frame_size]
-        output[target_start:target_start + frame_size] += frame * window
-        weights[target_start:target_start + frame_size] += window
-    valid = weights > 1e-5
-    output[valid] /= weights[valid]
-    return output
+def _silero_prosody_rate(speed: float) -> str | None:
+    """Map the shared UI scale to Silero's native SSML rate presets."""
+    if speed <= 0.76:
+        return "x-slow"
+    if speed <= 0.92:
+        return "slow"
+    if speed < 1.12:
+        return None
+    if speed < 1.42:
+        return "fast"
+    return "x-fast"
 
 
 def _play_audio(audio: np.ndarray, sample_rate: int) -> bool:
@@ -394,21 +381,34 @@ def speak(
         if _speech_interrupted:
             return False
             
-        # Генерация аудио
-        audio = model.apply_tts(
-            text=phonetic_text,
-            speaker=speaker or settings.ru_voice,
-            sample_rate=sample_rate,
-            put_accent=True,      # Автоматическое расставление ударений
-            put_yo=True           # Автоматическая замена 'е' на 'ё'
-        )
+        # Silero changes cadence during synthesis through native SSML prosody.
+        # Post-processing the finished waveform makes voices metallic, so it is
+        # deliberately not used here.
+        prosody_rate = _silero_prosody_rate(selected_speed)
+        if prosody_rate is None:
+            audio = model.apply_tts(
+                text=phonetic_text,
+                speaker=speaker or settings.ru_voice,
+                sample_rate=sample_rate,
+                put_accent=True,
+                put_yo=True,
+            )
+        else:
+            ssml_text = (
+                '<speak><prosody rate="'
+                f'{prosody_rate}">{html.escape(phonetic_text)}</prosody></speak>'
+            )
+            audio = model.apply_tts(
+                ssml_text=ssml_text,
+                speaker=speaker or settings.ru_voice,
+                sample_rate=sample_rate,
+            )
         
         # ФАЗА 3: Проверка перед самой отправкой аудио на звуковую карту
         if _speech_interrupted:
             return False
             
-        audio_data = _time_stretch(audio.numpy(), selected_speed)
-        return _play_audio(audio_data, sample_rate)
+        return _play_audio(audio.numpy(), sample_rate)
         
     except Exception as e:
         logger.error(f"Ошибка во время синтеза или воспроизведения Silero: {e}")

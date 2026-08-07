@@ -273,7 +273,12 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .tts-controls label > span { display: flex; justify-content: space-between; gap: 8px; }
 .tts-controls strong { color: #c9cfda; font-size: 9px; }
 .tts-controls small { color: #8d82e4; font-size: 9px; }
-.tts-controls input { width: 100%; accent-color: #7d69dd; }
+.tts-controls input, .wake-sensitivity input { width: 100%; min-height: 28px; cursor: grab; accent-color: #8d7dff; }
+.tts-controls input:active, .wake-sensitivity input:active { cursor: grabbing; }
+.tts-controls input[type="range"], .wake-sensitivity input[type="range"] { appearance: none; height: 28px; margin: 0; background: transparent; }
+.tts-controls input[type="range"]::-webkit-slider-runnable-track, .wake-sensitivity input[type="range"]::-webkit-slider-runnable-track { height: 6px; border: 1px solid rgba(141,125,255,.2); border-radius: 999px; background: linear-gradient(90deg, rgba(141,125,255,.42), rgba(82,215,234,.25)); }
+.tts-controls input[type="range"]::-webkit-slider-thumb, .wake-sensitivity input[type="range"]::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; margin-top: -8px; border: 2px solid #b8afff; border-radius: 50%; background: #7566df; box-shadow: 0 2px 12px rgba(117,102,223,.42); }
+.tts-controls input[type="range"]:focus-visible::-webkit-slider-thumb, .wake-sensitivity input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 3px solid rgba(82,215,234,.25); outline-offset: 2px; }
 .tts-controls select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; color: #c8ced8; background: #0c1017; font: inherit; font-size: 9px; outline: 0; }
 .tts-voice-section { display: grid; gap: 9px; }
 .tts-section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
@@ -304,7 +309,6 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .wake-sensitivity > span { display: grid; gap: 3px; }
 .wake-sensitivity strong { color: #c9cfda; font-size: 10px; }
 .wake-sensitivity small { color: #687386; font-size: 8px; }
-.wake-sensitivity input { width: 100%; accent-color: #7d69dd; }
 .proactive-test { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .proactive-phase { display: flex; align-items: center; gap: 8px; min-width: 0; color: #8d97a8; font-size: 10px; }
 .proactive-phase i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #5e6878; }

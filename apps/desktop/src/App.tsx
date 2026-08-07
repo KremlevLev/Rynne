@@ -402,6 +402,7 @@ export function App() {
   const [providerKeysLoading, setProviderKeysLoading] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState("");
   const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
+  const [ttsSpeedDraft, setTtsSpeedDraft] = useState(1);
   const [ttsVoices, setTtsVoices] = useState<TtsVoice[]>([]);
   const [ttsPending, setTtsPending] = useState(false);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
@@ -409,6 +410,10 @@ export function App() {
     readUiMode(typeof window === "undefined" ? null : window.localStorage)
   ));
   const conversationRef = useRef<HTMLDivElement>(null);
+  const wakeSensitivityDraggingRef = useRef(false);
+  const ttsSpeedDraggingRef = useRef(false);
+  const wakeSensitivityCommittedRef = useRef(0.72);
+  const ttsSpeedCommittedRef = useRef(1);
   const localeRef = useRef(locale);
   const followConversationRef = useRef(true);
   const [followingConversation, setFollowingConversation] = useState(true);
@@ -450,11 +455,14 @@ export function App() {
               setWakeWord(configuredWakeWord);
             }
             const sensitivity = event.payload.wake_word_sensitivity;
-            if (typeof sensitivity === "number") setWakeSensitivity(sensitivity);
+            if (typeof sensitivity === "number" && !wakeSensitivityDraggingRef.current) {
+              setWakeSensitivity(sensitivity);
+              wakeSensitivityCommittedRef.current = sensitivity;
+            }
             const receivedTtsSettings = event.payload.tts_settings;
             if (receivedTtsSettings && typeof receivedTtsSettings === "object" && !Array.isArray(receivedTtsSettings)) {
               const value = receivedTtsSettings as Record<string, unknown>;
-              setTtsSettings({
+              const nextTtsSettings: TtsSettings = {
                 language: ["auto", "ru", "en"].includes(String(value.language))
                   ? String(value.language) as TtsLanguage
                   : "auto",
@@ -464,7 +472,12 @@ export function App() {
                 style: ["neutral", "warm", "cheerful", "professional", "confident"].includes(String(value.style))
                   ? String(value.style) as TtsStyle
                   : "neutral",
-              });
+              };
+              setTtsSettings(nextTtsSettings);
+              if (!ttsSpeedDraggingRef.current) {
+                setTtsSpeedDraft(nextTtsSettings.speed);
+                ttsSpeedCommittedRef.current = nextTtsSettings.speed;
+              }
               setTtsPending(false);
             }
             const receivedCatalog = event.payload.tts_catalog;
@@ -1085,16 +1098,39 @@ export function App() {
               </div>
               <div className="tts-controls">
                 <label>
-                  <span><strong>{tx(locale, "Скорость речи", "Speech speed")}</strong><small>{ttsSettings.speed.toFixed(2)}×</small></span>
+                  <span><strong>{tx(locale, "Скорость речи", "Speech speed")}</strong><small>{ttsSpeedDraft.toFixed(2)}×</small></span>
                   <input
                     type="range"
                     min="0.7"
                     max="1.6"
                     step="0.05"
-                    value={ttsSettings.speed}
-                    onChange={(event) => setTtsSettings((current) => ({ ...current, speed: Number(event.target.value) }))}
-                    onPointerUp={(event) => void saveTtsSettings({ speed: Number(event.currentTarget.value) })}
-                    onKeyUp={(event) => void saveTtsSettings({ speed: Number(event.currentTarget.value) })}
+                    value={ttsSpeedDraft}
+                    onChange={(event) => setTtsSpeedDraft(Number(event.target.value))}
+                    onPointerDown={(event) => {
+                      ttsSpeedDraggingRef.current = true;
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUp={(event) => {
+                      ttsSpeedDraggingRef.current = false;
+                      const speed = Number(event.currentTarget.value);
+                      ttsSpeedCommittedRef.current = speed;
+                      setTtsSettings((current) => ({ ...current, speed }));
+                      void saveTtsSettings({ speed });
+                    }}
+                    onPointerCancel={() => {
+                      ttsSpeedDraggingRef.current = false;
+                      setTtsSpeedDraft(ttsSettings.speed);
+                    }}
+                    onBlur={(event) => {
+                      if (!ttsSpeedDraggingRef.current) {
+                        const speed = Number(event.currentTarget.value);
+                        if (Math.abs(speed - ttsSpeedCommittedRef.current) > 0.001) {
+                          ttsSpeedCommittedRef.current = speed;
+                          setTtsSettings((current) => ({ ...current, speed }));
+                          void saveTtsSettings({ speed });
+                        }
+                      }
+                    }}
                   />
                 </label>
                 <label>
@@ -1150,8 +1186,8 @@ export function App() {
               ))}
               <p className="tts-footnote">{tx(
                 locale,
-                "Скорость применяется ко всем ответам. Для Auto язык определяется отдельно для каждого фрагмента.",
-                "Speed applies to every reply. Auto detects the language for each spoken fragment.",
+                "Groq применяет точный коэффициент. Silero использует естественные SSML-ступени: очень медленно, медленно, обычно, быстро и очень быстро — без ускорения готовой записи.",
+                "Groq applies the exact multiplier. Silero uses natural SSML presets: x-slow, slow, normal, fast, and x-fast — without speeding up finished audio.",
               )}</p>
             </div>
             <div className="settings-card voice-card">
@@ -1200,8 +1236,26 @@ export function App() {
                     step="0.05"
                     value={wakeSensitivity}
                     onChange={(event) => setWakeSensitivity(Number(event.target.value))}
-                    onPointerUp={(event) => void setWakeWordSensitivity(Number(event.currentTarget.value))}
-                    onKeyUp={(event) => void setWakeWordSensitivity(Number(event.currentTarget.value))}
+                    onPointerDown={(event) => {
+                      wakeSensitivityDraggingRef.current = true;
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUp={(event) => {
+                      wakeSensitivityDraggingRef.current = false;
+                      const sensitivity = Number(event.currentTarget.value);
+                      wakeSensitivityCommittedRef.current = sensitivity;
+                      void setWakeWordSensitivity(sensitivity);
+                    }}
+                    onPointerCancel={() => { wakeSensitivityDraggingRef.current = false; }}
+                    onBlur={(event) => {
+                      if (!wakeSensitivityDraggingRef.current) {
+                        const sensitivity = Number(event.currentTarget.value);
+                        if (Math.abs(sensitivity - wakeSensitivityCommittedRef.current) > 0.001) {
+                          wakeSensitivityCommittedRef.current = sensitivity;
+                          void setWakeWordSensitivity(sensitivity);
+                        }
+                      }
+                    }}
                   />
                 </label>
               )}
