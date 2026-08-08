@@ -57,6 +57,29 @@ def test_speech_chunks_respect_limit() -> None:
     assert all(len(chunk) <= 120 for chunk in chunks)
 
 
+def test_start_does_not_warm_heavy_local_tts_by_default(
+    monkeypatch,
+) -> None:
+    async def scenario() -> None:
+        warmup_started = threading.Event()
+
+        monkeypatch.setattr(
+            speech_module,
+            "warm_up_tts",
+            lambda: warmup_started.set(),
+        )
+
+        service = SpeechService(RuntimeState())
+        await service.start()
+        await asyncio.sleep(0)
+
+        assert not warmup_started.is_set()
+
+        await service.close()
+
+    asyncio.run(scenario())
+
+
 def test_interrupt_does_not_cancel_caller(
     monkeypatch,
 ) -> None:

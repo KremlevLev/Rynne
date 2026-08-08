@@ -761,7 +761,13 @@ async def async_main() -> None:
             if NOVA_DESKTOP_UI
             else None
         ),
-        warm_up_on_start=True,
+        # Loading the local PyTorch/Silero package can monopolize the Python
+        # process for minutes on some Windows machines.  It used to start at
+        # the same time as wake-word and model traffic, making an already
+        # received Groq response appear only after the input mode was toggled.
+        # Keep Core responsive and initialize the selected local voice lazily,
+        # after the assistant response has already been published to the UI.
+        warm_up_on_start=False,
     )
     preferences = PreferencesManager()
     browser_manager = BrowserManager(
