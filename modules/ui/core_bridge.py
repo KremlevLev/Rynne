@@ -927,6 +927,32 @@ class CoreDesktopBridge:
                             )
                         )
 
+                response_language = str(
+                    payload.get(
+                        "response_language",
+                        "",
+                    )
+                ).strip().lower()
+                request_metadata: dict[str, object] = {}
+                if response_language in {"ru", "en"}:
+                    request_metadata["response_language"] = (
+                        response_language
+                    )
+                if str(
+                    payload.get(
+                        "proactive_event_id",
+                        "",
+                    )
+                ).startswith("proactive_"):
+                    request_metadata.update({
+                        "proactive_suggestion_accepted": True,
+                        "proactive_event_id": str(
+                            payload.get(
+                                "proactive_event_id"
+                            )
+                        ),
+                    })
+
                 request = (
                     await self.input_coordinator
                     .submit_text(
@@ -942,23 +968,7 @@ class CoreDesktopBridge:
                             )
                         ),
                         attachments=attachments,
-                        metadata=(
-                            {
-                                "proactive_suggestion_accepted": True,
-                                "proactive_event_id": str(
-                                    payload.get(
-                                        "proactive_event_id"
-                                    )
-                                ),
-                            }
-                            if str(
-                                payload.get(
-                                    "proactive_event_id",
-                                    "",
-                                )
-                            ).startswith("proactive_")
-                            else None
-                        ),
+                        metadata=(request_metadata or None),
                     )
                 )
                 if request is not None:

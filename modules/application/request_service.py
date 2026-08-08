@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -107,6 +108,46 @@ class RequestService:
     ) -> UserRequest | None:
         return self._current_request
 
+    async def _publish_heartbeat(
+        self,
+        request: UserRequest,
+    ) -> None:
+        """Make long provider/tool waits visible without affecting execution."""
+        started_at = time.monotonic()
+        await asyncio.sleep(8)
+        sequence = 0
+        while True:
+            sequence += 1
+            elapsed_seconds = round(time.monotonic() - started_at)
+            await self._emit_event(
+                "request_heartbeat",
+                {
+                    "request_id": request.request_id,
+                    "elapsed_seconds": elapsed_seconds,
+                    "sequence": sequence,
+                    "alive": True,
+                },
+            )
+            await asyncio.sleep(12)
+
+    async def _emit_request_started(
+        self,
+        request: UserRequest,
+    ) -> None:
+        # Publish the user's text before any slow provider call so text and
+        # voice requests appear in chat immediately.
+        await self._emit_event(
+            "user_message",
+            {
+                "request_id": request.request_id,
+                "text": request.text,
+            },
+        )
+        await self._emit_event(
+            "request_started",
+            request.to_dict(),
+        )
+
     async def run(
         self,
         shutdown_event: asyncio.Event,
@@ -176,7 +217,7 @@ class RequestService:
                     )
 
             if isinstance(intercepted_response, AssistantResponse):
-                await self._emit_event("request_started", request.to_dict())
+                await self._emit_request_started(request)
                 if self.response_handler is not None:
                     await self.response_handler(request, intercepted_response)
                 await self._emit_event(
@@ -204,11 +245,9 @@ class RequestService:
                     )
 
             self._current_request = request
-            await self._emit_event(
-                "request_started",
-                request.to_dict(),
-            )
+            await self._emit_request_started(request)
 
+            heartbeat_task: asyncio.Task | None = None
             try:
                 self._current_task = (
                     asyncio.create_task(
@@ -220,6 +259,13 @@ class RequestService:
                             + request.request_id
                         ),
                     )
+                )
+                heartbeat_task = asyncio.create_task(
+                    self._publish_heartbeat(request),
+                    name=(
+                        "nova-heartbeat-"
+                        + request.request_id
+                    ),
                 )
 
                 response = (
@@ -283,6 +329,12 @@ class RequestService:
                 )
 
             finally:
+                if heartbeat_task is not None:
+                    heartbeat_task.cancel()
+                    await asyncio.gather(
+                        heartbeat_task,
+                        return_exceptions=True,
+                    )
                 self._current_task = None
                 self._current_request = None
                 self.coordinator.task_done(

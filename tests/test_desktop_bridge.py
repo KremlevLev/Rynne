@@ -320,6 +320,7 @@ def test_submit_user_request_command() -> None:
                 "text": "Который час?",
                 "profile": "assistant",
                 "model_mode": "auto",
+                "response_language": "en",
             },
         )
 
@@ -334,6 +335,10 @@ def test_submit_user_request_command() -> None:
         assert (
             coordinator.requests[0].text
             == "Который час?"
+        )
+        assert (
+            coordinator.requests[0].metadata["response_language"]
+            == "en"
         )
 
         assert (

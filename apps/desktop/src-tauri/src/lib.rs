@@ -639,6 +639,12 @@ pub fn run() {
             nova_remove_provider_key
         ])
         .setup(move |app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let icon = tauri::image::Image::from_bytes(include_bytes!(
+                    "../icons/icon.png"
+                ))?;
+                window.set_icon(icon)?;
+            }
             let app_handle = app.handle().clone();
             if let Err(error) = spawn_core(app_handle.clone(), state_for_setup.clone()) {
                 eprintln!("[Nova Desktop] {error}");

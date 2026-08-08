@@ -148,11 +148,153 @@ def _specialized_speech_summary(
     return None
 
 
+def _english_result_message(
+    result: dict[str, Any],
+    *,
+    success: bool,
+) -> str:
+    """Keep deterministic English reports English, even for localized tools."""
+    message = str(result.get("message") or "").strip()
+    if message and not any("А" <= char <= "я" or char in "Ёё" for char in message):
+        return message
+
+    data = result.get("data")
+    if isinstance(data, dict):
+        path = str(data.get("path") or data.get("file_path") or "").strip()
+        if path:
+            return f"Created or updated: {path}" if success else f"Failed for: {path}"
+
+    if success:
+        return "The action completed successfully."
+
+    code = str(result.get("code") or "TOOL_FAILED").strip()
+    return f"The action failed ({code})."
+
+
+def _build_english_tool_execution_summary(
+    records: list[dict[str, Any]],
+    *,
+    budget_exhausted: bool,
+) -> ToolExecutionSummary:
+    if not records:
+        return ToolExecutionSummary(
+            display_text="There are no confirmed tool results.",
+            speech_text="There are no confirmed results yet.",
+            success=False,
+            error_code="NO_CONFIRMED_TOOL_RESULTS",
+            successful_count=0,
+            failed_count=0,
+            unverified_count=0,
+        )
+
+    english_names = {
+        "open_application": "Open application",
+        "open_application_batch": "Open multiple applications",
+        "close_application": "Close application",
+        "focus_window": "Focus window",
+        "press_keyboard_combination": "Press keyboard shortcut",
+        "type_text": "Type text",
+        "write_in_application": "Write in application",
+        "create_workspace_project": "Create project",
+        "run_terminal_command": "Run terminal command",
+        "execute_python_code": "Run code",
+        "set_reminder": "Set reminder",
+        "save_to_memory": "Save to memory",
+        "create_quick_note": "Create note",
+        "change_volume": "Change volume",
+        "open_website": "Open website",
+        "scrape_webpage": "Read webpage",
+    }
+    lines: list[str] = []
+    successful_count = 0
+    failed_count = 0
+    unverified_count = 0
+    tool_names: set[str] = set()
+
+    for record in records:
+        tool_name = str(record.get("name") or "unknown")
+        tool_names.add(tool_name)
+        result = _result_from_record(record)
+        success = bool(result.get("success"))
+        verified = _verification_state(result)
+        if success:
+            successful_count += 1
+            status = "Completed"
+            if verified is True:
+                verification_suffix = " [verified]"
+            elif verified is False:
+                verification_suffix = " [verification failed]"
+            else:
+                verification_suffix = " [not independently verified]"
+                unverified_count += 1
+        else:
+            failed_count += 1
+            status = "Failed"
+            verification_suffix = ""
+
+        lines.append(
+            f"{status} — {english_names.get(tool_name, tool_name)}: "
+            f"{_english_result_message(result, success=success)}"
+            f"{verification_suffix}"
+        )
+
+    if budget_exhausted:
+        lines.append("The agent step limit was reached.")
+    lines.append(
+        "Total: "
+        f"successful — {successful_count}, failed — {failed_count}, "
+        f"not independently verified — {unverified_count}."
+    )
+
+    if failed_count:
+        speech_text = f"The action finished with {failed_count} error(s)."
+    elif "write_in_application" in tool_names:
+        speech_text = "The application is open and the text was entered."
+    elif "type_text" in tool_names:
+        speech_text = "The text was entered in the active window."
+    elif "open_application" in tool_names:
+        speech_text = "The application is open."
+    elif "set_reminder" in tool_names:
+        speech_text = "The reminder is set."
+    else:
+        speech_text = f"Done. {successful_count} action(s) completed."
+    if budget_exhausted:
+        speech_text += " The step limit was reached."
+
+    response_success = (
+        failed_count == 0
+        and successful_count > 0
+        and not budget_exhausted
+    )
+    error_code = None
+    if budget_exhausted:
+        error_code = "AGENT_BUDGET_EXHAUSTED"
+    elif failed_count:
+        error_code = "ONE_OR_MORE_TOOLS_FAILED"
+
+    return ToolExecutionSummary(
+        display_text="\n".join(lines),
+        speech_text=speech_text,
+        success=response_success,
+        error_code=error_code,
+        successful_count=successful_count,
+        failed_count=failed_count,
+        unverified_count=unverified_count,
+    )
+
+
 def build_tool_execution_summary(
     records: list[dict[str, Any]],
     *,
     budget_exhausted: bool = False,
+    language: str = "ru",
 ) -> ToolExecutionSummary:
+    if language == "en":
+        return _build_english_tool_execution_summary(
+            records,
+            budget_exhausted=budget_exhausted,
+        )
+
     if not records:
         return ToolExecutionSummary(
             display_text=(
@@ -289,10 +431,12 @@ def build_assistant_response_from_tools(
     records: list[dict[str, Any]],
     *,
     budget_exhausted: bool = False,
+    language: str = "ru",
 ) -> AssistantResponse:
     summary = build_tool_execution_summary(
         records,
         budget_exhausted=budget_exhausted,
+        language=language,
     )
 
     return AssistantResponse(

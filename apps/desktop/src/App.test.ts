@@ -44,6 +44,30 @@ describe("eventToItem", () => {
     expect(item?.status).toBe("error");
   });
 
+  it("renders detailed agent stages and long-running heartbeats", () => {
+    const stage = eventToItem({
+      event_type: "agent_progress",
+      payload: {
+        phase: "model",
+        progress: 30,
+      },
+      created_at: 4,
+    });
+    const heartbeat = eventToItem({
+      event_type: "request_heartbeat",
+      payload: { elapsed_seconds: 44, alive: true },
+      created_at: 5,
+    });
+
+    expect(stage).toMatchObject({
+      kind: "progress",
+      title: "Модель строит следующий шаг",
+      progress: 30,
+      status: "working",
+    });
+    expect(heartbeat?.body).toContain("44 сек");
+  });
+
   it("scrolls only the conversation container", () => {
     const scrollTo = vi.fn();
 

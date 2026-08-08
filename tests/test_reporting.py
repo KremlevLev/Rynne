@@ -181,3 +181,29 @@ def test_reporting_does_not_need_llm() -> None:
         response.speech_text
         == "Сэр, напоминание установлено."
     )
+
+
+def test_english_reporting_does_not_leak_russian_wrapper_text() -> None:
+    records = [
+        create_record(
+            "write_in_application",
+            ToolResult.ok(
+                "Текст введён в приложение.",
+                verification=VerificationResult(
+                    verified=True,
+                    method="readback",
+                    confidence=1.0,
+                ),
+            ),
+        )
+    ]
+
+    response = build_assistant_response_from_tools(
+        records,
+        language="en",
+    )
+
+    assert response.success
+    assert "Completed — Write in application" in response.display_text
+    assert "[verified]" in response.display_text
+    assert "The application is open" in response.speech_text

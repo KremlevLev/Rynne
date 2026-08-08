@@ -8,10 +8,12 @@ export type JsonObject = { [key: string]: JsonValue };
 export const NOVA_EVENT_TYPES = [
   "runtime",
   "request_started",
+  "request_heartbeat",
   "request_cancelled",
   "request_failed",
   "user_message",
   "assistant_message",
+  "agent_progress",
   "proactive_suggestion",
   "proactive_status",
   "proactive_check_result",

@@ -43,7 +43,7 @@ export type UiMode = "aura" | "focus" | "console";
 export type UiLocale = GuideLocale;
 type TimelineItem = {
   id: string;
-  kind: "user" | "assistant" | "tool" | "suggestion";
+  kind: "user" | "assistant" | "tool" | "progress" | "suggestion";
   title: string;
   body?: string;
   status?: "working" | "success" | "error";
@@ -51,6 +51,8 @@ type TimelineItem = {
   actionLabel?: string;
   proactiveEventId?: string;
   proactiveContextKey?: string;
+  operationId?: string;
+  progress?: number;
 };
 
 type PendingPermission = {
@@ -316,6 +318,34 @@ function text(payload: JsonObject, key: string, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function agentProgressCopy(payload: JsonObject, locale: UiLocale): {
+  title: string;
+  body: string;
+} {
+  const phase = text(payload, "phase", "working");
+  const tools = Number(payload.available_tools ?? payload.proposed_tools ?? 0);
+  const completed = Number(payload.completed_tools ?? 0);
+  const copies: Record<string, [string, string, string, string]> = {
+    understanding: ["Запрос принят", "Request accepted", "Собираю контекст, историю и вложения.", "Collecting context, history, and attachments."],
+    routing: ["Разбираю задачу", "Understanding the task", `Определяю маршрут: ${text(payload, "intent", "general")} · ${text(payload, "strategy", "agent")}.`, `Selecting route: ${text(payload, "intent", "general")} · ${text(payload, "strategy", "agent")}.`],
+    delegating: ["Подключаю субагентов", "Starting parallel specialists", `Независимые части задачи анализируются параллельно. Доступная ёмкость: ${Number(payload.capacity ?? 0)}.`, `Independent parts are being analyzed in parallel. Available capacity: ${Number(payload.capacity ?? 0)}.`],
+    preparing: ["Готовлю возможности", "Preparing capabilities", `Подобрано инструментов: ${tools}. Подключаю подходящие skills и контекст.`, `${tools} tools selected. Loading relevant skills and context.`],
+    model: ["Модель строит следующий шаг", "Model is building the next step", "Жду ответ провайдера и исполнимый план действий.", "Waiting for the provider and an executable action plan."],
+    planning: ["Проверяю план", "Validating the plan", `Предложено действий: ${tools}. Проверяю аргументы и безопасность.`, `${tools} action(s) proposed. Validating arguments and safety.`],
+    capability_recovery: ["Расширяю набор инструментов", "Expanding capabilities", `Первый ответ не содержал исполнимого действия. Повторяю с ${tools} инструментами.`, `The first response had no executable action. Retrying with ${tools} tools.`],
+    tool_call_repair: ["Исправляю план действий", "Repairing the action plan", "Модель описала намерение вместо вызова инструмента — запрашиваю конкретный первый шаг.", "The model described an intention instead of calling a tool; requesting a concrete first step."],
+    executing: ["Начинаю выполнение", "Starting execution", `План готов: действий в первом пакете — ${tools}.`, `Plan ready: ${tools} action(s) in the first batch.`],
+    replanning: ["Анализирую результат шага", "Reviewing step results", `Выполнено инструментов: ${completed}. Решаю, нужен ли следующий шаг или альтернатива.`, `${completed} tool action(s) completed. Deciding on the next step or an alternative.`],
+    verifying: ["Проверяю конечный результат", "Verifying the outcome", `Инструментов выполнено: ${completed}. Сверяю результат с исходной задачей.`, `${completed} tool action(s) completed. Comparing the result with the original request.`],
+    finalizing: ["Формирую итог", "Preparing the final response", "Проверка завершена. Готовлю честный отчёт без ложного «готово».", "Verification finished. Preparing an evidence-based final report."],
+  };
+  const copy = copies[phase] ?? ["Nova работает", "Nova is working", text(payload, "message"), text(payload, "message")];
+  return {
+    title: locale === "ru" ? copy[0] : copy[1],
+    body: locale === "ru" ? copy[2] : copy[3],
+  };
+}
+
 export function pendingPermissionFromEvent(event: NovaEvent): PendingPermission | null {
   if (event.event_type !== "permissions" && event.event_type !== "approval_requested") return null;
   const candidate = event.event_type === "approval_requested"
@@ -341,6 +371,40 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
   const id = `${event.event_type}_${event.created_at}_${Math.random()}`;
   const payload = event.payload;
   switch (event.event_type) {
+    case "request_started":
+      return {
+        id,
+        kind: "progress",
+        title: tx(locale, "Передаю задачу Nova Core", "Sending the task to Nova Core"),
+        body: tx(locale, "Запрос получен и поставлен в выполнение.", "The request was received and queued for execution."),
+        status: "working",
+        progress: 3,
+      };
+    case "request_heartbeat": {
+      const elapsed = Number(payload.elapsed_seconds ?? 0);
+      return {
+        id,
+        kind: "progress",
+        title: tx(locale, "Nova всё ещё работает", "Nova is still working"),
+        body: tx(
+          locale,
+          `Core отвечает, текущий этап длится ${elapsed} сек. Дождитесь результата или таймаута провайдера.`,
+          `Core is responsive; the current stage has been running for ${elapsed}s. Waiting for a result or provider timeout.`,
+        ),
+        status: "working",
+      };
+    }
+    case "agent_progress": {
+      const copy = agentProgressCopy(payload, locale);
+      return {
+        id,
+        kind: "progress",
+        title: copy.title,
+        body: copy.body,
+        status: Number(payload.progress ?? 0) >= 100 ? "success" : "working",
+        progress: Number(payload.progress ?? 0),
+      };
+    }
     case "user_message":
       return { id, kind: "user", title: tx(locale, "Вы", "You"), body: text(payload, "text") };
     case "assistant_message":
@@ -368,8 +432,13 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
         id,
         kind: "tool",
         title: text(payload, "description", tx(locale, "Запускаю инструмент", "Running tool")),
-        body: text(payload, "tool_name"),
+        body: tx(
+          locale,
+          `Инструмент: ${text(payload, "tool_name")} · риск: ${text(payload, "risk", "unknown")}`,
+          `Tool: ${text(payload, "tool_name")} · risk: ${text(payload, "risk", "unknown")}`,
+        ),
         status: "working",
+        operationId: text(payload, "operation_id"),
       };
     case "tool_completed":
       return {
@@ -378,8 +447,9 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
         title: payload.success === false
           ? tx(locale, "Инструмент завершился с ошибкой", "Tool failed")
           : tx(locale, "Действие выполнено", "Action completed"),
-        body: text(payload, "tool_name"),
+        body: `${text(payload, "message", text(payload, "tool_name"))}${typeof payload.duration_ms === "number" ? ` · ${(payload.duration_ms / 1000).toFixed(1)}s` : ""}`,
         status: payload.success === false ? "error" : "success",
+        operationId: text(payload, "operation_id"),
       };
     case "proactive_suggestion":
       return {
@@ -506,15 +576,63 @@ export function App() {
         (event) => {
           if (!mounted) return;
           const item = eventToItem(event, localeRef.current);
-          if (item) setTimeline((current) => [...current, item]);
+          if (item) setTimeline((current) => {
+            if (item.kind === "user") {
+              const alreadyVisible = [...current].reverse().find((candidate) => candidate.kind === "user");
+              if (alreadyVisible?.body === item.body) return current;
+            }
+            if (event.event_type === "request_started") {
+              const last = current[current.length - 1];
+              if (last?.id.startsWith("local_progress_")) {
+                return [...current.slice(0, -1), item];
+              }
+            }
+            if (event.event_type === "request_heartbeat") {
+              const last = current[current.length - 1];
+              if (last?.id.startsWith("request_heartbeat_")) {
+                return [...current.slice(0, -1), item];
+              }
+            }
+            if (event.event_type === "tool_completed" && item.operationId) {
+              const index = current.findIndex((candidate) => (
+                candidate.kind === "tool" && candidate.operationId === item.operationId
+              ));
+              if (index >= 0) {
+                return current.map((candidate, candidateIndex) => (
+                  candidateIndex === index ? item : candidate
+                ));
+              }
+            }
+            if (event.event_type === "agent_progress" || event.event_type === "tool_started") {
+              const settled = current.map((candidate) => (
+                candidate.kind === "progress" && candidate.status === "working"
+                  ? { ...candidate, status: "success" as const }
+                  : candidate
+              ));
+              return [...settled, item];
+            }
+            return [...current, item];
+          });
           if (event.event_type === "request_started") setBusy(true);
+          if (event.event_type === "agent_progress") {
+            const copy = agentProgressCopy(event.payload, localeRef.current);
+            setActiveTool(copy.title);
+            const progress = event.payload.progress;
+            if (typeof progress === "number") setTaskProgress(progress);
+          }
           if (event.event_type === "runtime") {
             const state = event.payload.state;
             if (typeof state === "string") setRuntimeState(state);
           }
           if (event.event_type === "assistant_message" || event.event_type === "request_failed") {
             setBusy(false);
+            setTaskProgress(0);
             setActiveTool(tx(localeRef.current, "Ожидаю задачу", "Waiting for a task"));
+            setTimeline((current) => current.map((candidate) => (
+              candidate.status === "working" && (candidate.kind === "progress" || candidate.kind === "tool")
+                ? { ...candidate, status: event.event_type === "request_failed" ? "error" : "success" }
+                : candidate
+            )));
           }
           if (event.event_type === "tool_started") {
             setActiveTool(text(event.payload, "description", text(event.payload, "tool_name")));
@@ -694,7 +812,48 @@ export function App() {
     const value = request.trim();
     if (!value || busy || connection !== "connected") return;
     setComposer("");
-    await transport.send("submit_user_request", { text: value });
+    const localId = Date.now();
+    setBusy(true);
+    setTaskProgress(1);
+    setActiveTool(tx(locale, "Передаю запрос Nova Core", "Sending request to Nova Core"));
+    setTimeline((current) => [
+      ...current,
+      {
+        id: `local_user_${localId}`,
+        kind: "user",
+        title: tx(locale, "Вы", "You"),
+        body: value,
+      },
+      {
+        id: `local_progress_${localId}`,
+        kind: "progress",
+        title: tx(locale, "Отправляю запрос", "Sending request"),
+        body: tx(locale, "Жду подтверждения от Nova Core…", "Waiting for Nova Core to acknowledge the request…"),
+        status: "working",
+        progress: 1,
+      },
+    ]);
+    try {
+      await transport.send("submit_user_request", {
+        text: value,
+        response_language: locale,
+      });
+    } catch (error) {
+      setBusy(false);
+      setTaskProgress(0);
+      setTimeline((current) => [
+        ...current.map((candidate) => candidate.id === `local_progress_${localId}`
+          ? { ...candidate, status: "error" as const }
+          : candidate),
+        {
+          id: `local_error_${localId}`,
+          kind: "assistant",
+          title: "Nova",
+          body: error instanceof Error ? error.message : tx(locale, "Не удалось передать запрос Core.", "Could not send the request to Core."),
+          status: "error",
+        },
+      ]);
+    }
   }
 
   async function toggleProactive() {
@@ -717,6 +876,7 @@ export function App() {
     if (!item.action || busy || connection !== "connected") return;
     await transport.send("submit_user_request", {
       text: item.action,
+      response_language: locale,
       proactive_event_id: item.proactiveEventId ?? "",
       proactive_context_key: item.proactiveContextKey ?? "",
     });
@@ -1021,7 +1181,7 @@ export function App() {
                 <article key={item.id} className={`timeline ${item.kind}`}>
                   <div className="timeline-rail">
                     <span className={`timeline-dot ${item.status ?? ""}`}>
-                      {item.kind === "tool" ? <Wrench size={13} /> : item.kind === "suggestion" ? <Orbit size={13} /> : item.kind === "assistant" ? <Bot size={13} /> : null}
+                      {item.kind === "tool" ? <Wrench size={13} /> : item.kind === "progress" ? <Activity size={13} /> : item.kind === "suggestion" ? <Orbit size={13} /> : item.kind === "assistant" ? <Bot size={13} /> : null}
                     </span>
                   </div>
                   <div className="timeline-content">
@@ -1031,6 +1191,11 @@ export function App() {
                       {item.status === "success" && item.kind === "tool" && <span className="success-label">{tx(locale, "готово", "done")}</span>}
                     </div>
                     {item.body && <p>{item.body}</p>}
+                    {item.kind === "progress" && typeof item.progress === "number" && (
+                      <span className="stage-progress" aria-label={`${item.progress}%`}>
+                        <i style={{ width: `${Math.max(2, Math.min(100, item.progress))}%` }} />
+                      </span>
+                    )}
                     {item.kind === "tool" && <small className="tool-id">{item.body}</small>}
                     {item.kind === "suggestion" && (
                       <div className="suggestion-actions">
@@ -1189,11 +1354,11 @@ export function App() {
               <span className="settings-icon"><Languages size={22} /></span>
               <div>
                 <span className="eyebrow">{tx(locale, "ЯЗЫК", "LANGUAGE")}</span>
-                <h2>{tx(locale, "Язык интерфейса", "Interface language")}</h2>
+                <h2>{tx(locale, "Язык Nova", "Nova language")}</h2>
                 <p>{tx(
                   locale,
-                  "Переключение применяется мгновенно и сохраняется на этом компьютере. Ответы Nova остаются на языке вашего запроса.",
-                  "The change applies immediately and is saved on this computer. Nova still answers in the language of your request.",
+                  "Переключение применяется мгновенно к интерфейсу, ответам и итогам инструментов и сохраняется на этом компьютере.",
+                  "The change applies immediately to the interface, replies, and tool summaries, and is saved on this computer.",
                 )}</p>
               </div>
               <div className="locale-options">

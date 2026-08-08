@@ -1319,6 +1319,11 @@ async def async_main() -> None:
         skill_library=SkillLibrary(),
         isolated_history=True,
         subagent_pool=subagent_pool,
+        progress_handler=(
+            desktop_service.publish
+            if NOVA_DESKTOP_UI
+            else None
+        ),
     )
 
     # =========================================================
@@ -1549,17 +1554,6 @@ async def async_main() -> None:
         print(
             f"\n[Nova]: "
             f"{response.display_text}\n"
-        )
-
-        # Передаём сообщение пользователя в Desktop UI.
-        desktop_service.publish(
-            "user_message",
-            {
-                "request_id": (
-                    request.request_id
-                ),
-                "text": request.text,
-            },
         )
 
         # Передаём точный ответ в Desktop UI.

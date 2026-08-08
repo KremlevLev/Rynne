@@ -80,10 +80,14 @@ def test_action_refusal_retries_with_real_tools() -> None:
         {"get_current_time": get_current_time},
     )
     llm = RefusalThenToolLLM()
+    progress_events: list[tuple[str, dict]] = []
     agent = AgentService(
         llm,
         registry,
         ToolRunner(registry),
+        progress_handler=lambda event_type, payload: progress_events.append(
+            (event_type, payload)
+        ),
     )
 
     response = asyncio.run(
@@ -96,6 +100,15 @@ def test_action_refusal_retries_with_real_tools() -> None:
     assert llm.calls == 3
     assert calls == ["get_current_time"]
     assert "get_current_time" in llm.seen_tool_names[1]
+    phases = [payload["phase"] for _, payload in progress_events]
+    assert phases[:4] == [
+        "understanding",
+        "routing",
+        "preparing",
+        "model",
+    ]
+    assert "capability_recovery" in phases
+    assert phases[-2:] == ["verifying", "finalizing"]
     assert sum(
         message.get("role") == "user"
         and message.get("content") == "Проверь время"

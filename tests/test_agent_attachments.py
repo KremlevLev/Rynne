@@ -100,3 +100,19 @@ def test_ephemeral_proactive_image_is_deleted_after_read(
 
     assert isinstance(content, list)
     assert not image_path.exists()
+
+
+def test_response_language_is_attached_as_trusted_model_context() -> None:
+    request = UserRequest.from_text(
+        "Open Obsidian",
+        metadata={"response_language": "en"},
+    )
+
+    content = build_request_model_content(request)
+
+    assert isinstance(content, list)
+    assert any(
+        item.get("type") == "text"
+        and "Response language: English" in str(item.get("text"))
+        for item in content
+    )

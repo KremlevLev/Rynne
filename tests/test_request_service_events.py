@@ -40,11 +40,13 @@ def test_request_service_emits_orchestrator_lifecycle() -> None:
         await service.run(shutdown)
 
         assert [event_type for event_type, _ in events] == [
+            "user_message",
             "request_started",
             "request_completed",
         ]
-        assert events[0][1]["request_id"] == request.request_id
-        assert events[1][1]["success"] is True
+        assert events[0][1]["text"] == "Проверь UI"
+        assert events[1][1]["request_id"] == request.request_id
+        assert events[2][1]["success"] is True
 
     asyncio.run(scenario())
 

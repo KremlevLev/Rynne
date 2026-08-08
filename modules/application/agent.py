@@ -8,7 +8,7 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from modules.application.reporting import (
     build_assistant_response_from_tools,
 )
@@ -255,6 +255,23 @@ def build_request_model_content(
             "text": request.text,
         })
 
+    response_language = str(
+        request.metadata.get("response_language") or ""
+    ).strip().lower()
+    if response_language in {"ru", "en"}:
+        language_name = (
+            "English" if response_language == "en" else "Russian"
+        )
+        parts.append({
+            "type": "text",
+            "text": (
+                "[Trusted presentation preference]\n"
+                f"Response language: {language_name}. "
+                "Use this language for the answer, clarification questions, "
+                "and summaries of tool results."
+            ),
+        })
+
     workspace_path = str(
         request.metadata.get("workspace_path") or ""
     ).strip()
@@ -484,6 +501,9 @@ class AgentService:
         skill_library: SkillLibrary | None = None,
         isolated_history: bool = False,
         subagent_pool=None,
+        progress_handler: Callable[
+            [str, dict[str, Any]], Any
+        ] | None = None,
     ) -> None:
         self.llm = llm
         self.registry = registry
@@ -503,10 +523,37 @@ class AgentService:
         self.execution_memory = execution_memory
         self.skill_library = skill_library
         self.subagent_pool = subagent_pool
+        self.progress_handler = progress_handler
         # On-demand tools remain warm for the next turns, but the bounded
         # cache prevents a long session from putting the whole registry back
         # into every model context.
         self._sticky_tool_names: list[str] = []
+
+    def _emit_progress(
+        self,
+        phase: str,
+        *,
+        turn_id: str,
+        progress: int,
+        message: str = "",
+        **details: Any,
+    ) -> None:
+        if self.progress_handler is None:
+            return
+        payload: dict[str, Any] = {
+            "phase": phase,
+            "turn_id": turn_id,
+            "progress": max(0, min(100, int(progress))),
+            "message": message,
+            **details,
+        }
+        try:
+            self.progress_handler("agent_progress", payload)
+        except Exception:
+            logger.exception(
+                "Не удалось опубликовать этап AgentService: %s.",
+                phase,
+            )
 
     @staticmethod
     def _last_message_text(
@@ -841,6 +888,7 @@ class AgentService:
         tool_results: list[dict[str, Any]],
         original_complexity: TaskComplexity,
         budget_exhausted: bool,
+        response_language: str = "ru",
     ) -> AssistantResponse:
         """
         Формирует итог локально, без дополнительного запроса к LLM.
@@ -854,6 +902,7 @@ class AgentService:
         return build_assistant_response_from_tools(
             tool_results,
             budget_exhausted=budget_exhausted,
+            language=response_language,
         )
     async def run(
         self,
@@ -899,6 +948,30 @@ class AgentService:
             )
 
         user_text = resolved_user_text
+
+        explicit_response_language = (
+            str(
+                request_object.metadata.get("response_language") or ""
+            ).strip().lower()
+            if request_object is not None
+            else ""
+        )
+        if explicit_response_language in {"ru", "en"}:
+            response_language = explicit_response_language
+        else:
+            latin_count = len(re.findall(r"[A-Za-z]", user_text))
+            cyrillic_count = len(re.findall(r"[А-Яа-яЁё]", user_text))
+            response_language = (
+                "en" if latin_count > cyrillic_count else "ru"
+            )
+
+        self._emit_progress(
+            "understanding",
+            turn_id=turn_id,
+            progress=8,
+            message="Request accepted; collecting context.",
+            has_image=has_image,
+        )
 
         actual_user_content = (
             user_content
@@ -1024,6 +1097,15 @@ class AgentService:
             selection_text,
             self.registry.names,
         )
+
+        self._emit_progress(
+            "routing",
+            turn_id=turn_id,
+            progress=16,
+            message="Intent recognized; selecting an execution route.",
+            strategy=execution_decision.strategy.value,
+            intent=execution_decision.intent.value,
+        )
         proactive_autonomous_request = bool(
             request_object is not None
             and request_object.metadata.get("proactive_autonomous")
@@ -1061,6 +1143,16 @@ class AgentService:
             and self.subagent_pool.parallel_capacity() >= 2
         ):
             try:
+                self._emit_progress(
+                    "delegating",
+                    turn_id=turn_id,
+                    progress=20,
+                    message=(
+                        "Parallel specialists are analyzing independent "
+                        "parts of the task."
+                    ),
+                    capacity=self.subagent_pool.parallel_capacity(),
+                )
                 team_result = await self.subagent_pool.run(
                     goal=selection_text,
                     context=(
@@ -1161,6 +1253,14 @@ class AgentService:
             if use_tools
             else None
         )
+        self._emit_progress(
+            "preparing",
+            turn_id=turn_id,
+            progress=24,
+            message="Capabilities selected; preparing the model request.",
+            available_tools=len(tool_schemas or []),
+            skills=len(skill_bundle.names),
+        )
         interactive_browser_prompt = (
             "\n\n" + INTERACTIVE_BROWSER_PROMPT
             if request_prefers_interactive_browser(
@@ -1250,6 +1350,13 @@ class AgentService:
             },
         ]
 
+        self._emit_progress(
+            "model",
+            turn_id=turn_id,
+            progress=30,
+            message="Waiting for the model to build the next executable step.",
+            attempt=1,
+        )
         try:
             generated = await self._request_model(
                 complexity=complexity,
@@ -1290,6 +1397,13 @@ class AgentService:
             )
 
         tool_calls = collect_tool_calls(generated)
+        self._emit_progress(
+            "planning",
+            turn_id=turn_id,
+            progress=38,
+            message="Model response received; validating proposed actions.",
+            proposed_tools=len(tool_calls),
+        )
 
         # Небольшие модели иногда отвечают «не могу», даже когда подходящий
         # tool был передан. Даём ровно одну повторную попытку с расширенным,
@@ -1334,6 +1448,16 @@ class AgentService:
             )
 
             if expanded_tool_schemas:
+                self._emit_progress(
+                    "capability_recovery",
+                    turn_id=turn_id,
+                    progress=42,
+                    message=(
+                        "No executable action was produced; retrying with "
+                        "a broader capability set."
+                    ),
+                    available_tools=len(expanded_tool_schemas),
+                )
                 self.budget_manager.record_model_call(
                     turn_id
                 )
@@ -1392,6 +1516,15 @@ class AgentService:
             and budget_state.logical_model_calls
             < self.default_budget.max_logical_model_calls
         ):
+            self._emit_progress(
+                "tool_call_repair",
+                turn_id=turn_id,
+                progress=46,
+                message=(
+                    "Repairing the plan and requesting a concrete first "
+                    "tool call."
+                ),
+            )
             self.budget_manager.record_model_call(turn_id)
             repair_messages = [
                 {
@@ -1532,6 +1665,14 @@ class AgentService:
         pending_tool_calls = tool_calls
         budget_exhausted = False
         completion_gate_attempts = 0
+
+        self._emit_progress(
+            "executing",
+            turn_id=turn_id,
+            progress=50,
+            message="Execution plan is ready; starting tool actions.",
+            proposed_tools=len(tool_calls),
+        )
 
         while pending_tool_calls:
             executed_this_round = 0
@@ -1768,6 +1909,14 @@ class AgentService:
             self.budget_manager.record_model_call(
                 turn_id
             )
+            self._emit_progress(
+                "replanning",
+                turn_id=turn_id,
+                progress=min(82, 56 + total_tool_calls * 4),
+                message="Reviewing tool results and choosing the next step.",
+                completed_tools=total_tool_calls,
+                previous_step_failed=round_had_failure,
+            )
             continuation_messages = [
                 {
                     "role": "system",
@@ -1914,11 +2063,19 @@ class AgentService:
                     exc_info=True,
                 )
 
+        self._emit_progress(
+            "verifying",
+            turn_id=turn_id,
+            progress=92,
+            message="Checking that every requested result was achieved.",
+            completed_tools=total_tool_calls,
+        )
         final_response = await self._create_final_report(
             user_text=user_text,
             tool_results=executed_tool_results,
             original_complexity=complexity,
             budget_exhausted=budget_exhausted,
+            response_language=response_language,
         )
         remaining_requirements = goal_ledger.unmet(executed_tool_results)
         if remaining_requirements:
@@ -1928,12 +2085,20 @@ class AgentService:
             )
             final_response.success = False
             final_response.error_code = "GOAL_INCOMPLETE"
-            final_response.display_text += (
-                "\n\nЗадача пока не завершена: " + missing_text
-            )
-            final_response.speech_text = (
-                "Задача пока не завершена. " + missing_text
-            )
+            if response_language == "en":
+                final_response.display_text += (
+                    "\n\nThe task is not complete yet: " + missing_text
+                )
+                final_response.speech_text = (
+                    "The task is not complete yet. " + missing_text
+                )
+            else:
+                final_response.display_text += (
+                    "\n\nЗадача пока не завершена: " + missing_text
+                )
+                final_response.speech_text = (
+                    "Задача пока не завершена. " + missing_text
+                )
             final_response.data["goal_ledger"] = {
                 "complete": False,
                 "missing": [
@@ -1946,4 +2111,11 @@ class AgentService:
                 "complete": True,
                 "missing": [],
             }
+        self._emit_progress(
+            "finalizing",
+            turn_id=turn_id,
+            progress=100,
+            message="Execution finished; publishing the verified result.",
+            success=final_response.success,
+        )
         return final_response

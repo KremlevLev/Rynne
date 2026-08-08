@@ -39,6 +39,8 @@ describe("Nova desktop protocol", () => {
     expect(NOVA_EVENT_TYPES).toContain("proactive_suggestion");
     expect(NOVA_EVENT_TYPES).toContain("proactive_status");
     expect(NOVA_EVENT_TYPES).toContain("proactive_confirmation_resolved");
+    expect(NOVA_EVENT_TYPES).toContain("agent_progress");
+    expect(NOVA_EVENT_TYPES).toContain("request_heartbeat");
     expect(NOVA_COMMAND_ACTIONS).toContain("set_preference");
     expect(NOVA_COMMAND_ACTIONS).toContain("set_tts_settings");
     expect(NOVA_COMMAND_ACTIONS).toContain("preview_tts");

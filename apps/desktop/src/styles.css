@@ -149,8 +149,16 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .timeline.user .timeline-content p { margin-top: 3px; color: #e8eeea; }.timeline.user .message-meta strong { color: #78c89a; font-size: 10px; }
 .timeline.tool .timeline-content { padding-top: 3px; }.timeline.tool .timeline-content p { display: none; }
 .tool-id { display: block; margin-top: 3px; color: #596476; font: 9px "Cascadia Mono", "Consolas", monospace; }
+.timeline.progress { margin-bottom: 17px; }
+.timeline.progress .timeline-content { padding: 9px 12px 10px; border: 1px solid rgba(91,201,145,.09); border-radius: 3px 11px 3px 11px; background: linear-gradient(115deg, rgba(91,201,145,.045), rgba(13,16,22,.22)); }
+.timeline.progress .message-meta strong { color: #d2ded7; font-size: 11px; }
+.timeline.progress .timeline-content p { margin-top: 4px; color: #79877f; font-size: 10px; line-height: 1.45; }
+.timeline.progress .timeline-dot.working svg { animation: status-spin 1.7s linear infinite; }
+.stage-progress { display: block; width: min(420px, 100%); height: 2px; margin-top: 9px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.045); }
+.stage-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4ca878, #83d5a8); box-shadow: 0 0 10px rgba(91,201,145,.25); transition: width .35s ease; }
 .working-label, .success-label { padding: 2px 6px; border-radius: 5px; font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
 .working-label { color: #8edbb0; background: rgba(91,201,145,.1); }.success-label { color: var(--success); background: rgba(82,217,140,.08); }
+@keyframes status-spin { to { transform: rotate(360deg); } }
 .timeline.suggestion .timeline-content { padding: 14px 16px; border: 1px solid rgba(91,201,145,.18); border-radius: 13px; background: linear-gradient(135deg, rgba(91,201,145,.09), rgba(20,24,33,.65)); }
 .timeline.suggestion .timeline-dot { color: #9ed7b6; background: #13211a; }
 .suggestion-action { display: flex; align-items: center; gap: 5px; margin-top: 12px; padding: 7px 10px; border: 1px solid rgba(91,201,145,.25); border-radius: 8px; color: #c3ddd0; background: rgba(91,201,145,.09); font-size: 10px; cursor: pointer; }
