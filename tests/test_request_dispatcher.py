@@ -90,6 +90,47 @@ def create_dispatcher():
             risk=RiskLevel.READ_ONLY,
         )
     )
+    opened_urls = []
+    opened_chats = []
+    registry.register_definition(
+        ToolDefinition(
+            name="open_url_in_browser",
+            description="Open URL in browser.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string"},
+                    "url": {"type": "string"},
+                },
+                "required": ["app_name", "url"],
+            },
+            handler=lambda app_name, url: (
+                opened_urls.append((app_name, url))
+                or ToolResult.ok("Telegram открыт.")
+            ),
+            category=ToolCategory.WEB_READ,
+            risk=RiskLevel.LOW,
+        )
+    )
+    registry.register_definition(
+        ToolDefinition(
+            name="open_telegram_chat",
+            description="Open Telegram chat.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "contact": {"type": "string"},
+                },
+                "required": ["contact"],
+            },
+            handler=lambda contact: (
+                opened_chats.append(contact)
+                or ToolResult.ok("Telegram chat selected.")
+            ),
+            category=ToolCategory.GUI_WRITE,
+            risk=RiskLevel.LOW,
+        )
+    )
 
     direct_executor = DirectRequestExecutor(
         runner=ToolRunner(registry),
@@ -103,6 +144,8 @@ def create_dispatcher():
         direct_executor=direct_executor,
     )
 
+    agent.opened_urls = opened_urls
+    agent.opened_chats = opened_chats
     return dispatcher, agent
 
 
@@ -151,6 +194,40 @@ def test_image_context_never_uses_direct_bypass(
         assert response.success
         assert len(agent.calls) == 1
         assert agent.calls[0]["has_image"] is True
+
+    asyncio.run(scenario())
+
+
+def test_known_service_in_named_browser_bypasses_model_safely() -> None:
+    async def scenario() -> None:
+        dispatcher, agent = create_dispatcher()
+
+        response = await dispatcher.dispatch(
+            UserRequest.from_text("Открой гугл хром, а в нем телеграм")
+        )
+
+        assert response.success
+        assert agent.calls == []
+        assert agent.opened_urls == [
+            ("google chrome", "https://web.telegram.org/a/")
+        ]
+        assert response.data["model_calls"] == 0
+
+    asyncio.run(scenario())
+
+
+def test_telegram_chat_bypasses_model_safely() -> None:
+    async def scenario() -> None:
+        dispatcher, agent = create_dispatcher()
+
+        response = await dispatcher.dispatch(
+            UserRequest.from_text("Попробуй открыть чат с Владиславом")
+        )
+
+        assert response.success
+        assert agent.calls == []
+        assert agent.opened_chats == ["владиславом"]
+        assert response.data["model_calls"] == 0
 
     asyncio.run(scenario())
 

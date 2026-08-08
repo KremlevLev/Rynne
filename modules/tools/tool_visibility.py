@@ -17,6 +17,7 @@ PUBLIC_SKILLS = frozenset({
     "start_development_server",
     "edit_file_transactionally",
     "browser_research",
+    "open_telegram_chat",
 })
 
 # Внутренние примитивы - скрыты от модели

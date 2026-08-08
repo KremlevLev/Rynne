@@ -44,6 +44,17 @@ describe("eventToItem", () => {
     expect(item?.status).toBe("error");
   });
 
+  it("renders an explicit cancellation result", () => {
+    const item = eventToItem({
+      event_type: "request_cancelled",
+      payload: { request_id: "req-1" },
+      created_at: 3,
+    });
+
+    expect(item?.body).toBe("Задача остановлена.");
+    expect(item?.status).toBe("error");
+  });
+
   it("renders detailed agent stages and long-running heartbeats", () => {
     const stage = eventToItem({
       event_type: "agent_progress",

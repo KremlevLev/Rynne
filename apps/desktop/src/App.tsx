@@ -486,6 +486,14 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
         body: text(payload, "error", tx(locale, "Не удалось выполнить запрос.", "The request could not be completed.")),
         status: "error",
       };
+    case "request_cancelled":
+      return {
+        id,
+        kind: "assistant",
+        title: "Nova",
+        body: tx(locale, "Задача остановлена.", "Task stopped."),
+        status: "error",
+      };
     case "tool_started":
       {
         const argumentNames = stringList(payload, "argument_names");
@@ -601,6 +609,7 @@ export function App() {
   const [timeline, setTimeline] = useState<TimelineItem[]>(() => initialTimeline(locale));
   const [composer, setComposer] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cancelPending, setCancelPending] = useState(false);
   const [proactive, setProactive] = useState(false);
   const [activeTool, setActiveTool] = useState(() => tx(locale, "Ожидаю задачу", "Waiting for a task"));
   const [taskProgress, setTaskProgress] = useState(0);
@@ -704,13 +713,14 @@ export function App() {
             const state = event.payload.state;
             if (typeof state === "string") setRuntimeState(state);
           }
-          if (event.event_type === "assistant_message" || event.event_type === "request_failed") {
+          if (["assistant_message", "request_failed", "request_cancelled"].includes(event.event_type)) {
             setBusy(false);
+            setCancelPending(false);
             setTaskProgress(0);
             setActiveTool(tx(localeRef.current, "Ожидаю задачу", "Waiting for a task"));
             setTimeline((current) => current.map((candidate) => (
               candidate.status === "working" && (candidate.kind === "progress" || candidate.kind === "tool")
-                ? { ...candidate, status: event.event_type === "request_failed" ? "error" : "success" }
+                  ? { ...candidate, status: ["request_failed", "request_cancelled"].includes(event.event_type) ? "error" : "success" }
                 : candidate
             )));
           }
@@ -936,6 +946,20 @@ export function App() {
           status: "error",
         },
       ]);
+    }
+  }
+
+  async function cancelCurrentRequest() {
+    if (!busy || cancelPending || connection !== "connected") return;
+    setCancelPending(true);
+    setActiveTool(tx(locale, "Останавливаю задачу…", "Stopping task…"));
+    try {
+      await transport.send("cancel_current_request");
+    } catch (error) {
+      setCancelPending(false);
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось остановить задачу.", "Could not stop the task."),
+      );
     }
   }
 
@@ -1408,7 +1432,7 @@ export function App() {
                     <Mic size={18} />
                   </button>
                   {busy ? (
-                    <button className="send stop" onClick={() => transport.send("cancel_current_request")} aria-label={tx(locale, "Остановить", "Stop")}><Square size={14} /></button>
+                    <button className="send stop" onClick={() => void cancelCurrentRequest()} disabled={cancelPending} aria-label={tx(locale, "Остановить", "Stop")} title={tx(locale, "Немедленно остановить текущую задачу", "Stop the current task immediately")}><Square size={14} /></button>
                   ) : (
                     <button className="send" onClick={() => void send()} disabled={!composer.trim()} aria-label={tx(locale, "Отправить", "Send")}><Send size={17} /></button>
                   )}

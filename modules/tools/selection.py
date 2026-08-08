@@ -17,6 +17,12 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "система", "память", "оперативка", "cpu", "батарея", "загрузка",
     },
     "open_application": {"открыть", "открой", "запустить", "запусти", "включить"},
+    "open_url_in_browser": {
+        "в гугле", "в google", "google chrome", "гугл хром", "хром",
+    },
+    "open_telegram_chat": {
+        "чат с", "чат со", "telegram chat", "телеграм чат",
+    },
     "open_application_batch": {
         "несколько приложений", "несколько программ",
         "приложений", "программ",
@@ -182,6 +188,7 @@ CAPABILITY_GROUPS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
             "open_application", "open_application_batch",
             "close_application", "list_active_windows",
             "manage_windows", "write_in_application",
+            "open_url_in_browser", "open_telegram_chat",
         ),
     ),
     (

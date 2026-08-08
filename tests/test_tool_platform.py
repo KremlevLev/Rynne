@@ -482,6 +482,40 @@ def test_runner_normalizes_application_argument_alias() -> None:
     asyncio.run(scenario())
 
 
+def test_runner_propagates_task_cancellation() -> None:
+    async def scenario() -> None:
+        started = asyncio.Event()
+
+        async def handler() -> str:
+            started.set()
+            await asyncio.Event().wait()
+            return "unreachable"
+
+        registry = ToolRegistry()
+        registry.register_definition(
+            ToolDefinition(
+                name="long_tool",
+                description="Long operation.",
+                parameters={"type": "object", "properties": {}},
+                handler=handler,
+            )
+        )
+        task = asyncio.create_task(
+            ToolRunner(registry).execute(create_tool_call("long_tool", {}))
+        )
+        await started.wait()
+        task.cancel()
+
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("Tool cancellation must propagate to RequestService")
+
+    asyncio.run(scenario())
+
+
 def test_runner_adapts_legacy_string_result() -> None:
     async def scenario() -> None:
         registry = ToolRegistry()

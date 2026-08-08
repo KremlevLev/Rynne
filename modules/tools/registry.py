@@ -22,6 +22,21 @@ open_app_batch_tool = {
         },
     },
 }
+open_url_in_browser_tool = {
+    "type": "function",
+    "function": {
+        "name": "open_url_in_browser",
+        "description": "Открывает URL прямо в указанном пользовательском браузере без ввода через клавиатуру.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "app_name": {"type": "string"},
+                "url": {"type": "string"},
+            },
+            "required": ["app_name", "url"],
+        },
+    },
+}
 close_app_tool = {"type": "function", "function": {"name": "close_application", "description": "Закрывает запущенную программу (блокнот, калькулятор, проводник, хром) по названию.", "parameters": {"type": "object", "properties": {"app_name": {"type": "string", "description": "Название закрываемого приложения (блокнот, калькулятор, проводник, хром)."}}, "required": ["app_name"]}}}
 type_text_tool = {"type": "function", "function": {"name": "type_text", "description": "Печатает текст в активное окно.", "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}}
 get_time_tool = {"type": "function", "function": {"name": "get_current_time", "description": "Возвращает текущую дату и время.", "parameters": {"type": "object", "properties": {}}}}
@@ -253,6 +268,20 @@ write_in_application_tool = {
         },
     },
 }
+open_telegram_chat_tool = {
+    "type": "function",
+    "function": {
+        "name": "open_telegram_chat",
+        "description": "В уже открытом пользовательском Telegram Web находит контакт и открывает первый чат из поиска.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "contact": {"type": "string", "minLength": 1, "maxLength": 200},
+            },
+            "required": ["contact"],
+        },
+    },
+}
 
 scrape_webpage_tool = {
     "type": "function",
@@ -398,6 +427,7 @@ focus_window_tool = {
 ALL_TOOLS = [
     open_app_tool,
     open_app_batch_tool,
+    open_url_in_browser_tool,
     close_app_tool, 
     type_text_tool, 
     scrape_webpage_tool,
@@ -426,7 +456,8 @@ ALL_TOOLS = [
     press_hotkey_tool,
     list_windows_tool,
     focus_window_tool,
-    write_in_application_tool
+    write_in_application_tool,
+    open_telegram_chat_tool,
 ]
 
 for tool in ALL_TOOLS:

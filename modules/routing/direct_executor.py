@@ -303,6 +303,25 @@ class DirectRequestExecutor:
             }
 
         if (
+            decision.intent == IntentKind.WEB
+            and decision.selected_skill == "open_url_in_browser"
+        ):
+            app_name = str(decision.arguments.get("app_name", "")).strip()
+            url = str(decision.arguments.get("url", "")).strip()
+            if not app_name or not url:
+                return self._clarification("В каком браузере и какой адрес открыть?")
+            return {"app_name": app_name, "url": url}
+
+        if (
+            decision.intent == IntentKind.WEB
+            and decision.selected_skill == "open_telegram_chat"
+        ):
+            contact = str(decision.arguments.get("contact", "")).strip()
+            if not contact:
+                return self._clarification("Какой чат открыть?")
+            return {"contact": contact}
+
+        if (
             decision.intent
             == IntentKind.SYSTEM_VOLUME
         ):

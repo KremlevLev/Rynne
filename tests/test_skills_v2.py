@@ -155,3 +155,42 @@ def test_selection_includes_skills_for_complex_command() -> None:
 
     assert "write_in_application" in result
     assert "open_and_focus" in result
+
+
+def test_open_telegram_chat_uses_search_shortcut_and_contact() -> None:
+    actions: list[tuple[str, str]] = []
+    skills = WindowsSkills(
+        app_launcher=FakeAppLauncher(),
+        list_windows=lambda: "",
+        focus_window=lambda value: actions.append(("focus", value)) or "focused",
+        press_hotkey=lambda value: actions.append(("hotkey", value)) or "pressed",
+        type_text=lambda value: actions.append(("type", value)) or "typed",
+        get_active_window_title=lambda: "Telegram Web - Google Chrome",
+    )
+
+    result = skills.open_telegram_chat("Владислав")
+
+    assert result.success
+    assert result.verification.verified is None
+    assert actions == [
+        ("focus", "chrome"),
+        ("hotkey", "ctrl+f"),
+        ("type", "Владислав"),
+        ("hotkey", "enter"),
+    ]
+
+
+def test_open_telegram_chat_refuses_wrong_active_tab() -> None:
+    skills = WindowsSkills(
+        app_launcher=FakeAppLauncher(),
+        list_windows=lambda: "",
+        focus_window=lambda value: "focused",
+        press_hotkey=lambda value: "pressed",
+        type_text=lambda value: "typed",
+        get_active_window_title=lambda: "Search - Google Chrome",
+    )
+
+    result = skills.open_telegram_chat("Владислав")
+
+    assert not result.success
+    assert result.code == "TELEGRAM_WEB_NOT_ACTIVE"

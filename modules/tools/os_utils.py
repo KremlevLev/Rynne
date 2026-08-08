@@ -368,10 +368,12 @@ def type_text(text: str) -> str:
     Защищен от сбоев синхронизации буфера микропаузами.
     """
     try:
-        time.sleep(0.5)  # Пауза, чтобы окно успело принять фокус ввода
-        old_clipboard = pyperclip.paste()
+        time.sleep(0.15)  # Короткая пауза, чтобы окно приняло фокус.
+        # Reading and restoring the previous clipboard could block forever
+        # when another Windows process held OpenClipboard. The caller already
+        # treats this primitive as a clipboard write, so prefer bounded input.
         pyperclip.copy(text)
-        time.sleep(0.15)  # Ожидание обновления системного буфера обмена
+        time.sleep(0.05)
         
         # Пошаговая эмуляция во избежание "залипания" виртуальных клавиш
         pyautogui.keyDown('ctrl')
@@ -380,8 +382,7 @@ def type_text(text: str) -> str:
         time.sleep(0.05)
         pyautogui.keyUp('ctrl')
         
-        time.sleep(0.1)  # Даем время на вставку текста перед восстановлением буфера
-        pyperclip.copy(old_clipboard)
+        time.sleep(0.05)
         return "Текст успешно вставлен в активное окно."
     except Exception as e:
         return f"Не удалось напечатать текст: {e}"

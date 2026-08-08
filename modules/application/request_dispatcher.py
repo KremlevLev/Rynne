@@ -133,7 +133,10 @@ class RequestDispatcher:
             decision.strategy
             == ExecutionStrategy.DIRECT
             and not request.has_image
-            and not decision.needs_tools
+            and (
+                not decision.needs_tools
+                or decision.metadata.get("safe_direct_tool") is True
+            )
         ):
             response = (
                 await self.direct_executor.execute(

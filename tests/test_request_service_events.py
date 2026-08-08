@@ -85,3 +85,40 @@ def test_request_interceptor_can_finish_without_dispatching() -> None:
         assert responses[0][1].display_text == "Хорошо, не буду."
 
     asyncio.run(scenario())
+
+
+def test_cancel_current_interrupts_dispatch_and_emits_cancelled() -> None:
+    async def scenario() -> None:
+        coordinator = InputCoordinator()
+        request = UserRequest.from_text("Долгая задача")
+        await coordinator.submit(request)
+        shutdown = asyncio.Event()
+        dispatch_started = asyncio.Event()
+        events: list[str] = []
+
+        class Dispatcher:
+            async def dispatch(self, current_request):
+                dispatch_started.set()
+                await asyncio.Event().wait()
+                raise AssertionError("cancelled dispatch resumed")
+
+        service = RequestService(
+            coordinator=coordinator,
+            dispatcher=Dispatcher(),
+            event_handler=lambda event_type, payload: events.append(event_type),
+        )
+        service_task = asyncio.create_task(service.run(shutdown))
+        await dispatch_started.wait()
+
+        assert await service.cancel_current()
+        for _ in range(20):
+            if "request_cancelled" in events:
+                break
+            await asyncio.sleep(0)
+
+        assert "request_cancelled" in events
+        shutdown.set()
+        await coordinator.close()
+        await service_task
+
+    asyncio.run(scenario())

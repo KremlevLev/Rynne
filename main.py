@@ -402,6 +402,9 @@ def build_handlers(
     def launch_application_batch(count: int) -> ToolResult:
         return app_launcher.launch_batch(count)
 
+    def open_url_in_browser(app_name: str, url: str) -> ToolResult:
+        return app_launcher.open_url_in_browser(app_name, url)
+
     def save_to_memory(text: str) -> str:
         return memory.add_document(text)
 
@@ -420,6 +423,7 @@ def build_handlers(
         "get_current_time": get_current_time,
         "open_application": launch_application,
         "open_application_batch": launch_application_batch,
+        "open_url_in_browser": open_url_in_browser,
         "close_application": close_application,
         "type_text": type_text,
         "change_volume": change_volume,
@@ -447,6 +451,7 @@ def build_handlers(
         ),
         "write_in_application": (
             windows_skills.write_in_application),
+        "open_telegram_chat": windows_skills.open_telegram_chat,
         "scrape_webpage": scrape_webpage,
         "get_clipboard_content": get_clipboard_content,
         "set_clipboard_content": set_clipboard_content,

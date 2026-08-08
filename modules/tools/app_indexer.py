@@ -5,11 +5,13 @@ import ctypes
 import logging
 import os
 import re
+import subprocess
 import time
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional, Tuple
+from urllib.parse import urlsplit
 
 from modules.domain.results import ToolResult
 
@@ -383,6 +385,71 @@ class WindowsAppIndexer:
             logger.info("После запуска появились окна с неожиданными заголовками: %s", sorted(last_new_titles))
 
         return (True, f"Запрос на запуск '{match.matched_name}' передан Windows, но появление окна не подтверждено.")
+
+    def open_url_in_browser(self, app_name: str, url: str) -> ToolResult:
+        """Open a URL in the requested installed browser without GUI typing."""
+        clean_url = str(url).strip()
+        if not re.match(r"^https?://[^\s]+$", clean_url, re.IGNORECASE):
+            return ToolResult.failure(
+                "INVALID_URL",
+                "Нужен полный безопасный HTTP или HTTPS адрес.",
+            )
+
+        match = self.find_app(app_name)
+        if match is None:
+            return ToolResult.failure(
+                "APPLICATION_NOT_FOUND",
+                f"Браузер '{app_name}' не найден.",
+            )
+
+        try:
+            if Path(match.path).suffix.lower() in {".lnk", ".url"}:
+                os.startfile(match.path, "open", clean_url)
+            else:
+                subprocess.Popen([match.path, clean_url])
+        except Exception as exc:
+            logger.exception("Не удалось открыть %s в %s.", clean_url, app_name)
+            return ToolResult.failure(
+                "BROWSER_URL_OPEN_FAILED",
+                f"Не удалось открыть адрес в '{app_name}': {exc}",
+            )
+
+        expected_terms = self._expected_window_terms(app_name, match)
+        page_terms = {
+            part
+            for part in (urlsplit(clean_url).hostname or "").lower().split(".")
+            if len(part) >= 4 and part not in {"https", "www", "web", "com", "org", "net"}
+        }
+        deadline = time.monotonic() + 6.0
+        detected_title = ""
+        page_verified = False
+        while time.monotonic() < deadline:
+            time.sleep(0.2)
+            titles = {normalize_app_name(title) for title in get_visible_window_titles()}
+            detected_title = self._find_matching_window(titles, expected_terms) or ""
+            page_verified = any(
+                any(term in title for term in page_terms)
+                for title in titles
+            )
+            if detected_title and page_verified:
+                break
+
+        from modules.domain.results import VerificationResult
+
+        return ToolResult.ok(
+            f"Адрес {clean_url} открыт в '{match.matched_name}'.",
+            data={"app_name": match.matched_name, "url": clean_url},
+            verification=VerificationResult(
+                verified=True if detected_title and page_verified else None,
+                method="visible_page_title" if detected_title and page_verified else "launch_request",
+                confidence=0.9 if detected_title and page_verified else 0.55,
+                details=(
+                    f"Обнаружено окно: {detected_title}."
+                    if detected_title and page_verified
+                    else "Команда запуска передана браузеру; заголовок окна не считан."
+                ),
+            ),
+        )
 
     def launch_batch(self, count: int) -> ToolResult:
         """Launch a bounded number of ordinary applications."""

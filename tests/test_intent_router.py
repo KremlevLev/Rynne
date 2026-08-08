@@ -329,6 +329,39 @@ def test_browser_with_follow_up_goal_is_not_direct() -> None:
     assert decision.needs_tools
 
 
+def test_open_telegram_in_chrome_uses_one_direct_browser_skill() -> None:
+    decision = create_router().route(
+        "Открой гугл хром, а в нем телеграм"
+    )
+
+    assert decision.strategy == ExecutionStrategy.DIRECT
+    assert decision.intent == IntentKind.WEB
+    assert decision.selected_skill == "open_url_in_browser"
+    assert decision.arguments == {
+        "app_name": "google chrome",
+        "url": "https://web.telegram.org/a/",
+    }
+    assert decision.expected_model_calls == 0
+    assert decision.expected_tool_calls == 1
+
+
+def test_open_telegram_in_google_colloquial_phrase_is_direct() -> None:
+    decision = create_router().route("включи в гугле телеграм")
+
+    assert decision.strategy == ExecutionStrategy.DIRECT
+    assert decision.selected_skill == "open_url_in_browser"
+    assert decision.arguments["app_name"] == "google chrome"
+
+
+def test_open_telegram_chat_uses_guarded_direct_skill() -> None:
+    decision = create_router().route("попробуй открыть чат с владиславом")
+
+    assert decision.strategy == ExecutionStrategy.DIRECT
+    assert decision.selected_skill == "open_telegram_chat"
+    assert decision.arguments == {"contact": "владиславом"}
+    assert decision.expected_model_calls == 0
+
+
 def test_impatient_follow_up_does_not_open_filler_as_application() -> None:
     decision = create_router().route("Так открой, ало")
 

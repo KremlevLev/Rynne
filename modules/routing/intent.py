@@ -172,7 +172,16 @@ WEB_SERVICE_MARKERS = (
     "опен роутер",
 )
 
+WEB_SERVICE_URLS = {
+    "telegram": "https://web.telegram.org/a/",
+    "телеграм": "https://web.telegram.org/a/",
+    "телегу": "https://web.telegram.org/a/",
+}
+
 GENERAL_ACTION_MARKERS = (
+    "открой",
+    "открыть",
+    "включи",
     "сделай",
     "создай",
     "запусти",
@@ -634,6 +643,67 @@ class DeterministicIntentRouter:
         # «открой сайт» не превращалась в запуск приложения
         # с именем «сайт».
         # -----------------------------------------------------
+
+        requested_web_service = next(
+            (
+                (name, url)
+                for name, url in WEB_SERVICE_URLS.items()
+                if re.search(rf"\b{re.escape(name)}\b", text)
+            ),
+            None,
+        )
+        requested_user_browser = (
+            "google chrome"
+            if any(marker in text for marker in ("гугл хром", "google chrome", "хром", "в гугле", "в google"))
+            else None
+        )
+
+        explicit_open = any(
+            marker in text
+            for marker in ("открой", "открыть", "включи", "запусти", "open ")
+        )
+
+        if requested_web_service and requested_user_browser and explicit_open:
+            _, service_url = requested_web_service
+            return ExecutionDecision(
+                strategy=ExecutionStrategy.DIRECT,
+                intent=IntentKind.WEB,
+                required_tools={"open_url_in_browser"},
+                selected_skill="open_url_in_browser",
+                arguments={
+                    "app_name": requested_user_browser,
+                    "url": service_url,
+                },
+                needs_model=False,
+                needs_tools=True,
+                expected_model_calls=0,
+                expected_tool_calls=1,
+                confidence=0.99,
+                reason="Известный веб-сервис открывается одним браузерным skill без GUI-ввода.",
+                metadata={"safe_direct_tool": True},
+            )
+
+        telegram_chat_match = re.search(
+            r"(?:открой|открыть|покажи|найди)(?:\s+мне)?\s+чат(?:\s+с)?\s+(.+)$",
+            text,
+        )
+        if telegram_chat_match:
+            contact = telegram_chat_match.group(1).strip(" .,!?\"")
+            if contact:
+                return ExecutionDecision(
+                    strategy=ExecutionStrategy.DIRECT,
+                    intent=IntentKind.WEB,
+                    required_tools={"open_telegram_chat"},
+                    selected_skill="open_telegram_chat",
+                    arguments={"contact": contact},
+                    needs_model=False,
+                    needs_tools=True,
+                    expected_model_calls=0,
+                    expected_tool_calls=1,
+                    confidence=0.96,
+                    reason="Поиск чата выполняется одним skill в активном Telegram Web.",
+                    metadata={"safe_direct_tool": True},
+                )
 
         browser_is_part_of_larger_goal = (
             "браузер" in text

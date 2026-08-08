@@ -377,3 +377,63 @@ class WindowsSkills:
                 "focus_result": focus_result,
             },
         )
+
+    def open_telegram_chat(self, contact: str) -> ToolResult:
+        """Open a contact search in the user's already authenticated Telegram Web."""
+        clean_contact = " ".join(str(contact).strip().split())
+        if not clean_contact:
+            return ToolResult.failure("EMPTY_CONTACT", "Имя контакта не указано.")
+
+        focus_result = str(self.focus_window("chrome"))
+        if self._result_failed(focus_result):
+            focus_result = str(self.focus_window("google chrome"))
+        if self._result_failed(focus_result):
+            return ToolResult.failure(
+                "CHROME_FOCUS_FAILED",
+                f"Не удалось сфокусировать Google Chrome: {focus_result}",
+            )
+
+        time.sleep(0.25)
+        before_title = str(self.get_active_window_title()).strip()
+        if "telegram" not in before_title.lower():
+            return ToolResult.failure(
+                "TELEGRAM_WEB_NOT_ACTIVE",
+                "В активной вкладке Chrome не открыт Telegram Web.",
+                data={"active_window": before_title},
+            )
+
+        # Telegram Web K binds Ctrl+F to its global chat search. Ctrl+K is
+        # unsafe here: Chrome may interpret it as an address/search-bar
+        # shortcut and the contact would then be typed outside Telegram.
+        hotkey_result = str(self.press_hotkey("ctrl+f"))
+        if self._result_failed(hotkey_result):
+            return ToolResult.failure("TELEGRAM_SEARCH_FAILED", hotkey_result)
+
+        typing_result = str(self.type_text(clean_contact))
+        if self._result_failed(typing_result):
+            return ToolResult.failure("TELEGRAM_CONTACT_INPUT_FAILED", typing_result)
+
+        time.sleep(0.8)
+        enter_result = str(self.press_hotkey("enter"))
+        if self._result_failed(enter_result):
+            return ToolResult.failure("TELEGRAM_CHAT_OPEN_FAILED", enter_result)
+
+        time.sleep(0.5)
+        after_title = str(self.get_active_window_title()).strip()
+        if "telegram" not in after_title.lower():
+            return ToolResult.failure(
+                "ACTIVE_WINDOW_CHANGED",
+                "После поиска активное окно перестало быть Telegram Web.",
+                data={"active_window": after_title},
+            )
+
+        return ToolResult.ok(
+            f"В Telegram Web выполнен поиск чата с '{clean_contact}' и выбран первый результат.",
+            data={"contact": clean_contact, "active_window": after_title},
+            verification=VerificationResult(
+                verified=None,
+                method="telegram_keyboard_navigation",
+                confidence=0.7,
+                details="Telegram Web оставался активным до и после поиска; имя заголовка чата отдельно не считано.",
+            ),
+        )

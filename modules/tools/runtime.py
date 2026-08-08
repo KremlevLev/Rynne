@@ -72,6 +72,8 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
 
     "open_application": RiskLevel.LOW,
     "open_application_batch": RiskLevel.LOW,
+    "open_url_in_browser": RiskLevel.LOW,
+    "open_telegram_chat": RiskLevel.LOW,
     "change_volume": RiskLevel.LOW,
     "manage_media": RiskLevel.LOW,
     "focus_window": RiskLevel.LOW,
@@ -131,6 +133,8 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
 
     "open_application": ToolCategory.APPLICATION,
     "open_application_batch": ToolCategory.APPLICATION,
+    "open_url_in_browser": ToolCategory.WEB_READ,
+    "open_telegram_chat": ToolCategory.GUI_WRITE,
     "close_application": ToolCategory.APPLICATION,
     "focus_window": ToolCategory.GUI_WRITE,
     "list_active_windows": ToolCategory.GUI_READ,
@@ -1064,14 +1068,24 @@ class ToolRunner:
 
         except asyncio.CancelledError:
             actual_context.cancellation.cancel()
-
-            result = ToolResult.failure(
-                "TOOL_CANCELLED",
-                (
-                    f"Инструмент '{name}' был отменён."
-                ),
-                retryable=False,
+            self._emit_event(
+                "tool_completed",
+                {
+                    "tool_name": definition.name,
+                    "operation_id": actual_context.operation_id,
+                    "turn_id": actual_context.turn_id,
+                    "session_id": actual_context.session_id,
+                    "success": False,
+                    "code": "TOOL_CANCELLED",
+                    "message": f"Инструмент '{name}' был отменён.",
+                    "duration_ms": round((time.perf_counter() - started_at) * 1000),
+                    "artifacts": [],
+                    "retryable": False,
+                    "risk": definition.risk.value,
+                    "category": definition.category.value,
+                },
             )
+            raise
 
         except Exception as exc:
             logger.exception(
