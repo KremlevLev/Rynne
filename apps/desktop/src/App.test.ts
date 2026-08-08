@@ -68,6 +68,52 @@ describe("eventToItem", () => {
     expect(heartbeat?.body).toContain("44 сек");
   });
 
+  it("shows concrete selected tools and safe argument names", () => {
+    const stage = eventToItem({
+      event_type: "agent_progress",
+      payload: {
+        phase: "executing",
+        progress: 50,
+        proposed_tools: 2,
+        tool_names: ["open_application", "write_in_application"],
+      },
+      created_at: 6,
+    });
+    const tool = eventToItem({
+      event_type: "tool_started",
+      payload: {
+        tool_name: "write_in_application",
+        description: "Пишу текст в Obsidian",
+        argument_names: ["application", "text"],
+        risk: "low",
+      },
+      created_at: 7,
+    });
+
+    expect(stage?.body).toContain("open_application, write_in_application");
+    expect(tool?.body).toContain("application, text");
+  });
+
+  it("shows wake capture before the command reaches the model", () => {
+    const detected = eventToItem({
+      event_type: "voice_activity",
+      payload: { source: "wake_word", phase: "wake_detected", level: 0.8 },
+      created_at: 8,
+    });
+    const captured = eventToItem({
+      event_type: "voice_status",
+      payload: {
+        status: "wake_word_detected",
+        message: "Фраза записана за 2.1 сек. Распознаю команду…",
+      },
+      created_at: 9,
+    });
+
+    expect(detected?.title).toBe("Услышала «Нова»");
+    expect(captured?.body).toContain("2.1 сек");
+    expect(captured?.status).toBe("working");
+  });
+
   it("scrolls only the conversation container", () => {
     const scrollTo = vi.fn();
 

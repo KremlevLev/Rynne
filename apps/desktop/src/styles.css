@@ -238,7 +238,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .agent-state strong { font-size: 12px; }.agent-state p { max-width: 210px; margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .context-card { margin-bottom: 11px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(20,24,33,.58); }
 .context-card header { display: flex; justify-content: space-between; color: #a3adbd; font-size: 10px; }.context-card header span { display: flex; align-items: center; gap: 7px; }.context-card header small { color: #718277; font-size: 9px; }
-.progress { height: 3px; margin: 13px 0 15px; overflow: hidden; border-radius: 5px; background: #232936; }.progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #65ca95, #57cedc); transition: width .4s ease; }
+.context-card .progress { height: 3px; margin: 13px 0 15px; overflow: hidden; border-radius: 5px; background: #232936; }.context-card .progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #65ca95, #57cedc); transition: width .4s ease; }
 .context-card ul { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; color: #5d6778; font-size: 9px; }.context-card li { display: flex; align-items: center; gap: 7px; }.context-card li > span { width: 12px; height: 12px; border: 1px solid #343b49; border-radius: 50%; }
 .context-card li.done { color: #8f9aaa; }.context-card li.done svg { color: var(--success); }.context-card li.active { color: #b9cbc0; }.context-card li.active span { border-color: var(--accent); box-shadow: inset 0 0 0 3px #191b26; background: var(--accent); }
 .context-card.compact { padding-bottom: 13px; }.capabilities { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }.capabilities span { padding: 4px 7px; border-radius: 6px; color: #737f91; background: rgba(255,255,255,.035); font-size: 8px; }
@@ -565,8 +565,8 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(110,214,165,.48));
 }
-.progress, .progress i { border-radius: 0; }
-.progress { height: 2px; transform: skewX(-28deg); }
+.context-card .progress, .context-card .progress i { border-radius: 0; }
+.context-card .progress { height: 2px; transform: skewX(-28deg); }
 .capabilities span, .nearby-check { border-radius: 3px 7px 3px 7px; }
 
 .settings-card, .guide-card, .guide-hero {

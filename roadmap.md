@@ -12,6 +12,20 @@
 
 ## Тесты
 
+- ✅ Исправлена двухминутная задержка wake-команды на Windows/Realtek по реальному
+  runtime-логу: порог окончания речи раньше оказывался ниже измеренного фонового шума,
+  поэтому запись всегда доходила до максимального лимита, после чего PortAudio ждал
+  graceful drain входного буфера до переключения режима. Теперь конец фразы определяется
+  после 0,9 сек. тишины с порогом выше noise floor, готовый input stream завершается через
+  немедленный `abort`, а чат сразу показывает «Услышала Нова» → «Фраза записана» →
+  «Команда распознана» ещё до планирования моделью.
+- ✅ Исправлен невидимый live-progress в React: конфликт общего CSS-класса `progress`
+  с карточкой события сжимал каждый подробный этап до двухпиксельной полосы. Теперь в
+  чате читаемо показаны context/routing/model/planning/execution/replanning/verification,
+  фактические выбранные tools, безопасные имена аргументов, ошибки и процент выполнения.
+  Безопасный resolver также исправляет только однозначный formatting drift имени tool
+  (`OpenApplication`, `OPEN-APPLICATION` → `open_application`), поэтому модель больше не
+  получает ложный `TOOL_NOT_FOUND` из-за регистра, но Nova не угадывает чужую capability.
 - ✅ Adaptive Provider Swarm: Settings в реальном времени показывает общее и доступное
   число ключей Groq/OpenRouter/Gemini, независимые parallel lanes, активные запросы и
   готовность critic. Для каждого Nova-managed ключа можно задать собственный model ID;
@@ -42,8 +56,8 @@
   аналитические и read-only: реальные действия, permissions и итоговая проверка остаются
   у главной Nova. В UI видны создание команды, роли, назначенные модели и reviewer-сводка.
 ```bash
-python -m pytest tests/ -q  # 814 tests passed
-cd apps/desktop && npm test  # 20 tests passed
+python -m pytest tests/ -q  # 817 tests passed
+cd apps/desktop && npm test  # 22 tests passed
 python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 ```
 

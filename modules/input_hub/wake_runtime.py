@@ -173,8 +173,13 @@ class WakeWordRuntime:
             assert capture.audio_path is not None
             self._publish_status(
                 "wake_word_detected",
-                "Услышала Nova — распознаю команду…",
+                (
+                    f"Фраза записана за {capture.duration_seconds:.1f} сек. "
+                    "Распознаю команду…"
+                ),
                 detected_text=capture.detected_text,
+                capture_duration_seconds=capture.duration_seconds,
+                capture_end_reason=capture.end_reason,
             )
 
             try:

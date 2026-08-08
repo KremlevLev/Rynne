@@ -174,6 +174,24 @@ def test_registry_accepts_definition() -> None:
     )
 
 
+def test_registry_resolves_case_and_separator_drift_without_guessing() -> None:
+    registry = ToolRegistry()
+    definition = ToolDefinition(
+        name="open_application",
+        description="Opens an app.",
+        parameters={"type": "object", "properties": {}},
+        handler=lambda: "ok",
+        category=ToolCategory.SYSTEM_WRITE,
+        risk=RiskLevel.LOW,
+        idempotent=False,
+    )
+    registry.register_definition(definition)
+
+    assert registry.resolve_name("OpenApplication") == "open_application"
+    assert registry.resolve_name("OPEN-APPLICATION") == "open_application"
+    assert registry.get("OpenApplication") is definition
+
+
 def test_registry_rejects_duplicate_definition() -> None:
     registry = ToolRegistry()
 

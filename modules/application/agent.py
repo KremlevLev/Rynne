@@ -1296,6 +1296,7 @@ class AgentService:
             message="Capabilities selected; preparing the model request.",
             available_tools=len(tool_schemas or []),
             skills=len(skill_bundle.names),
+            tool_names=sorted(selected_tool_names)[:12],
         )
         interactive_browser_prompt = (
             "\n\n" + INTERACTIVE_BROWSER_PROMPT
@@ -1428,17 +1429,30 @@ class AgentService:
                     else set()
                 ),
             )
-            return deduplicate_tool_calls(
+            calls = deduplicate_tool_calls(
                 native_tool_calls + xml_tool_calls
             )
+            for call in calls:
+                function = call.get("function", {})
+                raw_name = str(function.get("name") or "")
+                resolved_name = self.registry.resolve_name(raw_name)
+                if resolved_name is not None:
+                    function["name"] = resolved_name
+            return deduplicate_tool_calls(calls)
 
         tool_calls = collect_tool_calls(generated)
+        proposed_tool_names = [
+            str(call.get("function", {}).get("name") or "")
+            for call in tool_calls
+            if str(call.get("function", {}).get("name") or "")
+        ]
         self._emit_progress(
             "planning",
             turn_id=turn_id,
             progress=38,
             message="Model response received; validating proposed actions.",
             proposed_tools=len(tool_calls),
+            tool_names=proposed_tool_names,
         )
 
         # Небольшие модели иногда отвечают «не могу», даже когда подходящий
@@ -1702,12 +1716,19 @@ class AgentService:
         budget_exhausted = False
         completion_gate_attempts = 0
 
+        proposed_tool_names = [
+            str(call.get("function", {}).get("name") or "")
+            for call in pending_tool_calls
+            if str(call.get("function", {}).get("name") or "")
+        ]
+
         self._emit_progress(
             "executing",
             turn_id=turn_id,
             progress=50,
             message="Execution plan is ready; starting tool actions.",
             proposed_tools=len(tool_calls),
+            tool_names=proposed_tool_names,
         )
 
         while pending_tool_calls:

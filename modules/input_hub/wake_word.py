@@ -59,7 +59,7 @@ class WakeWordConfig:
     sample_rate: int = 16_000
     block_size: int = 1_024
 
-    silence_duration: float = 1.5
+    silence_duration: float = 0.9
     maximum_command_duration: float = 20.0
     pre_roll_duration: float = 0.8
 
@@ -111,6 +111,12 @@ class WakeWordConfig:
                     "15",
                 )
             ),
+            silence_duration=float(
+                os.getenv(
+                    "NOVA_WAKE_SILENCE_SECONDS",
+                    "0.9",
+                )
+            ),
             sensitivity=float(
                 os.getenv(
                     "NOVA_WAKE_WORD_SENSITIVITY",
@@ -137,6 +143,8 @@ class WakeCapture:
     audio_path: Path | None = None
     detected_text: str = ""
     error: str = ""
+    duration_seconds: float = 0.0
+    end_reason: str = ""
 
     @property
     def success(self) -> bool:
@@ -249,6 +257,34 @@ def _rms_from_bytes(
                 np.square(samples)
             )
         )
+    )
+
+
+def _abort_input_stream(stream) -> bool:
+    """Discard buffered input so Windows drivers cannot stall finalization."""
+    try:
+        stream.abort()
+        return True
+    except Exception:
+        logger.debug(
+            "Не удалось abort wake input stream.",
+            exc_info=True,
+        )
+        return False
+
+
+def _continuation_rms_threshold(
+    config: WakeWordConfig,
+    *,
+    noise_floor: float,
+    detection_threshold: float,
+) -> float:
+    # The previous 0.65 multiplier put the threshold below the measured
+    # background noise, so silence was mathematically impossible to reach.
+    return max(
+        config.minimum_rms_threshold * 1.15,
+        noise_floor * 1.12,
+        detection_threshold * 0.9,
     )
 
 
@@ -509,6 +545,7 @@ class WakeWordDetector:
 
         silence_blocks = 0
         post_wake_blocks = 0
+        end_reason = ""
 
         noise_floor = (
             self.config.minimum_rms_threshold
@@ -676,12 +713,10 @@ class WakeWordDetector:
 
                         post_wake_blocks += 1
 
-                        continuation_threshold = max(
-                            (
-                                self.config
-                                .minimum_rms_threshold
-                            ),
-                            threshold * 0.65,
+                        continuation_threshold = _continuation_rms_threshold(
+                            self.config,
+                            noise_floor=noise_floor,
+                            detection_threshold=threshold,
                         )
 
                         if rms > continuation_threshold:
@@ -706,6 +741,12 @@ class WakeWordDetector:
                             and silence_blocks
                             >= silence_limit_blocks
                         ):
+                            end_reason = "silence"
+                            # PortAudio's graceful stop can wait for buffered
+                            # input for minutes on some Windows Realtek drivers.
+                            # The utterance is already copied, so discard the
+                            # remaining device buffer before closing the stream.
+                            _abort_input_stream(stream)
                             break
 
                         if (
@@ -715,6 +756,8 @@ class WakeWordDetector:
                             logger.info(
                                 "Достигнут лимит wake-команды."
                             )
+                            end_reason = "maximum_duration"
+                            _abort_input_stream(stream)
                             break
 
         except sd.PortAudioError as exc:
@@ -802,4 +845,11 @@ class WakeWordDetector:
             detected=True,
             audio_path=audio_path,
             detected_text=wake_text,
+            duration_seconds=round(
+                len(captured_audio)
+                * self.config.block_size
+                / self.config.sample_rate,
+                2,
+            ),
+            end_reason=end_reason or "completed",
         )

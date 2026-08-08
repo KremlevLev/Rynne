@@ -341,6 +341,11 @@ function text(payload: JsonObject, key: string, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function stringList(payload: JsonObject, key: string): string[] {
+  const value = payload[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 function agentProgressCopy(payload: JsonObject, locale: UiLocale): {
   title: string;
   body: string;
@@ -348,17 +353,19 @@ function agentProgressCopy(payload: JsonObject, locale: UiLocale): {
   const phase = text(payload, "phase", "working");
   const tools = Number(payload.available_tools ?? payload.proposed_tools ?? 0);
   const completed = Number(payload.completed_tools ?? 0);
+  const toolNames = stringList(payload, "tool_names");
+  const visibleTools = toolNames.length > 0 ? toolNames.join(", ") : tx(locale, "уточняются", "being selected");
   const copies: Record<string, [string, string, string, string]> = {
     understanding: ["Запрос принят", "Request accepted", "Собираю контекст, историю и вложения.", "Collecting context, history, and attachments."],
     routing: ["Разбираю задачу", "Understanding the task", `Определяю маршрут: ${text(payload, "intent", "general")} · ${text(payload, "strategy", "agent")}.`, `Selecting route: ${text(payload, "intent", "general")} · ${text(payload, "strategy", "agent")}.`],
     delegating: ["Подключаю субагентов", "Starting parallel specialists", `Независимые части задачи анализируются параллельно. Доступная ёмкость: ${Number(payload.capacity ?? 0)}.`, `Independent parts are being analyzed in parallel. Available capacity: ${Number(payload.capacity ?? 0)}.`],
-    preparing: ["Готовлю возможности", "Preparing capabilities", `Подобрано инструментов: ${tools}. Подключаю подходящие skills и контекст.`, `${tools} tools selected. Loading relevant skills and context.`],
+    preparing: ["Готовлю возможности", "Preparing capabilities", `Подобрано инструментов: ${tools}. Кандидаты: ${visibleTools}.`, `${tools} tools selected. Candidates: ${visibleTools}.`],
     model: ["Модель строит следующий шаг", "Model is building the next step", "Жду ответ провайдера и исполнимый план действий.", "Waiting for the provider and an executable action plan."],
-    planning: ["Проверяю план", "Validating the plan", `Предложено действий: ${tools}. Проверяю аргументы и безопасность.`, `${tools} action(s) proposed. Validating arguments and safety.`],
+    planning: ["Проверяю план", "Validating the plan", `Предложено действий: ${tools}. Следующие вызовы: ${visibleTools}.`, `${tools} action(s) proposed. Next calls: ${visibleTools}.`],
     capability_recovery: ["Расширяю набор инструментов", "Expanding capabilities", `Первый ответ не содержал исполнимого действия. Повторяю с ${tools} инструментами.`, `The first response had no executable action. Retrying with ${tools} tools.`],
     tool_call_repair: ["Исправляю план действий", "Repairing the action plan", "Модель описала намерение вместо вызова инструмента — запрашиваю конкретный первый шаг.", "The model described an intention instead of calling a tool; requesting a concrete first step."],
-    executing: ["Начинаю выполнение", "Starting execution", `План готов: действий в первом пакете — ${tools}.`, `Plan ready: ${tools} action(s) in the first batch.`],
-    replanning: ["Анализирую результат шага", "Reviewing step results", `Выполнено инструментов: ${completed}. Решаю, нужен ли следующий шаг или альтернатива.`, `${completed} tool action(s) completed. Deciding on the next step or an alternative.`],
+    executing: ["Начинаю выполнение", "Starting execution", `План готов: ${visibleTools}. Действий в пакете — ${tools}.`, `Plan ready: ${visibleTools}. ${tools} action(s) in the batch.`],
+    replanning: [payload.previous_step_failed === true ? "Ищу альтернативу после ошибки" : "Анализирую результат шага", payload.previous_step_failed === true ? "Finding an alternative after a failure" : "Reviewing step results", `Выполнено инструментов: ${completed}. ${payload.previous_step_failed === true ? "Предыдущий шаг не сработал — выбираю другой путь." : "Сверяю результат и выбираю следующий шаг."}`, `${completed} tool action(s) completed. ${payload.previous_step_failed === true ? "The previous step failed; choosing another route." : "Checking the result and selecting the next step."}`],
     verifying: ["Проверяю конечный результат", "Verifying the outcome", `Инструментов выполнено: ${completed}. Сверяю результат с исходной задачей.`, `${completed} tool action(s) completed. Comparing the result with the original request.`],
     finalizing: ["Формирую итог", "Preparing the final response", "Проверка завершена. Готовлю честный отчёт без ложного «готово».", "Verification finished. Preparing an evidence-based final report."],
   };
@@ -417,6 +424,35 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
         status: "working",
       };
     }
+    case "voice_activity": {
+      if (text(payload, "source") !== "wake_word" || text(payload, "phase") !== "wake_detected") {
+        return null;
+      }
+      return {
+        id,
+        kind: "progress",
+        title: tx(locale, "Услышала «Нова»", "Wake word detected"),
+        body: tx(locale, "Записываю команду и автоматически завершу фразу после короткой паузы.", "Recording the command; the utterance will end automatically after a short pause."),
+        status: "working",
+        progress: 6,
+      };
+    }
+    case "voice_status": {
+      const status = text(payload, "status");
+      if (!["wake_word_detected", "command_recognized", "unavailable"].includes(status)) return null;
+      return {
+        id,
+        kind: "progress",
+        title: status === "wake_word_detected"
+          ? tx(locale, "Фраза записана", "Utterance captured")
+          : status === "command_recognized"
+            ? tx(locale, "Голосовая команда распознана", "Voice command recognized")
+            : tx(locale, "Wake word недоступен", "Wake word is unavailable"),
+        body: text(payload, "message"),
+        status: status === "unavailable" ? "error" : status === "command_recognized" ? "success" : "working",
+        progress: status === "wake_word_detected" ? 10 : status === "command_recognized" ? 14 : undefined,
+      };
+    }
     case "agent_progress": {
       const copy = agentProgressCopy(payload, locale);
       return {
@@ -451,18 +487,21 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
         status: "error",
       };
     case "tool_started":
+      {
+        const argumentNames = stringList(payload, "argument_names");
       return {
         id,
         kind: "tool",
         title: text(payload, "description", tx(locale, "Запускаю инструмент", "Running tool")),
         body: tx(
           locale,
-          `Инструмент: ${text(payload, "tool_name")} · риск: ${text(payload, "risk", "unknown")}`,
-          `Tool: ${text(payload, "tool_name")} · risk: ${text(payload, "risk", "unknown")}`,
+          `Инструмент: ${text(payload, "tool_name")} · параметры: ${argumentNames.join(", ") || "нет"} · риск: ${text(payload, "risk", "unknown")}`,
+          `Tool: ${text(payload, "tool_name")} · parameters: ${argumentNames.join(", ") || "none"} · risk: ${text(payload, "risk", "unknown")}`,
         ),
         status: "working",
         operationId: text(payload, "operation_id"),
       };
+      }
     case "tool_completed":
       return {
         id,

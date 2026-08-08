@@ -10,6 +10,8 @@ from modules.input_hub.wake_word import (
     contains_wake_word,
     normalize_wake_text,
     strip_wake_prefix,
+    _abort_input_stream,
+    _continuation_rms_threshold,
 )
 
 
@@ -152,6 +154,36 @@ def test_explicit_environment_switch_can_disable_wake_word(
     monkeypatch.setenv("NOVA_WAKE_WORD_ENABLED", "false")
 
     assert not WakeWordConfig.from_environment().available
+
+
+def test_wake_stream_uses_abort_instead_of_waiting_for_buffer_drain() -> None:
+    class Stream:
+        aborted = False
+
+        def abort(self) -> None:
+            self.aborted = True
+
+    stream = Stream()
+
+    assert _abort_input_stream(stream)
+    assert stream.aborted
+
+
+def test_wake_silence_threshold_stays_above_measured_noise() -> None:
+    config = WakeWordConfig(
+        enabled=True,
+        wake_word="нова",
+        model_path=Path("model"),
+        minimum_rms_threshold=0.003,
+    )
+
+    threshold = _continuation_rms_threshold(
+        config,
+        noise_floor=0.01,
+        detection_threshold=0.012,
+    )
+
+    assert threshold > 0.01
 
 
 def test_detector_caches_fatal_vosk_initialization_error(

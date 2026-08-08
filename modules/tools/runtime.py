@@ -5,6 +5,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 import time
 from typing import Any, Callable
 from modules.tools.policy import (
@@ -708,7 +709,22 @@ class ToolRegistry:
         self,
         name: str,
     ) -> ToolDefinition | None:
-        return self._tools.get(name)
+        resolved = self.resolve_name(name)
+        return self._tools.get(resolved) if resolved is not None else None
+
+    def resolve_name(self, name: str) -> str | None:
+        """Resolve harmless model formatting drift without guessing a capability."""
+        if name in self._tools:
+            return name
+        compact = re.sub(r"[^a-z0-9]", "", str(name).casefold())
+        if not compact:
+            return None
+        matches = [
+            registered
+            for registered in self._tools
+            if re.sub(r"[^a-z0-9]", "", registered.casefold()) == compact
+        ]
+        return matches[0] if len(matches) == 1 else None
 
 
 class ToolRunner:
