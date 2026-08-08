@@ -6,6 +6,7 @@ from modules.tools.budgets import (
     BudgetManager,
     BudgetState,
 )
+from modules.application.agent import AgentService
 
 
 def test_budget_starts_not_exhausted() -> None:
@@ -116,3 +117,19 @@ def test_budget_manager_records_calls() -> None:
     assert state is not None
     assert state.model_calls_used == 1
     assert state.tool_calls_used == 1
+
+
+def test_agent_budget_scales_with_independent_provider_lanes() -> None:
+    service = AgentService.__new__(AgentService)
+    service.default_budget = AgentBudget()
+    service.subagent_pool = type(
+        "CapacityPool",
+        (),
+        {"parallel_capacity": lambda self: 4},
+    )()
+
+    budget = service._budget_for_available_capacity()
+
+    assert budget.max_logical_model_calls == 11
+    assert budget.max_tool_calls == 32
+    assert budget.max_tokens == 64_000

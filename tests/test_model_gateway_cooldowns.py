@@ -878,3 +878,46 @@ def test_model_cooldown_skips_to_next_model(
         await gateway.close()
 
     asyncio.run(scenario())
+
+
+def test_per_key_model_override_is_used_for_request(monkeypatch) -> None:
+    async def scenario() -> None:
+        gateway = ModelGateway()
+        gateway._key_slots = {
+            "groq": [
+                KeySlot(
+                    provider="groq",
+                    index=0,
+                    api_key="test-key",
+                    model_override="custom/tool-model",
+                )
+            ],
+            "openrouter": [],
+            "gemini": [],
+        }
+        observed: list[str] = []
+
+        async def fake_request_once(*, slot, candidate, **_kwargs):
+            observed.append(candidate.model)
+            return ModelResponse(
+                provider=candidate.provider,
+                model=candidate.model,
+                key_label=slot.label,
+                text="ok",
+                tool_calls=[],
+            )
+
+        monkeypatch.setattr(gateway, "_request_once", fake_request_once)
+        response = await gateway.complete(
+            candidates=[create_candidate("default-model", provider="groq")],
+            messages=[{"role": "user", "content": "test"}],
+        )
+
+        assert observed == ["custom/tool-model"]
+        assert response.model == "custom/tool-model"
+        snapshot = gateway.health_snapshot()
+        assert snapshot["keys"][0]["model_override"] == "custom/tool-model"
+        assert snapshot["capacity"]["parallel_lanes"] == 1
+        await gateway.close()
+
+    asyncio.run(scenario())

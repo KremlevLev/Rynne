@@ -114,10 +114,20 @@ class SubagentPool:
     def parallel_capacity(self) -> int:
         return min(self.max_agents, sum(self.provider_capacity().values()))
 
+    def capacity_snapshot(self) -> dict[str, Any]:
+        providers = self.provider_capacity()
+        parallel = min(self.max_agents, sum(providers.values()))
+        return {
+            "provider_capacity": providers,
+            "parallel_capacity": parallel,
+            "critic_enabled": parallel >= 2,
+            "adaptive_budget": parallel > 1,
+        }
+
     @staticmethod
-    def default_subtasks(goal: str) -> list[dict[str, str]]:
+    def default_subtasks(goal: str, capacity: int = 3) -> list[dict[str, str]]:
         del goal
-        return [
+        tasks = [
             {
                 "role": "intent_guardian",
                 "task": (
@@ -141,14 +151,46 @@ class SubagentPool:
                 ),
             },
         ]
+        if capacity >= 4:
+            tasks.append(
+                {
+                    "role": "evidence_researcher",
+                    "task": (
+                        "Проверь фактические предпосылки, существующие возможности и контекст. "
+                        "Отдели подтверждённое от предположений и перечисли недостающие доказательства."
+                    ),
+                }
+            )
+        if capacity >= 5:
+            tasks.append(
+                {
+                    "role": "independent_solver",
+                    "task": (
+                        "Независимо реши задачу другим способом и сравни его по скорости, "
+                        "надёжности и полноте с очевидным подходом."
+                    ),
+                }
+            )
+        if capacity >= 6:
+            tasks.append(
+                {
+                    "role": "adversarial_critic",
+                    "task": (
+                        "Попытайся опровергнуть предлагаемый план: найди скрытые пробелы, "
+                        "ложные успехи и проверки, которые могут дать неверный результат."
+                    ),
+                }
+            )
+        return tasks
 
     @staticmethod
     def _normalize_subtasks(
         subtasks: list[dict[str, Any]] | list[str] | None,
         goal: str,
+        capacity: int = 3,
     ) -> list[dict[str, str]]:
         if not subtasks:
-            return SubagentPool.default_subtasks(goal)
+            return SubagentPool.default_subtasks(goal, capacity)
         normalized: list[dict[str, str]] = []
         for index, item in enumerate(subtasks):
             if isinstance(item, str):
@@ -161,7 +203,7 @@ class SubagentPool:
                 continue
             if task:
                 normalized.append({"role": role[:80], "task": task[:2000]})
-        return normalized or SubagentPool.default_subtasks(goal)
+        return normalized or SubagentPool.default_subtasks(goal, capacity)
 
     @staticmethod
     def _route_for_provider(
@@ -278,6 +320,76 @@ class SubagentPool:
             logger.warning("Subagent reviewer failed: %s", exc)
             return evidence
 
+    async def _critic(self, goal: str, synthesis: str) -> dict[str, Any]:
+        if not synthesis:
+            return {"passed": False, "critique": "Reviewer не создал результат."}
+        self._publish("subagent_critic_started", {"goal": goal})
+        route = build_model_route(TaskComplexity.ULTRA) or build_model_route(
+            TaskComplexity.COMPLEX_TOOL
+        )
+        try:
+            response = await self.llm.complete(
+                candidates=route,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Ты независимый critic Nova. Проверь, сохраняет ли синтез точный "
+                            "intent, исполним ли план, есть ли проверка результата и не заявлены "
+                            "ли невыполненные действия. Первая строка строго PASS или REVISE. "
+                            "Далее кратко перечисли только существенные замечания."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Цель:\n{goal}\n\nСинтез:\n{synthesis}",
+                    },
+                ],
+                tools=None,
+                allow_tools=False,
+            )
+            critique = response.text.strip()[:5000]
+            first_line = critique.upper().splitlines()[0].strip() if critique else ""
+            # Only an explicit REVISE triggers the bounded repair pass. Models that
+            # ignore the requested envelope must not erase a valid reviewer result.
+            passed = first_line != "REVISE"
+        except Exception as exc:
+            critique = f"Critic недоступен: {exc}"
+            passed = True
+        result = {"passed": passed, "critique": critique}
+        self._publish("subagent_critic_completed", result)
+        return result
+
+    async def _revise(self, goal: str, synthesis: str, critique: str) -> str:
+        route = build_model_route(TaskComplexity.ULTRA) or build_model_route(
+            TaskComplexity.COMPLEX_TOOL
+        )
+        try:
+            response = await self.llm.complete(
+                candidates=route,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Ты manager Nova. Исправь синтез по замечаниям critic за один проход. "
+                            "Не добавляй неподтверждённых действий и не меняй цель пользователя."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Цель:\n{goal}\n\nСинтез:\n{synthesis}\n\n"
+                            f"Замечания critic:\n{critique}"
+                        ),
+                    },
+                ],
+                tools=None,
+                allow_tools=False,
+            )
+            return response.text.strip()[:8000] or synthesis
+        except Exception:
+            return synthesis
+
     async def run(
         self,
         *,
@@ -289,8 +401,8 @@ class SubagentPool:
         goal = str(goal).strip()
         if not goal:
             return {"success": False, "error": "Пустая цель для команды субагентов."}
-        tasks = self._normalize_subtasks(subtasks, goal)
         capacity = self.parallel_capacity()
+        tasks = self._normalize_subtasks(subtasks, goal, capacity)
         requested = self.max_agents if max_agents is None else max(1, int(max_agents))
         worker_count = min(len(tasks), requested, capacity, MAX_SUBAGENTS)
         if worker_count <= 0:
@@ -326,6 +438,13 @@ class SubagentPool:
             )
         )
         synthesis = await self._review(goal, list(results))
+        critic = {"passed": True, "critique": "Critic отключён: нужна вторая независимая линия."}
+        review_iterations = 1
+        if capacity >= 2 and synthesis:
+            critic = await self._critic(goal, synthesis)
+            if not critic["passed"]:
+                synthesis = await self._revise(goal, synthesis, str(critic["critique"]))
+                review_iterations = 2
         payload = {
             "success": bool(synthesis),
             "team_id": team_id,
@@ -333,8 +452,12 @@ class SubagentPool:
             "parallel_agents": worker_count,
             "available_capacity": capacity,
             "provider_capacity": capacities,
+            "resource_profile": self.capacity_snapshot(),
             "results": [asdict(item) for item in results],
             "synthesis": synthesis,
+            "critic": critic,
+            "critic_passed": bool(critic["passed"]),
+            "review_iterations": review_iterations,
         }
         self._publish("subagent_team_completed", payload)
         return payload

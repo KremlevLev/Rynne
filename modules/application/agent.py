@@ -529,6 +529,35 @@ class AgentService:
         # into every model context.
         self._sticky_tool_names: list[str] = []
 
+    def _budget_for_available_capacity(self) -> AgentBudget:
+        """Scale useful work with independent model lanes, while keeping hard caps."""
+        lanes = 1
+        if self.subagent_pool is not None:
+            try:
+                lanes = max(1, int(self.subagent_pool.parallel_capacity()))
+            except Exception:
+                lanes = 1
+        extra = max(0, lanes - 1)
+        base = self.default_budget
+        return AgentBudget(
+            max_logical_model_calls=min(14, base.max_logical_model_calls + extra),
+            max_provider_attempts_per_call=min(
+                8, base.max_provider_attempts_per_call + extra
+            ),
+            max_total_provider_attempts=min(
+                24, base.max_total_provider_attempts + extra * 3
+            ),
+            max_replans=min(4, base.max_replans + extra // 2),
+            max_tool_calls=min(40, base.max_tool_calls + extra * 4),
+            max_wall_time_seconds=base.max_wall_time_seconds,
+            max_same_tool_repeats=base.max_same_tool_repeats,
+            max_observation_characters=min(
+                36_000, base.max_observation_characters + extra * 4_000
+            ),
+            max_tokens=min(64_000, 16_000 * lanes),
+            max_cost=base.max_cost,
+        )
+
     def _emit_progress(
         self,
         phase: str,
@@ -922,6 +951,7 @@ class AgentService:
         turn_id = (
             f"turn_{uuid.uuid4().hex}"
         )
+        turn_budget = self._budget_for_available_capacity()
         if isinstance(
             user_text,
             UserRequest,
@@ -971,6 +1001,12 @@ class AgentService:
             progress=8,
             message="Request accepted; collecting context.",
             has_image=has_image,
+            resource_budget={
+                "model_calls": turn_budget.max_logical_model_calls,
+                "tool_calls": turn_budget.max_tool_calls,
+                "observation_characters": turn_budget.max_observation_characters,
+                "token_budget": turn_budget.max_tokens,
+            },
         )
 
         actual_user_content = (
@@ -1298,7 +1334,7 @@ class AgentService:
         budget_state = (
             self.budget_manager.create_state(
                 turn_id,
-                budget=self.default_budget,
+                budget=turn_budget,
             )
         )
 
@@ -1413,7 +1449,7 @@ class AgentService:
             and use_tools
             and action_was_requested
             and budget_state.logical_model_calls
-            < self.default_budget.max_logical_model_calls
+            < turn_budget.max_logical_model_calls
         ):
             expanded_tool_names = get_selected_tool_names(
                 selection_text,
@@ -1514,7 +1550,7 @@ class AgentService:
             and action_was_requested
             and tool_schemas
             and budget_state.logical_model_calls
-            < self.default_budget.max_logical_model_calls
+            < turn_budget.max_logical_model_calls
         ):
             self._emit_progress(
                 "tool_call_repair",
@@ -1682,7 +1718,7 @@ class AgentService:
                     total_tool_calls
                     >= min(
                         MAX_TOOL_CALLS,
-                        self.default_budget.max_tool_calls,
+                        turn_budget.max_tool_calls,
                     )
                 ):
                     budget_exhausted = True
@@ -1963,7 +1999,7 @@ class AgentService:
                 and gate_requirements
                 and completion_gate_attempts < 2
                 and budget_state.logical_model_calls
-                < self.default_budget.max_logical_model_calls
+                < turn_budget.max_logical_model_calls
             ):
                 # Preserve the premature answer as negative context, then ask
                 # once more with the exact missing postconditions. This is a

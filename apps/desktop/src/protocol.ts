@@ -36,6 +36,8 @@ export const NOVA_EVENT_TYPES = [
   "subagent_team_started",
   "subagent_started",
   "subagent_completed",
+  "subagent_critic_started",
+  "subagent_critic_completed",
   "subagent_team_completed",
   "models",
   "command_result",

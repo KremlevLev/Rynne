@@ -83,6 +83,25 @@ type TtsVoice = {
   online: boolean;
   available: boolean;
 };
+type ProviderRuntimeKey = {
+  provider: ProviderName;
+  index: number;
+  available: boolean;
+  disabled: boolean;
+  in_flight_requests: number;
+  global_cooldown_seconds: number;
+  model_override: string;
+};
+type ProviderRuntime = {
+  keys: ProviderRuntimeKey[];
+  capacity: {
+    providers: Partial<Record<ProviderName, { total: number; available: number; in_flight: number }>>;
+    total_keys: number;
+    available_keys: number;
+    parallel_lanes: number;
+    in_flight: number;
+  };
+};
 
 const DEFAULT_TTS_SETTINGS: TtsSettings = {
   language: "auto",
@@ -154,24 +173,28 @@ export const PROVIDER_OPTIONS: ReadonlyArray<{
   label: string;
   description: string;
   placeholder: string;
+  modelPlaceholder: string;
 }> = [
   {
     key: "groq",
     label: "Groq",
     description: "GPT OSS 120B для текста и tools · Qwen для изображений · Whisper STT",
     placeholder: "gsk_…",
+    modelPlaceholder: "openai/gpt-oss-120b",
   },
   {
     key: "openrouter",
     label: "OpenRouter",
     description: "Резервные модели и независимые лимиты",
     placeholder: "sk-or-v1-…",
+    modelPlaceholder: "openai/gpt-oss-120b:free",
   },
   {
     key: "gemini",
     label: "Google Gemini",
     description: "Дополнительный маршрут для vision и сложных задач",
     placeholder: "AIza…",
+    modelPlaceholder: "gemini-2.5-flash",
   },
 ];
 
@@ -500,6 +523,22 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
           : text(payload, "error", tx(locale, "Субагент не ответил.", "Subagent did not respond.")),
         status: payload.success === true ? "success" : "error",
       };
+    case "subagent_critic_started":
+      return {
+        id,
+        kind: "tool",
+        title: tx(locale, "Critic проверяет план", "Critic is evaluating the plan"),
+        body: tx(locale, "Ищу потерянные требования, ложные успехи и непроверенные шаги.", "Checking for lost requirements, false success, and unverified steps."),
+        status: "working",
+      };
+    case "subagent_critic_completed":
+      return {
+        id,
+        kind: "tool",
+        title: payload.passed === true ? tx(locale, "Critic принял план", "Critic accepted the plan") : tx(locale, "Critic отправил план на доработку", "Critic requested a revision"),
+        body: text(payload, "critique"),
+        status: payload.passed === true ? "success" : "working",
+      };
     case "subagent_team_completed":
       return {
         id,
@@ -537,7 +576,9 @@ export function App() {
   const [wakeSensitivity, setWakeSensitivity] = useState(0.72);
   const [provider, setProvider] = useState<ProviderName>("groq");
   const [apiKey, setApiKey] = useState("");
+  const [apiModel, setApiModel] = useState("");
   const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
+  const [providerRuntime, setProviderRuntime] = useState<ProviderRuntime | null>(null);
   const [providerKeysLoading, setProviderKeysLoading] = useState(false);
   const [settingsStatus, setSettingsStatus] = useState("");
   const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
@@ -721,6 +762,9 @@ export function App() {
           if (event.event_type === "task_progress") {
             const value = event.payload.progress;
             if (typeof value === "number") setTaskProgress(value);
+          }
+          if (event.event_type === "models") {
+            setProviderRuntime(event.payload as unknown as ProviderRuntime);
           }
           if (event.event_type === "permissions") {
             setPendingPermission(pendingPermissionFromEvent(event));
@@ -969,14 +1013,31 @@ export function App() {
     if (apiKey.trim().length < 12) return;
     setSettingsStatus(tx(locale, "Добавляю ключ и перезапускаю Nova Core…", "Adding the key and restarting Nova Core…"));
     try {
-      await transport.addProviderKey(provider, apiKey.trim());
+      await transport.addProviderKey(provider, apiKey.trim(), apiModel.trim());
       setApiKey("");
+      setApiModel("");
       setSettingsStatus(tx(locale, "Ключ добавлен. Nova Core переподключается.", "Key added. Nova Core is reconnecting."));
       await refreshProviderKeys();
     } catch (error) {
       setSettingsStatus(
         error instanceof Error ? error.message : tx(locale, "Не удалось сохранить API-ключ.", "Could not save the API key."),
       );
+    }
+  }
+
+  async function updateProviderModel(key: ProviderKeySummary, model: string) {
+    if (!key.removable || model === key.model) return;
+    setSettingsStatus(tx(locale, "Сохраняю модель ключа и перезапускаю Nova Core…", "Saving the key model and restarting Nova Core…"));
+    try {
+      await transport.updateProviderKeyModel(key.provider, key.index, model.trim());
+      setProviderKeys((current) => current.map((item) => (
+        item.provider === key.provider && item.source === key.source && item.index === key.index
+          ? { ...item, model: model.trim() }
+          : item
+      )));
+      setSettingsStatus(tx(locale, "Модель ключа обновлена.", "Key model updated."));
+    } catch (error) {
+      setSettingsStatus(error instanceof Error ? error.message : tx(locale, "Не удалось обновить модель.", "Could not update the model."));
     }
   }
 
@@ -1610,8 +1671,18 @@ export function App() {
                 <p>{tx(locale, "Добавляйте сколько угодно ключей Groq, OpenRouter и Gemini. Начало и конец каждого ключа видны для проверки, середина скрыта; полный секрет никогда не отправляется в React UI.", "Add any number of Groq, OpenRouter, and Gemini keys. The prefix and suffix remain visible while the middle is masked; the full secret never enters the React UI.")}</p>
               </div>
               <div className="provider-pool">
+                <div className="provider-capacity-summary">
+                  <span>{tx(locale, "Живая ёмкость роя", "Live swarm capacity")}</span>
+                  <strong>{providerRuntime?.capacity.parallel_lanes ?? 0} {tx(locale, "линий", "lanes")}</strong>
+                  <small>
+                    {providerRuntime?.capacity.available_keys ?? providerKeys.length}/{providerRuntime?.capacity.total_keys ?? providerKeys.length} {tx(locale, "ключей доступны", "keys available")}
+                    {" · "}{tx(locale, "до", "up to")} {Math.min(6, providerRuntime?.capacity.parallel_lanes ?? 0)} {tx(locale, "субагентов", "subagents")}
+                    {" · "}{(providerRuntime?.capacity.parallel_lanes ?? 0) >= 2 ? tx(locale, "critic включён", "critic enabled") : tx(locale, "critic ждёт второй независимый ключ", "critic needs a second independent key")}
+                  </small>
+                </div>
                 {providers.map((option) => {
                   const keys = providerKeys.filter((key) => key.provider === option.key);
+                  const runtimeCapacity = providerRuntime?.capacity.providers[option.key];
                   return (
                     <section className="provider-group" key={option.key}>
                       <header>
@@ -1619,7 +1690,9 @@ export function App() {
                           <strong>{option.label}</strong>
                           <small>{option.description}</small>
                         </span>
-                        <b>{providerKeysLoading ? "…" : keys.length}</b>
+                        <b title={tx(locale, "доступно / всего", "available / total")}>
+                          {providerKeysLoading ? "…" : `${runtimeCapacity?.available ?? keys.length}/${runtimeCapacity?.total ?? keys.length}`}
+                        </b>
                       </header>
                       <div className="provider-key-list">
                         {keys.length === 0 ? (
@@ -1629,6 +1702,18 @@ export function App() {
                             <span>
                               <code>{key.hint}</code>
                               <small>{key.source === "nova" ? tx(locale, "Добавлен в Nova", "Added in Nova") : tx(locale, "Системная переменная", "System environment variable")}</small>
+                              <input
+                                className="provider-model-input"
+                                defaultValue={key.model}
+                                disabled={!key.removable}
+                                placeholder={option.modelPlaceholder}
+                                aria-label={tx(locale, `Модель для ${key.hint}`, `Model for ${key.hint}`)}
+                                title={key.removable ? tx(locale, "Своя модель для этого ключа", "Custom model for this key") : tx(locale, "Модель задана системной переменной", "Model is set by an environment variable")}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") event.currentTarget.blur();
+                                }}
+                                onBlur={(event) => void updateProviderModel(key, event.currentTarget.value)}
+                              />
                             </span>
                             {key.removable && (
                               <button
@@ -1668,6 +1753,19 @@ export function App() {
                     if (event.key === "Enter") void addProviderKey();
                   }}
                   placeholder={providers.find((option) => option.key === provider)?.placeholder}
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                {tx(locale, "Модель для этого ключа", "Model for this key")}
+                <input
+                  type="text"
+                  value={apiModel}
+                  onChange={(event) => setApiModel(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void addProviderKey();
+                  }}
+                  placeholder={providers.find((option) => option.key === provider)?.modelPlaceholder}
                   autoComplete="off"
                 />
               </label>

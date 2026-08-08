@@ -44,6 +44,7 @@ struct ProviderKeySummary {
     hint: String,
     source: String,
     removable: bool,
+    model: String,
 }
 
 fn provider_variables(provider: &str) -> Result<(&'static str, &'static str), String> {
@@ -51,6 +52,15 @@ fn provider_variables(provider: &str) -> Result<(&'static str, &'static str), St
         "groq" => Ok(("GROQ_API_KEYS", "GROQ_API_KEY")),
         "openrouter" => Ok(("OPENROUTER_API_KEYS", "OPENROUTER_API_KEY")),
         "gemini" => Ok(("GEMINI_API_KEYS", "GEMINI_API_KEY")),
+        _ => Err("Unsupported model provider.".to_owned()),
+    }
+}
+
+fn provider_model_variable(provider: &str) -> Result<&'static str, String> {
+    match provider.trim().to_lowercase().as_str() {
+        "groq" => Ok("NOVA_GROQ_KEY_MODELS"),
+        "openrouter" => Ok("NOVA_OPENROUTER_KEY_MODELS"),
+        "gemini" => Ok("NOVA_GEMINI_KEY_MODELS"),
         _ => Err("Unsupported model provider.".to_owned()),
     }
 }
@@ -67,6 +77,25 @@ fn split_key_list(value: &str) -> Vec<String> {
         }
     }
     keys
+}
+
+fn split_model_list(value: &str) -> Vec<String> {
+    value
+        .trim()
+        .trim_matches(|character| character == '"' || character == '\'')
+        .split(',')
+        .map(|item| item.trim().to_owned())
+        .collect()
+}
+
+fn provider_models(contents: &str, provider: &str, count: usize) -> Result<Vec<String>, String> {
+    let variable = provider_model_variable(provider)?;
+    let mut models = env_value(contents, variable)
+        .map(|value| split_model_list(&value))
+        .unwrap_or_default();
+    models.resize(count, String::new());
+    models.truncate(count);
+    Ok(models)
 }
 
 fn env_value(contents: &str, variable: &str) -> Option<String> {
@@ -141,6 +170,17 @@ fn inherited_provider_keys(provider: &str) -> Result<Vec<String>, String> {
     Ok(keys)
 }
 
+fn inherited_provider_models(provider: &str, count: usize) -> Result<Vec<String>, String> {
+    let variable = provider_model_variable(provider)?;
+    let mut models = std::env::var(variable)
+        .ok()
+        .map(|value| split_model_list(&value))
+        .unwrap_or_default();
+    models.resize(count, String::new());
+    models.truncate(count);
+    Ok(models)
+}
+
 fn key_hint(key: &str) -> String {
     let characters: Vec<char> = key.chars().collect();
     let prefix_length = 10.min(characters.len().saturating_sub(6));
@@ -162,8 +202,14 @@ fn provider_env_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join(".env"))
 }
 
-fn write_provider_keys(env_path: &Path, provider: &str, keys: &[String]) -> Result<(), String> {
+fn write_provider_configuration(
+    env_path: &Path,
+    provider: &str,
+    keys: &[String],
+    models: &[String],
+) -> Result<(), String> {
     let (plural, legacy) = provider_variables(provider)?;
+    let model_variable = provider_model_variable(provider)?;
     let current = std::fs::read_to_string(env_path).unwrap_or_default();
     let mut lines: Vec<String> = current
         .lines()
@@ -175,12 +221,18 @@ fn write_provider_keys(env_path: &Path, provider: &str, keys: &[String]) -> Resu
             let numbered = variable
                 .strip_prefix(&format!("{legacy}_"))
                 .is_some_and(|suffix| suffix.parse::<usize>().is_ok());
-            variable != plural && variable != legacy && !numbered
+            variable != plural && variable != legacy && variable != model_variable && !numbered
         })
         .map(str::to_owned)
         .collect();
     if !keys.is_empty() {
         lines.push(format!("{plural}={}", keys.join(",")));
+        let mut aligned_models = models.to_vec();
+        aligned_models.resize(keys.len(), String::new());
+        aligned_models.truncate(keys.len());
+        if aligned_models.iter().any(|model| !model.is_empty()) {
+            lines.push(format!("{model_variable}={}", aligned_models.join(",")));
+        }
     }
     let contents = if lines.is_empty() {
         String::new()
@@ -189,6 +241,19 @@ fn write_provider_keys(env_path: &Path, provider: &str, keys: &[String]) -> Resu
     };
     std::fs::write(env_path, contents)
         .map_err(|error| format!("Cannot save Nova provider settings: {error}"))
+}
+
+fn validate_model(model: &str) -> Result<&str, String> {
+    let value = model.trim();
+    if value.len() > 240
+        || value.contains(',')
+        || !value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "/_-.:+@".contains(character))
+    {
+        return Err("Model name has an invalid format.".to_owned());
+    }
+    Ok(value)
 }
 
 fn validate_api_key(api_key: &str) -> Result<&str, String> {
@@ -287,7 +352,9 @@ fn nova_list_provider_keys(app: AppHandle) -> Result<Vec<ProviderKeySummary>, St
 
     for provider in ["groq", "openrouter", "gemini"] {
         let file_keys = file_provider_keys(&contents, provider)?;
+        let file_models = provider_models(&contents, provider, file_keys.len())?;
         let inherited_keys = inherited_provider_keys(provider)?;
+        let inherited_models = inherited_provider_models(provider, inherited_keys.len())?;
 
         for (index, key) in file_keys.iter().enumerate() {
             summaries.push(ProviderKeySummary {
@@ -296,18 +363,20 @@ fn nova_list_provider_keys(app: AppHandle) -> Result<Vec<ProviderKeySummary>, St
                 hint: key_hint(key),
                 source: "nova".to_owned(),
                 removable: true,
+                model: file_models.get(index).cloned().unwrap_or_default(),
             });
         }
-        for key in inherited_keys {
+        for (index, key) in inherited_keys.into_iter().enumerate() {
             if file_keys.contains(&key) {
                 continue;
             }
             summaries.push(ProviderKeySummary {
                 provider: provider.to_owned(),
-                index: 0,
+                index,
                 hint: key_hint(&key),
                 source: "environment".to_owned(),
                 removable: false,
+                model: inherited_models.get(index).cloned().unwrap_or_default(),
             });
         }
     }
@@ -318,6 +387,7 @@ fn nova_list_provider_keys(app: AppHandle) -> Result<Vec<ProviderKeySummary>, St
 fn add_provider_key(
     provider: String,
     api_key: String,
+    model: Option<String>,
     app: AppHandle,
     state: State<'_, Arc<CoreState>>,
 ) -> Result<(), String> {
@@ -326,9 +396,17 @@ fn add_provider_key(
     let env_path = provider_env_path(&app)?;
     let current = std::fs::read_to_string(&env_path).unwrap_or_default();
     let mut keys = file_provider_keys(&current, &provider)?;
-    if !keys.iter().any(|existing| existing == key) {
+    let mut models = provider_models(&current, &provider, keys.len())?;
+    let requested_model = validate_model(model.as_deref().unwrap_or_default())?.to_owned();
+    if let Some(index) = keys.iter().position(|existing| existing == key) {
+        if !requested_model.is_empty() {
+            models[index] = requested_model;
+            write_provider_configuration(&env_path, &provider, &keys, &models)?;
+        }
+    } else {
         keys.push(key.to_owned());
-        write_provider_keys(&env_path, &provider, &keys)?;
+        models.push(requested_model);
+        write_provider_configuration(&env_path, &provider, &keys, &models)?;
     }
 
     let core_state = state.inner().clone();
@@ -340,20 +418,47 @@ fn add_provider_key(
 fn nova_add_provider_key(
     provider: String,
     api_key: String,
+    model: Option<String>,
     app: AppHandle,
     state: State<'_, Arc<CoreState>>,
 ) -> Result<(), String> {
-    add_provider_key(provider, api_key, app, state)
+    add_provider_key(provider, api_key, model, app, state)
 }
 
 #[tauri::command]
 fn nova_configure_provider(
     provider: String,
     api_key: String,
+    model: Option<String>,
     app: AppHandle,
     state: State<'_, Arc<CoreState>>,
 ) -> Result<(), String> {
-    add_provider_key(provider, api_key, app, state)
+    add_provider_key(provider, api_key, model, app, state)
+}
+
+#[tauri::command]
+fn nova_update_provider_key_model(
+    provider: String,
+    index: usize,
+    model: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    provider_variables(&provider)?;
+    let model = validate_model(&model)?.to_owned();
+    let env_path = provider_env_path(&app)?;
+    let current = std::fs::read_to_string(&env_path).unwrap_or_default();
+    let keys = file_provider_keys(&current, &provider)?;
+    if index >= keys.len() {
+        return Err("Provider key was not found.".to_owned());
+    }
+    let mut models = provider_models(&current, &provider, keys.len())?;
+    models[index] = model;
+    write_provider_configuration(&env_path, &provider, &keys, &models)?;
+
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)
 }
 
 #[tauri::command]
@@ -367,11 +472,13 @@ fn nova_remove_provider_key(
     let env_path = provider_env_path(&app)?;
     let current = std::fs::read_to_string(&env_path).unwrap_or_default();
     let mut keys = file_provider_keys(&current, &provider)?;
+    let mut models = provider_models(&current, &provider, keys.len())?;
     if index >= keys.len() {
         return Err("Provider key was not found.".to_owned());
     }
     keys.remove(index);
-    write_provider_keys(&env_path, &provider, &keys)?;
+    models.remove(index);
+    write_provider_configuration(&env_path, &provider, &keys, &models)?;
 
     let core_state = state.inner().clone();
     stop_core(&core_state);
@@ -447,14 +554,20 @@ fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<
     let contents = std::fs::read_to_string(env_path).unwrap_or_default();
     for provider in ["groq", "openrouter", "gemini"] {
         let (plural, _) = provider_variables(provider)?;
+        let model_variable = provider_model_variable(provider)?;
         let mut keys = file_provider_keys(&contents, provider)?;
-        for key in inherited_provider_keys(provider)? {
+        let mut models = provider_models(&contents, provider, keys.len())?;
+        let inherited_keys = inherited_provider_keys(provider)?;
+        let inherited_models = inherited_provider_models(provider, inherited_keys.len())?;
+        for (index, key) in inherited_keys.into_iter().enumerate() {
             if !keys.contains(&key) {
                 keys.push(key);
+                models.push(inherited_models.get(index).cloned().unwrap_or_default());
             }
         }
         if !keys.is_empty() {
             command.env(plural, keys.join(","));
+            command.env(model_variable, models.join(","));
         }
     }
     Ok(())
@@ -636,13 +749,12 @@ pub fn run() {
             nova_configure_provider,
             nova_list_provider_keys,
             nova_add_provider_key,
+            nova_update_provider_key_model,
             nova_remove_provider_key
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {
-                let icon = tauri::image::Image::from_bytes(include_bytes!(
-                    "../icons/icon.png"
-                ))?;
+                let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
                 window.set_icon(icon)?;
             }
             let app_handle = app.handle().clone();

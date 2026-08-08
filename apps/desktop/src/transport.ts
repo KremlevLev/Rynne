@@ -18,13 +18,15 @@ export interface ProviderKeySummary {
   hint: string;
   source: "nova" | "environment";
   removable: boolean;
+  model: string;
 }
 
 export interface NovaTransport {
   connect(onEvent: EventListener, onConnection: ConnectionListener): Promise<() => void>;
   send(action: NovaCommandAction, payload?: JsonObject): Promise<void>;
   listProviderKeys(): Promise<ProviderKeySummary[]>;
-  addProviderKey(provider: ProviderName, apiKey: string): Promise<void>;
+  addProviderKey(provider: ProviderName, apiKey: string, model?: string): Promise<void>;
+  updateProviderKeyModel(provider: ProviderName, index: number, model: string): Promise<void>;
   removeProviderKey(provider: ProviderName, index: number): Promise<void>;
 }
 
@@ -105,11 +107,20 @@ export class TauriNovaTransport implements NovaTransport {
     return invoke<ProviderKeySummary[]>("nova_list_provider_keys");
   }
 
-  async addProviderKey(provider: ProviderName, apiKey: string): Promise<void> {
+  async addProviderKey(provider: ProviderName, apiKey: string, model = ""): Promise<void> {
     await invoke("nova_add_provider_key", {
       provider,
       apiKey,
+      model,
     });
+  }
+
+  async updateProviderKeyModel(
+    provider: ProviderName,
+    index: number,
+    model: string,
+  ): Promise<void> {
+    await invoke("nova_update_provider_key_model", { provider, index, model });
   }
 
   async removeProviderKey(provider: ProviderName, index: number): Promise<void> {
@@ -273,6 +284,10 @@ class DemoNovaTransport implements NovaTransport {
   }
 
   async addProviderKey(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async updateProviderKeyModel(): Promise<void> {
     return Promise.resolve();
   }
 

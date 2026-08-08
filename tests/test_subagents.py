@@ -87,3 +87,34 @@ def test_gateway_prefers_idle_key_for_parallel_request() -> None:
     gateway._preferred_key_index["groq"] = 0
 
     assert gateway._ordered_slots("groq")[0] is idle
+
+
+def test_critic_can_request_one_bounded_revision(monkeypatch) -> None:
+    monkeypatch.setattr(subagents, "build_model_route", fake_route)
+
+    class CriticLLM(FakeLLM):
+        async def complete(self, *, candidates, messages, **kwargs):
+            system = str(messages[0]["content"])
+            if "независимый critic" in system:
+                return SimpleNamespace(
+                    provider=candidates[0].provider,
+                    model=candidates[0].model,
+                    text="REVISE\nДобавь проверку результата.",
+                )
+            if "manager Nova" in system:
+                return SimpleNamespace(
+                    provider=candidates[0].provider,
+                    model=candidates[0].model,
+                    text="Исправленный проверяемый план",
+                )
+            return await super().complete(
+                candidates=candidates,
+                messages=messages,
+                **kwargs,
+            )
+
+    result = asyncio.run(SubagentPool(CriticLLM()).run(goal="Сделай сложную задачу"))
+
+    assert result["review_iterations"] == 2
+    assert result["critic_passed"] is False
+    assert result["synthesis"] == "Исправленный проверяемый план"

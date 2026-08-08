@@ -56,6 +56,14 @@ def _collect_keys(
     return tuple(dict.fromkeys(collected))
 
 
+def _aligned_key_models(variable_name: str, count: int) -> tuple[str, ...]:
+    """Return one optional model override for every key, preserving blank slots."""
+    raw = os.getenv(variable_name, "")
+    models = [item.strip() for item in raw.split(",")] if raw else []
+    models.extend("" for _ in range(max(0, count - len(models))))
+    return tuple(models[:count])
+
+
 def _model_list(
     variable_name: str,
     default: str,
@@ -102,6 +110,19 @@ HAS_MODEL_PROVIDER: Final[bool] = bool(
     GROQ_API_KEYS
     or OPENROUTER_API_KEYS
     or GEMINI_API_KEYS
+)
+
+GROQ_KEY_MODELS = _aligned_key_models(
+    "NOVA_GROQ_KEY_MODELS",
+    len(GROQ_API_KEYS),
+)
+OPENROUTER_KEY_MODELS = _aligned_key_models(
+    "NOVA_OPENROUTER_KEY_MODELS",
+    len(OPENROUTER_API_KEYS),
+)
+GEMINI_KEY_MODELS = _aligned_key_models(
+    "NOVA_GEMINI_KEY_MODELS",
+    len(GEMINI_API_KEYS),
 )
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"

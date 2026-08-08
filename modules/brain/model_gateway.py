@@ -5,7 +5,7 @@ import asyncio
 import copy
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
@@ -29,6 +29,11 @@ OPENROUTER_API_KEYS: tuple[str, ...] = tuple(
 GEMINI_API_KEYS: tuple[str, ...] = tuple(
     getattr(config, "GEMINI_API_KEYS", ())
 )
+GROQ_KEY_MODELS: tuple[str, ...] = tuple(getattr(config, "GROQ_KEY_MODELS", ()))
+OPENROUTER_KEY_MODELS: tuple[str, ...] = tuple(
+    getattr(config, "OPENROUTER_KEY_MODELS", ())
+)
+GEMINI_KEY_MODELS: tuple[str, ...] = tuple(getattr(config, "GEMINI_KEY_MODELS", ()))
 
 GROQ_BASE_URL = getattr(
     config,
@@ -103,6 +108,7 @@ class KeySlot:
     index: int
     api_key: str
     quota_group: str | None = None
+    model_override: str | None = None
 
     # Только глобальное состояние ключа.
     disabled: bool = False
@@ -218,6 +224,9 @@ class ModelGateway:
                     provider="groq",
                     index=index,
                     api_key=api_key,
+                    model_override=(GROQ_KEY_MODELS[index] or None)
+                    if index < len(GROQ_KEY_MODELS)
+                    else None,
                 )
                 for index, api_key in enumerate(
                     GROQ_API_KEYS
@@ -228,6 +237,9 @@ class ModelGateway:
                     provider="openrouter",
                     index=index,
                     api_key=api_key,
+                    model_override=(OPENROUTER_KEY_MODELS[index] or None)
+                    if index < len(OPENROUTER_KEY_MODELS)
+                    else None,
                 )
                 for index, api_key in enumerate(
                     OPENROUTER_API_KEYS
@@ -239,6 +251,9 @@ class ModelGateway:
                     index=index,
                     api_key=api_key,
                     quota_group=gemini_quota_groups.get(index),
+                    model_override=(GEMINI_KEY_MODELS[index] or None)
+                    if index < len(GEMINI_KEY_MODELS)
+                    else None,
                 )
                 for index, api_key in enumerate(
                     GEMINI_API_KEYS
@@ -1152,6 +1167,7 @@ class ModelGateway:
         requires_vision: bool = False,
     ) -> ModelResponse:
         failure_messages: list[str] = []
+        attempted_routes: set[tuple[str, int, str]] = set()
 
         for candidate in candidates:
             if (
@@ -1187,27 +1203,6 @@ class ModelGateway:
                 )
                 continue
 
-            model_cooldown = (
-                self._model_cooldown_remaining(
-                    candidate
-                )
-            )
-
-            if model_cooldown > 0:
-                logger.info(
-                    "Модель %s пропущена, cooldown %.0f сек.",
-                    candidate.identity,
-                    model_cooldown,
-                )
-
-                failure_messages.append(
-                    (
-                        f"{candidate.identity}: модель "
-                        f"на cooldown {model_cooldown:.0f} сек."
-                    )
-                )
-                continue
-
             slots = self._ordered_slots(
                 candidate.provider
             )
@@ -1225,6 +1220,20 @@ class ModelGateway:
             move_to_next_candidate = False
 
             for slot in slots:
+                effective_candidate = (
+                    replace(candidate, model=slot.model_override)
+                    if slot.model_override
+                    else candidate
+                )
+                route_identity = (
+                    effective_candidate.provider,
+                    slot.index,
+                    effective_candidate.model,
+                )
+                if route_identity in attempted_routes:
+                    continue
+                attempted_routes.add(route_identity)
+
                 if not slot.globally_available:
                     logger.info(
                         "%s пропущен: disabled=%s, "
@@ -1239,6 +1248,14 @@ class ModelGateway:
                             f"{candidate.identity}/"
                             f"{slot.label}: ключ недоступен"
                         )
+                    )
+                    continue
+
+                model_cooldown = self._model_cooldown_remaining(effective_candidate)
+                if model_cooldown > 0:
+                    failure_messages.append(
+                        f"{effective_candidate.identity}: модель на cooldown "
+                        f"{model_cooldown:.0f} сек."
                     )
                     continue
 
@@ -1258,7 +1275,7 @@ class ModelGateway:
                 route_cooldown = (
                     self._route_cooldown_remaining(
                         slot,
-                        candidate,
+                        effective_candidate,
                     )
                 )
 
@@ -1266,13 +1283,13 @@ class ModelGateway:
                     logger.info(
                         "%s/%s пропущен, route cooldown %.0f сек.",
                         slot.label,
-                        candidate.model,
+                        effective_candidate.model,
                         route_cooldown,
                     )
 
                     failure_messages.append(
                         (
-                            f"{candidate.identity}/"
+                            f"{effective_candidate.identity}/"
                             f"{slot.label}: route cooldown "
                             f"{route_cooldown:.0f} сек."
                         )
@@ -1283,8 +1300,8 @@ class ModelGateway:
 
                 logger.info(
                     "Запрос: provider=%s model=%s key=%s",
-                    candidate.provider,
-                    candidate.model,
+                    effective_candidate.provider,
+                    effective_candidate.model,
                     slot.label,
                 )
 
@@ -1292,7 +1309,7 @@ class ModelGateway:
                     slot.in_flight_requests += 1
                     response = await self._request_once(
                         slot=slot,
-                        candidate=candidate,
+                        candidate=effective_candidate,
                         messages=messages,
                         tools=tools,
                         allow_tools=allow_tools,
@@ -1305,12 +1322,12 @@ class ModelGateway:
 
                     self._register_failure(
                         slot=slot,
-                        candidate=candidate,
+                        candidate=effective_candidate,
                         failure=failure,
                     )
 
                     failure_description = (
-                        f"{candidate.identity}/"
+                        f"{effective_candidate.identity}/"
                         f"{slot.label}: "
                         f"{failure.message}"
                     )
@@ -1321,7 +1338,7 @@ class ModelGateway:
 
                     logger.warning(
                         "Сбой %s на %s: %s",
-                        candidate.identity,
+                        effective_candidate.identity,
                         slot.label,
                         failure.message,
                     )
@@ -1341,7 +1358,7 @@ class ModelGateway:
                     self._set_preferred_key(slot)
                     self._clear_route_cooldown(
                         slot,
-                        candidate,
+                        effective_candidate,
                     )
 
                     logger.info(
@@ -1390,7 +1407,9 @@ class ModelGateway:
                 key_states.append(
                     {
                         "provider": provider,
+                        "index": slot.index,
                         "key": slot.label,
+                        "model_override": slot.model_override or "",
                         "available": (
                             slot.globally_available
                         ),
@@ -1522,12 +1541,38 @@ class ModelGateway:
                 }
             )
 
+        provider_capacity: dict[str, dict[str, int]] = {}
+        independent_lanes: set[tuple[str, str]] = set()
+        total_in_flight = 0
+        for item in key_states:
+            provider = str(item["provider"])
+            stats = provider_capacity.setdefault(
+                provider,
+                {"total": 0, "available": 0, "in_flight": 0},
+            )
+            stats["total"] += 1
+            stats["in_flight"] += int(item["in_flight_requests"])
+            total_in_flight += int(item["in_flight_requests"])
+            if item["available"]:
+                stats["available"] += 1
+                quota_group = str(item.get("quota_group") or item["key"])
+                independent_lanes.add((provider, quota_group))
+
         return {
             "keys": key_states,
             "routes": route_states,
             "models": model_states,
             "providers": provider_states,
             "quota_groups": quota_group_states,
+            "capacity": {
+                "providers": provider_capacity,
+                "total_keys": len(key_states),
+                "available_keys": sum(
+                    1 for item in key_states if item["available"]
+                ),
+                "parallel_lanes": len(independent_lanes),
+                "in_flight": total_in_flight,
+            },
         }
 
 
