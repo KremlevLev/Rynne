@@ -935,6 +935,20 @@ class ToolRunner:
 
         original_argument_names = set(arguments)
 
+        properties = definition.parameters.get("properties", {})
+        if "app_name" in properties and not arguments.get("app_name"):
+            for alias in (
+                "application",
+                "application_name",
+                "app",
+                "program",
+                "name",
+            ):
+                value = arguments.get(alias)
+                if isinstance(value, str) and value.strip():
+                    arguments["app_name"] = value.strip()
+                    break
+
         arguments = strip_unknown_properties(
             arguments,
             definition.parameters,

@@ -23,6 +23,8 @@ def test_core_config_imports() -> None:
     assert hasattr(core.config, "GROQ_API_KEYS")
     assert hasattr(core.config, "OPENROUTER_API_KEYS")
     assert hasattr(core.config, "SYSTEM_PROMPT")
+    assert "one to three short sentences" in core.config.SYSTEM_PROMPT
+    assert "never dump a capability catalogue" in core.config.SYSTEM_PROMPT
 
 
 def test_domain_modules_import() -> None:

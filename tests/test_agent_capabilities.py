@@ -120,6 +120,8 @@ def test_contextual_follow_up_detection_is_conservative() -> None:
     assert is_contextual_follow_up("а теперь там мою активность?")
     assert is_contextual_follow_up("так открой его")
     assert is_contextual_follow_up("что на этой странице?")
+    assert is_contextual_follow_up("да")
+    assert is_contextual_follow_up("подтверждаю")
     assert not is_contextual_follow_up("Запусти все приложения")
     assert not is_contextual_follow_up("Расскажи про квантовую физику")
 

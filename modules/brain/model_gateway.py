@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import re
 import time
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -16,6 +17,17 @@ from modules.brain.model_router import ModelCandidate
 
 
 logger = logging.getLogger("ModelGateway")
+
+
+_INTERNAL_CONTROL_LABEL_RE = re.compile(
+    r"^(?:user\s+)?(?:safety|policy|classification)\s*:\s*"
+    r"(?:safe|unsafe|allowed|disallowed)\s*[.!]?$",
+    re.IGNORECASE,
+)
+
+
+def is_internal_control_label(text: str) -> bool:
+    return bool(_INTERNAL_CONTROL_LABEL_RE.fullmatch(str(text).strip()))
 
 
 GROQ_API_KEYS: tuple[str, ...] = tuple(
@@ -1049,6 +1061,14 @@ class ModelGateway:
             raise GatewayFailure(
                 kind=FailureKind.EMPTY_RESPONSE,
                 message="Модель вернула пустой ответ.",
+                retryable=True,
+                cooldown_seconds=10.0,
+            )
+
+        if not response_tool_calls and is_internal_control_label(response_text):
+            raise GatewayFailure(
+                kind=FailureKind.EMPTY_RESPONSE,
+                message="Provider returned an internal control label instead of an answer.",
                 retryable=True,
                 cooldown_seconds=10.0,
             )

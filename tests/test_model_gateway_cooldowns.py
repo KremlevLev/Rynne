@@ -11,8 +11,15 @@ from modules.brain.model_gateway import (
     KeySlot,
     ModelGateway,
     ModelResponse,
+    is_internal_control_label,
 )
 from modules.brain.model_router import ModelCandidate
+
+
+def test_internal_control_labels_are_not_user_answers() -> None:
+    assert is_internal_control_label("User Safety: safe")
+    assert is_internal_control_label("classification: allowed")
+    assert not is_internal_control_label("This action is safe to continue.")
 
 
 def create_candidate(

@@ -78,6 +78,16 @@ def test_write_in_application_uses_one_skill() -> None:
     assert decision.expected_tool_calls == 1
 
 
+def test_stt_misspelling_of_obsidian_keeps_application_write_route() -> None:
+    decision = create_router().route(
+        "открой absidian, напиши там стих о космосе"
+    )
+
+    assert decision.intent == IntentKind.APPLICATION_WRITE
+    assert decision.selected_skill == "write_in_application"
+    assert decision.arguments["app_name"] == "obsidian"
+
+
 def test_write_without_topic_requires_clarification() -> None:
     decision = create_router().route(
         "Напиши в Obsidian"

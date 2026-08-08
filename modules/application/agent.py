@@ -223,6 +223,16 @@ def is_contextual_follow_up(text: str) -> bool:
     normalized = " ".join(str(text).strip().split())
     if not normalized:
         return False
+    if normalized.lower().strip(" .!?") in {
+        "да",
+        "ага",
+        "давай",
+        "подтверждаю",
+        "yes",
+        "confirm",
+        "go ahead",
+    }:
+        return True
     if CONTEXTUAL_FOLLOW_UP_RE.search(normalized):
         return True
     return (
@@ -592,6 +602,18 @@ class AgentService:
         for message in reversed(history):
             if message.get("role") == role:
                 return content_to_text(message.get("content"))
+        return ""
+
+    @staticmethod
+    def _last_actionable_user_text(
+        history: list[dict[str, Any]],
+    ) -> str:
+        for message in reversed(history):
+            if message.get("role") != "user":
+                continue
+            text = content_to_text(message.get("content"))
+            if request_requires_action(text):
+                return text
         return ""
 
     def can_resolve_contextual_follow_up(self, text: str) -> bool:
@@ -1023,6 +1045,11 @@ class AgentService:
         previous_history = list(self.history)
         contextual_follow_up = self.can_resolve_contextual_follow_up(user_text)
         previous_user_text = self._last_message_text(previous_history, "user")
+        if contextual_follow_up:
+            previous_user_text = (
+                self._last_actionable_user_text(previous_history)
+                or previous_user_text
+            )
         selection_text = (
             f"Предыдущая цель: {previous_user_text}\nПродолжение: {user_text}"
             if contextual_follow_up and previous_user_text

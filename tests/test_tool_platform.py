@@ -447,6 +447,41 @@ def test_runner_rejects_missing_required_parameter() -> None:
     asyncio.run(scenario())
 
 
+def test_runner_normalizes_application_argument_alias() -> None:
+    async def scenario() -> None:
+        received: list[str] = []
+
+        def handler(app_name: str) -> str:
+            received.append(app_name)
+            return "ok"
+
+        registry = ToolRegistry()
+        registry.register_definition(
+            ToolDefinition(
+                name="open_application",
+                description="Open an application.",
+                parameters={
+                    "type": "object",
+                    "properties": {"app_name": {"type": "string"}},
+                    "required": ["app_name"],
+                },
+                handler=handler,
+            )
+        )
+
+        result = await ToolRunner(registry).execute(
+            create_tool_call(
+                "open_application",
+                {"application": "Obsidian"},
+            )
+        )
+
+        assert result.success
+        assert received == ["Obsidian"]
+
+    asyncio.run(scenario())
+
+
 def test_runner_adapts_legacy_string_result() -> None:
     async def scenario() -> None:
         registry = ToolRegistry()

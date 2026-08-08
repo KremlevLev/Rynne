@@ -207,6 +207,13 @@ def normalize_request_text(
 ) -> str:
     normalized = str(text).lower()
     normalized = normalized.replace("ё", "е")
+    # Common Whisper/Vosk transliterations must not turn an obvious app
+    # command into a generic chat request.
+    normalized = re.sub(
+        r"\b(?:absidian|obsidien|обсидиан|абсидиан)\b",
+        "obsidian",
+        normalized,
+    )
     normalized = re.sub(
         r"\s+",
         " ",
