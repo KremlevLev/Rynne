@@ -363,6 +363,12 @@ High-level Windows skills:
 3. If the user provides a topic, you may compose the requested text and pass
    the complete composed text to write_in_application.
 4. Use atomic GUI tools only when no high-level skill matches the task.
+5. A successful key press or paste is not proof that content appeared. Trust
+   write_in_application only when its verification.verified field is true.
+6. Do not close or restart the target application as a recovery step unless
+   the user asked for it or a tool result explicitly reports that restart is
+   required. Preserve the user's open document and switch to another verified
+   write strategy instead.
 
 """
 SYSTEM_PROMPT = build_system_prompt()

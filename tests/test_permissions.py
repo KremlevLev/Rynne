@@ -163,6 +163,23 @@ def test_pending_requests_are_visible() -> None:
     )
 
 
+def test_confirmation_request_is_emitted_immediately() -> None:
+    events: list[tuple[str, dict]] = []
+    manager = PermissionManager(
+        event_sink=lambda event_type, payload: events.append((event_type, payload))
+    )
+    context = create_policy_context(
+        "run_terminal_command",
+        risk=RiskLevel.EXECUTE,
+    )
+
+    manager.request(context)
+
+    assert events[0][0] == "approval_requested"
+    assert events[0][1]["operation_id"] == context.operation_id
+    assert events[0][1]["tool_name"] == "run_terminal_command"
+
+
 def test_wait_for_confirmation_can_be_confirmed() -> None:
     async def scenario() -> None:
         manager = PermissionManager()

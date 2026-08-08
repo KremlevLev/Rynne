@@ -8,9 +8,9 @@ import {
   Mic,
   Radio,
   ShieldCheck,
-  Sparkles,
   Wrench,
 } from "lucide-react";
+import { NovaMark } from "./NovaMark";
 
 export type GuideLocale = "ru" | "en";
 
@@ -241,7 +241,7 @@ export function Guide({ locale }: { locale: GuideLocale }) {
   return (
     <div className="guide-view">
       <section className="guide-hero">
-        <span className="guide-orb"><Sparkles size={24} /></span>
+        <span className="guide-orb"><NovaMark size={70} /></span>
         <div>
           <span className="eyebrow">{isRu ? "ПАМЯТКА NOVA" : "NOVA HANDBOOK"}</span>
           <h2>{isRu ? "Передайте задачу, а не набор кликов" : "Delegate an outcome, not a sequence of clicks"}</h2>

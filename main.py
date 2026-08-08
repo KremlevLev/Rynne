@@ -805,6 +805,9 @@ async def async_main() -> None:
         artifact_store,
         browser_manager,
     )
+    # Dynamic tools must be bound before the strict legacy registry validates
+    # that every published schema has an executable handler.
+    handlers["delegate_subagents"] = subagent_pool.delegate_subagents
 
     # ---------------------------------------------------------
     # СОЗДАНИЕ TOOL REGISTRY И ОТЛОЖЕННАЯ РЕГИСТРАЦИЯ ПЛАНОВ
@@ -880,7 +883,6 @@ async def async_main() -> None:
         ),
         disabled_kinds=NOVA_PROACTIVE_DISABLED_KINDS,
     )
-    handlers["delegate_subagents"] = subagent_pool.delegate_subagents
     proactive_confirmation = ProactiveConfirmationManager()
     website_watch_manager = WebsiteWatchManager(database)
     backup_watch_manager = BackupWatchManager(database)
@@ -1964,6 +1966,19 @@ async def test_reasoning_loop(request: str) -> None:
     
     # Создаём компоненты
     llm = NovaLLM()
+    debug_subagent_pool = SubagentPool(llm)
+    debug_handlers = build_handlers(
+        LocalMemory(),
+        TaskScheduler(),
+        await asyncio.to_thread(WindowsAppIndexer),
+        process_manager,
+        memory_store,
+        artifact_store,
+        BrowserManager(headless=True),
+    )
+    debug_handlers["delegate_subagents"] = (
+        debug_subagent_pool.delegate_subagents
+    )
     registry = ToolRegistry.from_legacy(
         [ts for ts in ALL_TOOLS if ts["function"]["name"] not in {
             "execute_plan", "get_plan_status", "cancel_plan",
@@ -1971,15 +1986,7 @@ async def test_reasoning_loop(request: str) -> None:
             "list_background_plans", "retry_background_plan",
             "cancel_background_plan",
         }],
-        build_handlers(
-            LocalMemory(),
-            TaskScheduler(),
-            await asyncio.to_thread(WindowsAppIndexer),
-            process_manager,
-            memory_store,
-            artifact_store,
-            BrowserManager(headless=True),
-        ),
+        debug_handlers,
     )
     runner = ToolRunner(registry)
     

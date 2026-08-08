@@ -9,19 +9,19 @@
       html, body, #root { width: 100%; height: 100%; margin: 0; background: #080a0f; }
       .boot { height: 100%; display: grid; place-items: center; color: #dfe3ff; font-family: Inter, "Segoe UI", sans-serif; }
       .boot-inner { display: grid; justify-items: center; gap: 18px; }
-      .boot-orb { width: 58px; height: 58px; border: 1px solid rgba(139,111,255,.55); border-radius: 19px; display: grid; place-items: center; background: radial-gradient(circle at 35% 25%, #8268dc, #242044 70%); box-shadow: 0 0 42px rgba(111,82,220,.28); animation: boot-pulse 1.6s ease-in-out infinite; }
-      .boot-orb::after { content: "✦"; font-size: 26px; }
+      .boot-orb { width: 62px; height: 62px; border: 0; border-radius: 16px; display: grid; place-items: center; background: transparent url("/nova-icon-green.png") center/contain no-repeat; box-shadow: 0 16px 42px rgba(0,0,0,.28), 0 0 24px rgba(80,185,129,.08); animation: boot-pulse 1.6s ease-in-out infinite; }
+      .boot-orb svg { display: none; }
       .boot-copy { display: grid; gap: 6px; text-align: center; }
       .boot-copy strong { font-size: 18px; letter-spacing: .01em; }
       .boot-copy span { color: #747d91; font-size: 12px; }
       .boot-line { width: 170px; height: 2px; overflow: hidden; border-radius: 2px; background: #181c27; }
-      .boot-line::after { content: ""; display: block; width: 45%; height: 100%; background: linear-gradient(90deg, transparent, #8e75ff, transparent); animation: boot-line 1.25s ease-in-out infinite; }
-      @keyframes boot-pulse { 50% { transform: translateY(-3px); box-shadow: 0 0 58px rgba(111,82,220,.42); } }
+      .boot-line::after { content: ""; display: block; width: 45%; height: 100%; background: linear-gradient(90deg, transparent, #68c997, transparent); animation: boot-line 1.25s ease-in-out infinite; }
+      @keyframes boot-pulse { 50% { transform: translateY(-3px); box-shadow: 0 0 42px rgba(80,185,129,.2); } }
       @keyframes boot-line { from { transform: translateX(-120%); } to { transform: translateX(340%); } }
     </style>
   </head>
   <body>
-    <div id="root"><div class="boot"><div class="boot-inner"><div class="boot-orb"></div><div class="boot-copy"><strong id="boot-title">Nova запускается</strong><span id="boot-status">Подключаю Core и голосовые сервисы…</span></div><div class="boot-line"></div></div></div></div>
+    <div id="root"><div class="boot"><div class="boot-inner"><div class="boot-orb" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="boot-crescent" x1="13" y1="50" x2="40" y2="9" gradientUnits="userSpaceOnUse"><stop stop-color="#4B34B4" stop-opacity="0"/><stop offset=".3" stop-color="#7250E3"/><stop offset=".64" stop-color="#A685FF"/><stop offset=".88" stop-color="#EEE5FF"/><stop offset="1" stop-color="#F6F1FF" stop-opacity="0"/></linearGradient><linearGradient id="boot-metal" x1="22" y1="20" x2="49" y2="48" gradientUnits="userSpaceOnUse"><stop stop-color="#F2EFF3"/><stop offset=".55" stop-color="#CBC6CF"/><stop offset="1" stop-color="#7D7783"/></linearGradient></defs><path d="M40.4 9.2C29.3 8.5 18.9 14.1 14.6 23.9C10.4 33.7 13 43.8 22.1 50.1C16.6 44.4 15.4 37.4 17.5 30C20.8 18.9 29.5 11.3 40.4 9.2Z" fill="url(#boot-crescent)"/><path d="M22.1 43V20H28L40.8 32.6V22H45.9V35.2L48.8 47.4L27.6 28V43H22.1Z" fill="url(#boot-metal)"/><path d="M43.7 13.2L44.8 16.3L48 17.4L44.8 18.5L43.7 21.8L42.6 18.5L39.4 17.4L42.6 16.3L43.7 13.2Z" fill="#DAD5DC"/></svg></div><div class="boot-copy"><strong id="boot-title">Nova запускается</strong><span id="boot-status">Подключаю Core и голосовые сервисы…</span></div><div class="boot-line"></div></div></div></div>
     <script>
       try {
         if (localStorage.getItem("nova.ui-locale") === "en") {

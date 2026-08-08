@@ -4,6 +4,7 @@ import {
   isConversationNearBottom,
   normalizeUiMode,
   normalizeUiLocale,
+  pendingPermissionFromEvent,
   readUiLocale,
   readUiMode,
   scrollConversationToBottom,
@@ -68,6 +69,53 @@ describe("eventToItem", () => {
       scrollTop: 1740,
       clientHeight: 600,
     })).toBe(true);
+  });
+});
+
+describe("permission bridge", () => {
+  it("turns a Core permission snapshot into a visible approval", () => {
+    const permission = pendingPermissionFromEvent({
+      event_type: "permissions",
+      payload: {
+        items: [{
+          operation_id: "op_1",
+          tool_name: "run_terminal_command",
+          risk: "execute",
+          message: "Run tests?",
+          arguments: { command: "pytest -q" },
+          expires_at: 123,
+        }],
+      },
+      created_at: 1,
+    });
+
+    expect(permission?.operationId).toBe("op_1");
+    expect(permission?.arguments.command).toBe("pytest -q");
+  });
+
+  it("shows an immediate approval event without waiting for a snapshot", () => {
+    const permission = pendingPermissionFromEvent({
+      event_type: "approval_requested",
+      payload: {
+        operation_id: "op_fast",
+        tool_name: "run_terminal_command",
+        risk: "execute",
+        message: "Run the command?",
+        arguments: { command: "npm test" },
+        expires_at: 456,
+      },
+      created_at: 3,
+    });
+
+    expect(permission?.operationId).toBe("op_fast");
+  });
+
+  it("clears the approval when Core has no pending permissions", () => {
+    expect(pendingPermissionFromEvent({
+      event_type: "permissions",
+      payload: { items: [] },
+      created_at: 2,
+    })).toBeNull();
   });
 });
 

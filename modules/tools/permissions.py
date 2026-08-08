@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from modules.tools.policy import (
     PolicyContext,
@@ -88,7 +88,11 @@ class PermissionManager:
     не получено до timeout, действие запрещается.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        event_sink: Callable[[str, dict[str, Any]], Any] | None = None,
+    ) -> None:
         self._pending: dict[
             str,
             PermissionRequest,
@@ -100,6 +104,21 @@ class PermissionManager:
         ] = {}
 
         self._lock = threading.RLock()
+        self._event_sink = event_sink
+
+    def set_event_sink(
+        self,
+        event_sink: Callable[[str, dict[str, Any]], Any] | None,
+    ) -> None:
+        self._event_sink = event_sink
+
+    def _emit(self, event_type: str, payload: dict[str, Any]) -> None:
+        if self._event_sink is None:
+            return
+        try:
+            self._event_sink(event_type, payload)
+        except Exception:
+            logger.exception("Не удалось отправить событие разрешения: %s.", event_type)
 
     def request(
         self,
@@ -150,6 +169,12 @@ class PermissionManager:
             policy_context.tool_name,
             decision.value,
         )
+
+        if request.decision in {
+            PolicyDecision.REQUIRE_CONFIRMATION,
+            PolicyDecision.REQUIRE_STRONG_CONFIRMATION,
+        }:
+            self._emit("approval_requested", request.to_dict())
 
         return request
 

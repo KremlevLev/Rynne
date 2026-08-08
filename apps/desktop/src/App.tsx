@@ -18,7 +18,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  Sparkles,
+  Orbit,
   Square,
   Terminal,
   Trash2,
@@ -36,6 +36,7 @@ import {
   type ProviderName,
 } from "./transport";
 import { Guide, type GuideLocale } from "./Guide";
+import { NovaMark } from "./NovaMark";
 
 type ViewKey = "dialog" | "tasks" | "automations" | "guide" | "settings";
 export type UiMode = "aura" | "focus" | "console";
@@ -50,6 +51,15 @@ type TimelineItem = {
   actionLabel?: string;
   proactiveEventId?: string;
   proactiveContextKey?: string;
+};
+
+type PendingPermission = {
+  operationId: string;
+  toolName: string;
+  risk: string;
+  message: string;
+  arguments: JsonObject;
+  expiresAt: number;
 };
 
 type TtsLanguage = "auto" | "ru" | "en";
@@ -306,6 +316,27 @@ function text(payload: JsonObject, key: string, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+export function pendingPermissionFromEvent(event: NovaEvent): PendingPermission | null {
+  if (event.event_type !== "permissions" && event.event_type !== "approval_requested") return null;
+  const candidate = event.event_type === "approval_requested"
+    ? event.payload
+    : Array.isArray(event.payload.items) ? event.payload.items[0] : null;
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const value = candidate as Record<string, unknown>;
+  const operationId = typeof value.operation_id === "string" ? value.operation_id : "";
+  if (!operationId) return null;
+  return {
+    operationId,
+    toolName: typeof value.tool_name === "string" ? value.tool_name : "tool",
+    risk: typeof value.risk === "string" ? value.risk : "execute",
+    message: typeof value.message === "string" ? value.message : "",
+    arguments: value.arguments && typeof value.arguments === "object" && !Array.isArray(value.arguments)
+      ? value.arguments as JsonObject
+      : {},
+    expiresAt: typeof value.expires_at === "number" ? value.expires_at : 0,
+  };
+}
+
 export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): TimelineItem | null {
   const id = `${event.event_type}_${event.created_at}_${Math.random()}`;
   const payload = event.payload;
@@ -460,6 +491,8 @@ export function App() {
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [voiceSource, setVoiceSource] = useState("stt");
   const [confirmingSuggestionId, setConfirmingSuggestionId] = useState<string | null>(null);
+  const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
+  const [permissionPending, setPermissionPending] = useState(false);
   const runtime = runtimePresentation(runtimeState, locale);
   const nav = navigation(locale);
   const modes = uiModeOptions(locale);
@@ -571,6 +604,12 @@ export function App() {
             const value = event.payload.progress;
             if (typeof value === "number") setTaskProgress(value);
           }
+          if (event.event_type === "permissions") {
+            setPendingPermission(pendingPermissionFromEvent(event));
+          }
+          if (event.event_type === "approval_requested") {
+            setPendingPermission(pendingPermissionFromEvent(event));
+          }
           if (event.event_type === "command_result") {
             const message = text(event.payload, "message");
             if (event.payload.success === false && message) {
@@ -596,7 +635,21 @@ export function App() {
     if (followConversationRef.current) {
       scrollConversationToBottom(conversationRef.current);
     }
-  }, [timeline]);
+  }, [timeline, pendingPermission]);
+
+  async function resolvePermission(granted: boolean) {
+    if (!pendingPermission || permissionPending) return;
+    setPermissionPending(true);
+    try {
+      await transport.send(
+        granted ? "confirm_permission" : "deny_permission",
+        { operation_id: pendingPermission.operationId },
+      );
+      setPendingPermission(null);
+    } finally {
+      setPermissionPending(false);
+    }
+  }
 
   function handleConversationScroll() {
     const element = conversationRef.current;
@@ -848,7 +901,7 @@ export function App() {
     <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-orb"><Sparkles size={17} /></div>
+          <div className="brand-orb"><NovaMark size={42} /></div>
           <div>
             <strong>Nova</strong>
             <span>
@@ -968,7 +1021,7 @@ export function App() {
                 <article key={item.id} className={`timeline ${item.kind}`}>
                   <div className="timeline-rail">
                     <span className={`timeline-dot ${item.status ?? ""}`}>
-                      {item.kind === "tool" ? <Wrench size={13} /> : item.kind === "suggestion" ? <Sparkles size={13} /> : item.kind === "assistant" ? <Bot size={13} /> : null}
+                      {item.kind === "tool" ? <Wrench size={13} /> : item.kind === "suggestion" ? <Orbit size={13} /> : item.kind === "assistant" ? <Bot size={13} /> : null}
                     </span>
                   </div>
                   <div className="timeline-content">
@@ -1003,6 +1056,25 @@ export function App() {
                   </div>
                 </article>
               ))}
+              {pendingPermission && (
+                <article className="permission-card" role="alert" aria-live="assertive">
+                  <div className="permission-icon"><ShieldCheck size={19} /></div>
+                  <div className="permission-copy">
+                    <span>{tx(locale, "НУЖНО ПОДТВЕРЖДЕНИЕ", "CONFIRMATION REQUIRED")}</span>
+                    <strong>{tx(locale, "Разрешить Nova выполнить действие?", "Allow Nova to run this action?")}</strong>
+                    <p>{pendingPermission.message || pendingPermission.toolName}</p>
+                    <code>{String(pendingPermission.arguments.command ?? pendingPermission.arguments.path ?? pendingPermission.toolName)}</code>
+                    <div className="permission-actions">
+                      <button className="permission-approve" disabled={permissionPending} onClick={() => void resolvePermission(true)}>
+                        {tx(locale, "Разрешить", "Allow")}
+                      </button>
+                      <button className="permission-deny" disabled={permissionPending} onClick={() => void resolvePermission(false)}>
+                        {tx(locale, "Отклонить", "Deny")}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              )}
             </div>
 
             {!followingConversation && (
@@ -1464,7 +1536,7 @@ export function App() {
         <section className="agent-state">
           <div className={busy || runtime.working ? "large-orb working" : "large-orb"}>
             <span />
-            <Sparkles size={23} />
+            <NovaMark size={96} />
           </div>
           <strong>{busy ? tx(locale, "Nova работает", "Nova is working") : runtime.label}</strong>
           <p>{activeTool}</p>

@@ -1,8 +1,19 @@
 # tests/test_skills_v2.py
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from modules.tools.skills import WindowsSkills
 from modules.tools.app_indexer import WindowsAppIndexer
+
+
+class FakeAppLauncher:
+    def launch_by_name(self, app_name: str) -> tuple[bool, str]:
+        return True, f"Opened {app_name}"
+
+    def find_app(self, app_name: str):
+        return None
 
 
 def test_write_in_application_rejects_empty_app_name() -> None:
@@ -57,6 +68,69 @@ def test_open_and_focus_rejects_empty_name() -> None:
 
     assert not result.success
     assert result.code == "EMPTY_APPLICATION_NAME"
+
+
+def test_obsidian_write_creates_and_rechecks_real_note(tmp_path: Path) -> None:
+    vault = tmp_path / "My Vault"
+    vault.mkdir()
+    config = tmp_path / "obsidian.json"
+    config.write_text(json.dumps({
+        "vaults": {
+            "vault-id": {
+                "path": str(vault),
+                "open": True,
+                "ts": 10,
+            },
+        },
+    }), encoding="utf-8")
+    opened_uris: list[str] = []
+    skills = WindowsSkills(
+        app_launcher=FakeAppLauncher(),
+        list_windows=lambda: "",
+        focus_window=lambda value: "focused",
+        press_hotkey=lambda value: "pressed",
+        type_text=lambda value: "typed",
+        get_active_window_title=lambda: "Obsidian",
+        obsidian_config_path=config,
+        open_uri=opened_uris.append,
+    )
+
+    result = skills.write_in_application(
+        app_name="Obsidian",
+        text="# Стих\n\nМеж звёзд летит мой тихий свет.",
+    )
+
+    assert result.success
+    assert result.verification.verified is True
+    assert result.verification.method == "obsidian_file_roundtrip"
+    note = vault / "Стих.md"
+    assert note.read_text(encoding="utf-8") == (
+        "# Стих\n\nМеж звёзд летит мой тихий свет.\n"
+    )
+    assert opened_uris and opened_uris[0].startswith("obsidian://open?")
+
+
+def test_generic_editor_never_claims_success_without_readback() -> None:
+    clipboard = {"value": "initial"}
+    skills = WindowsSkills(
+        app_launcher=FakeAppLauncher(),
+        list_windows=lambda: "",
+        focus_window=lambda value: "focused",
+        press_hotkey=lambda value: "pressed",
+        type_text=lambda value: "typed",
+        get_active_window_title=lambda: "Notepad",
+        clipboard_get=lambda: clipboard["value"],
+        clipboard_set=lambda value: clipboard.__setitem__("value", value),
+    )
+
+    result = skills.write_in_application(
+        app_name="Notepad",
+        text="Expected text",
+    )
+
+    assert not result.success
+    assert result.code == "TEXT_NOT_OBSERVED"
+    assert result.verification.verified is False
 
 
 def test_selection_includes_high_level_skills() -> None:

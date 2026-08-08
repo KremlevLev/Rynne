@@ -730,6 +730,7 @@ class ToolRunner:
             or PermissionManager()
         )
         self._event_sink = event_sink
+        self.permission_manager.set_event_sink(self._emit_event)
 
     def set_event_sink(
         self,
@@ -740,6 +741,7 @@ class ToolRunner:
     ) -> None:
         """Подключает наблюдателя presentation layer без зависимости от UI."""
         self._event_sink = event_sink
+        self.permission_manager.set_event_sink(self._emit_event)
 
     def _emit_event(
         self,
