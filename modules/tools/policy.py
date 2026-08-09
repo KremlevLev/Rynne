@@ -147,6 +147,11 @@ def evaluate_policy(
     if policy_context.tool_name in ALWAYS_CONFIRMED:
         return PolicyDecision.REQUIRE_CONFIRMATION
 
+    # Any write to an external service (Telegram, Slack, email, social APIs)
+    # requires a visible user decision even when it arrived through MCP.
+    if policy_context.tool_category == ToolCategory.NETWORK_WRITE:
+        return PolicyDecision.REQUIRE_CONFIRMATION
+
     if policy_context.risk == RiskLevel.READ_ONLY:
         return PolicyDecision.ALLOW
 

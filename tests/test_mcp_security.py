@@ -213,6 +213,7 @@ class TestInferMCPToolRisk:
         """Test inference of execute risk."""
         assert infer_mcp_tool_risk("run_command", "Execute command") == RiskLevel.EXECUTE
         assert infer_mcp_tool_risk("shell_exec", "Run shell") == RiskLevel.EXECUTE
+        assert infer_mcp_tool_risk("send_message", "Send Telegram message") == RiskLevel.EXECUTE
 
     def test_infer_destructive(self) -> None:
         """Test inference of destructive risk."""
@@ -237,6 +238,12 @@ class TestInferMCPToolCategory:
     def test_infer_web_category(self) -> None:
         """Test inference of web category."""
         assert infer_mcp_tool_category("fetch_url", "Fetch web page") == ToolCategory.WEB_READ
+        assert infer_mcp_tool_category("read_messages", "Read Telegram chat") == ToolCategory.WEB_READ
+
+    def test_infer_network_write_category(self) -> None:
+        assert infer_mcp_tool_category(
+            "send_message", "Send Telegram message"
+        ) == ToolCategory.NETWORK_WRITE
 
     def test_infer_development_category(self) -> None:
         """Test inference of development category."""

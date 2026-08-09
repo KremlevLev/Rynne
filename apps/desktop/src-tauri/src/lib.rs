@@ -47,6 +47,23 @@ struct ProviderKeySummary {
     model: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ServiceSecretSummary {
+    service: String,
+    hint: String,
+    source: String,
+    removable: bool,
+}
+
+fn service_variable(service: &str) -> Result<&'static str, String> {
+    match service.trim().to_lowercase().as_str() {
+        "telegram" => Ok("TELEGRAM_BOT_TOKEN"),
+        "tavily" => Ok("TAVILY_API_KEY"),
+        _ => Err("Unsupported integration service.".to_owned()),
+    }
+}
+
 fn provider_variables(provider: &str) -> Result<(&'static str, &'static str), String> {
     match provider.trim().to_lowercase().as_str() {
         "groq" => Ok(("GROQ_API_KEYS", "GROQ_API_KEY")),
@@ -270,6 +287,35 @@ fn validate_api_key(api_key: &str) -> Result<&str, String> {
     Ok(key)
 }
 
+fn validate_service_secret(secret: &str) -> Result<&str, String> {
+    let value = secret.trim();
+    if value.len() < 12
+        || value.len() > 512
+        || value.contains(char::is_whitespace)
+        || !value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "_-.:".contains(character))
+    {
+        return Err("Integration key has an invalid format.".to_owned());
+    }
+    Ok(value)
+}
+
+fn write_service_secret(env_path: &Path, variable: &str, value: Option<&str>) -> Result<(), String> {
+    let current = std::fs::read_to_string(env_path).unwrap_or_default();
+    let mut lines: Vec<String> = current
+        .lines()
+        .filter(|line| line.split_once('=').map(|(name, _)| name.trim()) != Some(variable))
+        .map(str::to_owned)
+        .collect();
+    if let Some(secret) = value.filter(|secret| !secret.is_empty()) {
+        lines.push(format!("{variable}={secret}"));
+    }
+    let contents = if lines.is_empty() { String::new() } else { format!("{}\n", lines.join("\n")) };
+    std::fs::write(env_path, contents)
+        .map_err(|error| format!("Cannot save Nova integration settings: {error}"))
+}
+
 #[tauri::command]
 fn nova_connect(app: AppHandle, state: State<'_, Arc<CoreState>>) -> bool {
     ensure_core_running(&app, state.inner())
@@ -382,6 +428,67 @@ fn nova_list_provider_keys(app: AppHandle) -> Result<Vec<ProviderKeySummary>, St
     }
 
     Ok(summaries)
+}
+
+#[tauri::command]
+fn nova_list_service_secrets(app: AppHandle) -> Result<Vec<ServiceSecretSummary>, String> {
+    let env_path = provider_env_path(&app)?;
+    let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
+    let mut summaries = Vec::new();
+    for service in ["telegram", "tavily"] {
+        let variable = service_variable(service)?;
+        if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
+            summaries.push(ServiceSecretSummary {
+                service: service.to_owned(),
+                hint: key_hint(&value),
+                source: "nova".to_owned(),
+                removable: true,
+            });
+        } else if let Ok(value) = std::env::var(variable) {
+            if !value.trim().is_empty() {
+                summaries.push(ServiceSecretSummary {
+                    service: service.to_owned(),
+                    hint: key_hint(value.trim()),
+                    source: "environment".to_owned(),
+                    removable: false,
+                });
+            }
+        }
+    }
+    Ok(summaries)
+}
+
+#[tauri::command]
+fn nova_set_service_secret(
+    service: String,
+    secret: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    let variable = service_variable(&service)?;
+    let value = validate_service_secret(&secret)?;
+    if service.eq_ignore_ascii_case("telegram") && !value.contains(':') {
+        return Err("Telegram Bot token must contain a colon.".to_owned());
+    }
+    let env_path = provider_env_path(&app)?;
+    write_service_secret(&env_path, variable, Some(value))?;
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)
+}
+
+#[tauri::command]
+fn nova_remove_service_secret(
+    service: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    let variable = service_variable(&service)?;
+    let env_path = provider_env_path(&app)?;
+    write_service_secret(&env_path, variable, None)?;
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)
 }
 
 fn add_provider_key(
@@ -570,6 +677,16 @@ fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<
             command.env(model_variable, models.join(","));
         }
     }
+    for service in ["telegram", "tavily"] {
+        let variable = service_variable(service)?;
+        if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
+            command.env(variable, value);
+        } else if let Ok(value) = std::env::var(variable) {
+            if !value.trim().is_empty() {
+                command.env(variable, value);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -750,7 +867,10 @@ pub fn run() {
             nova_list_provider_keys,
             nova_add_provider_key,
             nova_update_provider_key_model,
-            nova_remove_provider_key
+            nova_remove_provider_key,
+            nova_list_service_secrets,
+            nova_set_service_secret,
+            nova_remove_service_secret
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {

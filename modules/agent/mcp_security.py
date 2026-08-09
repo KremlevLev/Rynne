@@ -276,7 +276,12 @@ def infer_mcp_tool_risk(tool_name: str, description: str = "") -> RiskLevel:
     if any(word in lowered for word in ["write", "create", "update", "modify", "edit"]):
         return RiskLevel.WRITE
     
-    if any(word in lowered for word in ["execute", "run", "command", "shell", "bash"]):
+    # Sending data to a person/service is an external side effect. Classify it
+    # as execute so Nova's permission layer must obtain explicit confirmation.
+    if any(word in lowered for word in [
+        "execute", "run", "command", "shell", "bash",
+        "send", "reply", "publish", "post_message",
+    ]):
         return RiskLevel.EXECUTE
     
     if any(word in lowered for word in ["read", "get", "list", "search", "query"]):
@@ -288,6 +293,14 @@ def infer_mcp_tool_risk(tool_name: str, description: str = "") -> RiskLevel:
 def infer_mcp_tool_category(tool_name: str, description: str = "") -> ToolCategory:
     """Infer category from tool name and description."""
     lowered = f"{tool_name} {description}".lower()
+
+    if any(word in lowered for word in [
+        "send", "reply", "publish", "post_message",
+    ]):
+        return ToolCategory.NETWORK_WRITE
+
+    if any(word in lowered for word in ["telegram", "message", "chat"]):
+        return ToolCategory.WEB_READ
     
     if any(word in lowered for word in ["file", "read", "write", "path"]):
         return ToolCategory.FILE_READ if "read" in lowered else ToolCategory.FILE_WRITE

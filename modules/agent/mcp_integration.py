@@ -10,12 +10,92 @@ import json
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 from modules.agent.mcp_gateway import MCPGateway, MCPServerConfig
 
 logger = logging.getLogger("MCPIntegration")
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def create_bundled_telegram_server_config(
+    *,
+    project_root: Path | None = None,
+    python_executable: str | None = None,
+) -> MCPServerConfig | None:
+    """Build the opt-in Telegram MCP config without exposing secrets as tools."""
+    if not _env_flag("NOVA_TELEGRAM_MCP_ENABLED"):
+        return None
+    api_id = os.environ.get("TELEGRAM_API_ID", "").strip()
+    api_hash = os.environ.get("TELEGRAM_API_HASH", "").strip()
+    if not api_id.isdigit() or not api_hash:
+        logger.warning(
+            "Telegram MCP is enabled but credentials are missing. "
+            "Run scripts/setup_telegram_mcp.py."
+        )
+        return None
+    root = (project_root or Path(__file__).resolve().parents[2]).resolve()
+    server_path = root / "integrations" / "telegram_mcp" / "server.py"
+    if not server_path.is_file():
+        logger.warning("Bundled Telegram MCP server is missing: %s", server_path)
+        return None
+    env = {
+        "TELEGRAM_API_ID": api_id,
+        "TELEGRAM_API_HASH": api_hash,
+    }
+    session_path = os.environ.get("TELEGRAM_SESSION_PATH", "").strip()
+    if session_path:
+        env["TELEGRAM_SESSION_PATH"] = session_path
+    executable = python_executable or sys.executable
+    packaged = bool(getattr(sys, "frozen", False)) and python_executable is None
+    return MCPServerConfig(
+        name="telegram",
+        command=executable,
+        args=["--telegram-mcp-server"] if packaged else [str(server_path)],
+        env=env,
+        enabled=True,
+        transport="stdio",
+        timeout=45.0,
+    )
+
+
+def create_bundled_telegram_bot_server_config(
+    *,
+    project_root: Path | None = None,
+    python_executable: str | None = None,
+) -> MCPServerConfig | None:
+    """Build the official Bot API/Telegram Business MCP configuration."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token or ":" not in token:
+        return None
+    root = (project_root or Path(__file__).resolve().parents[2]).resolve()
+    server_path = root / "integrations" / "telegram_bot_mcp" / "server.py"
+    if not server_path.is_file():
+        logger.warning("Bundled Telegram Business MCP server is missing: %s", server_path)
+        return None
+    env = {"TELEGRAM_BOT_TOKEN": token}
+    store_path = os.environ.get("TELEGRAM_BOT_STORE_PATH", "").strip()
+    if store_path:
+        env["TELEGRAM_BOT_STORE_PATH"] = store_path
+    executable = python_executable or sys.executable
+    packaged = bool(getattr(sys, "frozen", False)) and python_executable is None
+    return MCPServerConfig(
+        name="telegram_business",
+        command=executable,
+        args=["--telegram-bot-mcp-server"] if packaged else [str(server_path)],
+        env=env,
+        enabled=True,
+        transport="stdio",
+        timeout=45.0,
+    )
 
 
 def _resolve_env_references(
@@ -377,6 +457,14 @@ async def bootstrap_mcp_with_auto_discovery(
     )
     for server_config in configured_gateway._servers.values():
         gateway.register_server(server_config)
+
+    telegram_config = create_bundled_telegram_server_config()
+    if telegram_config is not None and telegram_config.name not in gateway._servers:
+        gateway.register_server(telegram_config)
+
+    telegram_bot_config = create_bundled_telegram_bot_server_config()
+    if telegram_bot_config is not None and telegram_bot_config.name not in gateway._servers:
+        gateway.register_server(telegram_bot_config)
     
     # Auto-discover localhost MCP servers (SSE transport)
     if auto_discover:

@@ -12,6 +12,7 @@ export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type EventListener = (event: NovaEvent) => void;
 export type ConnectionListener = (state: ConnectionState) => void;
 export type ProviderName = "groq" | "openrouter" | "gemini";
+export type ServiceName = "telegram" | "tavily";
 export interface ProviderKeySummary {
   provider: ProviderName;
   index: number;
@@ -19,6 +20,12 @@ export interface ProviderKeySummary {
   source: "nova" | "environment";
   removable: boolean;
   model: string;
+}
+export interface ServiceSecretSummary {
+  service: ServiceName;
+  hint: string;
+  source: "nova" | "environment";
+  removable: boolean;
 }
 
 export interface NovaTransport {
@@ -28,6 +35,9 @@ export interface NovaTransport {
   addProviderKey(provider: ProviderName, apiKey: string, model?: string): Promise<void>;
   updateProviderKeyModel(provider: ProviderName, index: number, model: string): Promise<void>;
   removeProviderKey(provider: ProviderName, index: number): Promise<void>;
+  listServiceSecrets(): Promise<ServiceSecretSummary[]>;
+  setServiceSecret(service: ServiceName, secret: string): Promise<void>;
+  removeServiceSecret(service: ServiceName): Promise<void>;
 }
 
 export class TauriNovaTransport implements NovaTransport {
@@ -128,6 +138,18 @@ export class TauriNovaTransport implements NovaTransport {
       provider,
       index,
     });
+  }
+
+  async listServiceSecrets(): Promise<ServiceSecretSummary[]> {
+    return invoke<ServiceSecretSummary[]>("nova_list_service_secrets");
+  }
+
+  async setServiceSecret(service: ServiceName, secret: string): Promise<void> {
+    await invoke("nova_set_service_secret", { service, secret });
+  }
+
+  async removeServiceSecret(service: ServiceName): Promise<void> {
+    await invoke("nova_remove_service_secret", { service });
   }
 }
 
@@ -292,6 +314,18 @@ class DemoNovaTransport implements NovaTransport {
   }
 
   async removeProviderKey(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async listServiceSecrets(): Promise<ServiceSecretSummary[]> {
+    return [];
+  }
+
+  async setServiceSecret(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async removeServiceSecret(): Promise<void> {
     return Promise.resolve();
   }
 

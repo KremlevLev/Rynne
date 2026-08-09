@@ -34,6 +34,8 @@ import {
   type NovaTransport,
   type ProviderKeySummary,
   type ProviderName,
+  type ServiceName,
+  type ServiceSecretSummary,
 } from "./transport";
 import { Guide, type GuideLocale } from "./Guide";
 import { NovaMark } from "./NovaMark";
@@ -628,6 +630,11 @@ export function App() {
   const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
   const [providerRuntime, setProviderRuntime] = useState<ProviderRuntime | null>(null);
   const [providerKeysLoading, setProviderKeysLoading] = useState(false);
+  const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretSummary[]>([]);
+  const [serviceDrafts, setServiceDrafts] = useState<Record<ServiceName, string>>({
+    telegram: "",
+    tavily: "",
+  });
   const [settingsStatus, setSettingsStatus] = useState("");
   const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
   const [ttsSpeedDraft, setTtsSpeedDraft] = useState(1);
@@ -877,7 +884,10 @@ export function App() {
   }
 
   useEffect(() => {
-    if (connection === "connected") void refreshProviderKeys();
+    if (connection === "connected") {
+      void refreshProviderKeys();
+      void refreshServiceSecrets();
+    }
   }, [connection]);
 
   useEffect(() => {
@@ -1069,6 +1079,40 @@ export function App() {
       );
     } finally {
       setProviderKeysLoading(false);
+    }
+  }
+
+  async function refreshServiceSecrets() {
+    try {
+      setServiceSecrets(await transport.listServiceSecrets());
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось загрузить интеграции.", "Could not load integrations."),
+      );
+    }
+  }
+
+  async function saveServiceSecret(service: ServiceName) {
+    const secret = serviceDrafts[service].trim();
+    if (secret.length < 12) return;
+    setSettingsStatus(tx(locale, "Сохраняю ключ и перезапускаю Nova Core…", "Saving the key and restarting Nova Core…"));
+    try {
+      await transport.setServiceSecret(service, secret);
+      setServiceDrafts((current) => ({ ...current, [service]: "" }));
+      await refreshServiceSecrets();
+      setSettingsStatus(tx(locale, "Интеграция подключена.", "Integration connected."));
+    } catch (error) {
+      setSettingsStatus(error instanceof Error ? error.message : tx(locale, "Не удалось сохранить ключ.", "Could not save the key."));
+    }
+  }
+
+  async function removeServiceSecret(service: ServiceName) {
+    try {
+      await transport.removeServiceSecret(service);
+      await refreshServiceSecrets();
+      setSettingsStatus(tx(locale, "Интеграция отключена.", "Integration disconnected."));
+    } catch (error) {
+      setSettingsStatus(error instanceof Error ? error.message : tx(locale, "Не удалось удалить ключ.", "Could not remove the key."));
     }
   }
 
@@ -1841,6 +1885,80 @@ export function App() {
                 <Plus size={15} /> {tx(locale, "Добавить ключ", "Add key")}
               </button>
               {settingsStatus && <p className="settings-status">{settingsStatus}</p>}
+            </div>
+            <div className="settings-card provider-card integration-card">
+              <span className="settings-icon"><Bot size={22} /></span>
+              <div>
+                <span className="eyebrow">{tx(locale, "ИНТЕГРАЦИИ", "INTEGRATIONS")}</span>
+                <h2>{tx(locale, "Telegram и веб-поиск", "Telegram and web search")}</h2>
+                <p>{tx(
+                  locale,
+                  "Секреты хранятся локально и отображаются только в маскированном виде. Telegram использует официального Business-бота, Tavily улучшает поиск в интернете.",
+                  "Secrets stay local and are only shown in masked form. Telegram uses an official connected Business bot; Tavily improves web search.",
+                )}</p>
+              </div>
+              <div className="integration-grid">
+                {([
+                  {
+                    service: "telegram" as const,
+                    title: "Telegram Business Bot",
+                    descriptionRu: "Создайте бота через @BotFather, включите Business Mode и подключите его в настройках Telegram. Nova увидит новые разрешённые диалоги после подключения.",
+                    descriptionEn: "Create a bot with @BotFather, enable Business Mode, then connect it in Telegram settings. Nova sees newly observed permitted chats after connection.",
+                    placeholder: "123456789:AA…",
+                  },
+                  {
+                    service: "tavily" as const,
+                    title: "Tavily Search",
+                    descriptionRu: "Ключ Tavily для качественного веб-поиска. Без него Nova продолжит использовать бесплатный резервный поиск.",
+                    descriptionEn: "Tavily key for higher-quality web search. Without it, Nova keeps using the free fallback search.",
+                    placeholder: "tvly-…",
+                  },
+                ]).map((option) => {
+                  const configured = serviceSecrets.find((item) => item.service === option.service);
+                  return (
+                    <section className="provider-group integration-service" key={option.service}>
+                      <header>
+                        <span>
+                          <strong>{option.title}</strong>
+                          <small>{tx(locale, option.descriptionRu, option.descriptionEn)}</small>
+                        </span>
+                        <b>{configured ? tx(locale, "ВКЛ", "ON") : tx(locale, "ВЫКЛ", "OFF")}</b>
+                      </header>
+                      {configured ? (
+                        <div className="provider-key">
+                          <span>
+                            <code>{configured.hint}</code>
+                            <small>{configured.source === "nova" ? tx(locale, "Добавлен в Nova", "Added in Nova") : tx(locale, "Системная переменная", "System environment variable")}</small>
+                          </span>
+                          {configured.removable && (
+                            <button onClick={() => void removeServiceSecret(option.service)} title={tx(locale, "Отключить", "Disconnect")}>
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="integration-secret-row">
+                          <input
+                            type="password"
+                            value={serviceDrafts[option.service]}
+                            onChange={(event) => setServiceDrafts((current) => ({ ...current, [option.service]: event.target.value }))}
+                            onKeyDown={(event) => { if (event.key === "Enter") void saveServiceSecret(option.service); }}
+                            placeholder={option.placeholder}
+                            autoComplete="off"
+                          />
+                          <button
+                            className="save-settings"
+                            onClick={() => void saveServiceSecret(option.service)}
+                            disabled={serviceDrafts[option.service].trim().length < 12}
+                          >
+                            <Plus size={14} /> {tx(locale, "Подключить", "Connect")}
+                          </button>
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
             </div>
           </div>
         ) : (

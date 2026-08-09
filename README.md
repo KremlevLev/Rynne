@@ -323,6 +323,32 @@ See [`docs/desktop_architecture.md`](docs/desktop_architecture.md) for the archi
 
 ## MCP: connect the services you use
 
+### Telegram Business Bot (recommended)
+
+Create a bot with `@BotFather`, enable its Business Mode, connect it to your
+Telegram account, and paste the Bot Token in **Settings → Integrations**. Nova
+then receives permitted new business messages, keeps a local searchable cache,
+and can reply on behalf of the connected account after confirmation. The Bot
+API does not expose arbitrary old history: a chat appears after a new message
+is observed through the connection. The same settings screen accepts a Tavily
+API key for higher-quality web search.
+
+### Personal Telegram through MCP (advanced)
+
+Nova ships an optional local Telegram MCP adapter for your real account. It can
+list and search chats, read recent history and send a confirmed message without
+guessing screen coordinates. Authorize it once, then restart Core:
+
+```powershell
+py -m pip install -r requirements.txt
+py scripts/setup_telegram_mcp.py
+```
+
+The session stays on this PC. Reading is silent; sending always shows a Nova
+confirmation card before anything leaves your account. Opening a visible chat
+still uses the Chrome skill, so API access and on-screen navigation complement
+instead of confusing each other.
+
 Nova supports `stdio`, Streamable HTTP, and legacy SSE through the official MCP Python SDK. Save a standard `mcpServers` configuration:
 
 ```env

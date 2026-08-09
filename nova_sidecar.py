@@ -14,6 +14,36 @@ import traceback
 
 
 def run() -> int:
+    if "--telegram-bot-mcp-server" in sys.argv:
+        for stream in (sys.stdout, sys.stdin, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(
+                    encoding="utf-8",
+                    errors="replace",
+                    newline="\n",
+                    write_through=True,
+                )
+        from integrations.telegram_bot_mcp.server import mcp
+
+        mcp.run(transport="stdio")
+        return 0
+
+    if "--telegram-mcp-server" in sys.argv:
+        # In an installed build the same bundled executable acts as a separate
+        # stdio MCP process. Keep stdout untouched: it carries MCP frames.
+        for stream in (sys.stdout, sys.stdin, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(
+                    encoding="utf-8",
+                    errors="replace",
+                    newline="\n",
+                    write_through=True,
+                )
+        from integrations.telegram_mcp.server import mcp
+
+        mcp.run(transport="stdio")
+        return 0
+
     protocol_stdout = sys.stdout
     for stream in (
         protocol_stdout,

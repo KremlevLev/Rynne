@@ -322,6 +322,12 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .provider-key button { display: grid; flex: 0 0 auto; place-items: center; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 7px; color: #737e8e; background: transparent; cursor: pointer; }
 .provider-key button:hover { color: #ff96a7; background: rgba(251,113,133,.09); }
 .provider-add-row { display: grid; grid-template-columns: minmax(120px, .45fr) minmax(210px, 1.1fr) minmax(210px, 1fr); gap: 12px; }
+.integration-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.integration-service { display: grid; align-content: start; gap: 12px; }
+.integration-service header small { min-height: 58px; }
+.integration-secret-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.integration-secret-row input { min-width: 0; }
+.integration-secret-row .save-settings { margin: 0; white-space: nowrap; }
 .save-settings { display: flex; align-items: center; gap: 7px; }
 .appearance-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .appearance-option { display: grid; align-content: start; gap: 11px; min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 12px; color: #8f99aa; background: rgba(8,11,16,.55); text-align: left; cursor: pointer; transition: .18s ease; }
@@ -691,6 +697,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   .app-shell { grid-template-columns: 210px minmax(500px, 1fr); }
   .context-panel { display: none; }
   .provider-pool { grid-template-columns: 1fr; }
+  .integration-grid { grid-template-columns: 1fr; }
   .voice-mode-options { grid-template-columns: 1fr; }
   .tts-voice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tts-controls { grid-template-columns: 1fr; }

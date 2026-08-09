@@ -74,6 +74,39 @@ Before adding a server:
 4. Put credentials in environment variables, never in committed JSON.
 5. Start with read-only tools and test discovery plus one real tool call.
 
+## Bundled Telegram Business Bot MCP (recommended)
+
+Add `TELEGRAM_BOT_TOKEN` in the desktop Settings → Integrations screen. The
+official Bot API connection requires no `api_id` or `api_hash`. After the bot is
+connected to the user's Telegram Business account, Nova exposes status,
+observed chats, cached messages, and confirmed sending as MCP tools. Only events
+received after connection are available; Telegram does not provide arbitrary
+historical chats to bots.
+
+## Bundled personal Telegram MCP (advanced)
+
+Nova includes an opt-in, local MTProto MCP server with a deliberately small
+surface: connection status, chat listing, recent messages, message search and
+sending. It runs as a separate stdio process and uses the user's real Telegram
+account through Telethon; it is not a Telegram bot.
+
+1. Create an application at `https://my.telegram.org/apps` and keep its API
+   hash private.
+2. Install dependencies and authorize once in an interactive terminal:
+
+```powershell
+py -m pip install -r requirements.txt
+py scripts/setup_telegram_mcp.py
+```
+
+3. Restart Nova Core. The server is registered automatically when
+   `NOVA_TELEGRAM_MCP_ENABLED=true` is present in the local `.env`.
+
+The Telethon session is stored under `%LOCALAPPDATA%\Nova\telegram-mcp` by
+default. Never commit `.env` or the `.session` file. Reading tools run without
+prompts; `send_message` is classified as a network write and always requires
+visible confirmation in Nova before the MCP call is allowed.
+
 Protocol and SDK references:
 
 - https://modelcontextprotocol.io/

@@ -23,7 +23,7 @@ CORE_RESOURCE_DIR = TAURI_ROOT / "resources" / "nova-core"
 CORE_BUILD_MANIFEST = TAURI_ROOT / "resources" / "nova-core.build.json"
 PYINSTALLER_ROOT = PROJECT_ROOT / "build" / "pyinstaller"
 CORE_ENTRY_POINT = PROJECT_ROOT / "nova_sidecar.py"
-BUILD_RECIPE_VERSION = 2
+BUILD_RECIPE_VERSION = 3
 
 
 def run(command: list[str], *, cwd: Path = PROJECT_ROOT) -> None:
@@ -76,6 +76,7 @@ def source_fingerprint() -> str:
         PROJECT_ROOT / "requirements.txt",
         *sorted((PROJECT_ROOT / "core").rglob("*.py")),
         *sorted((PROJECT_ROOT / "modules").rglob("*.py")),
+        *sorted((PROJECT_ROOT / "integrations").rglob("*.py")),
         *sorted((PROJECT_ROOT / "data" / "skills").rglob("*.md")),
     ]
     for path in sources:
@@ -160,6 +161,12 @@ def build_core(*, force: bool = False) -> Path:
         "mcp.client.stdio",
         "--hidden-import",
         "mcp.client.sse",
+        "--hidden-import",
+        "mcp.server.fastmcp",
+        "--hidden-import",
+        "telethon",
+        "--hidden-import",
+        "integrations.telegram_bot_mcp.server",
         "--hidden-import",
         "playwright.async_api",
         str(CORE_ENTRY_POINT),

@@ -296,6 +296,9 @@ MCP_SERVER_ALIASES: dict[str, tuple[str, ...]] = {
     "websearch": ("поиск в интернете", "в сети", "web search"),
     "gdrive": ("google drive", "гугл драйв", "gdrive"),
     "slack": ("slack", "слак", "канал"),
+    "telegram": (
+        "telegram", "телеграм", "телегу", "сообщение", "переписка", "чат",
+    ),
     "jira": ("jira", "жира", "ticket"),
     "docker": ("docker", "докер", "контейнер"),
     "sqlite": ("sqlite", "sql", "база данных"),
