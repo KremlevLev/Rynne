@@ -31,6 +31,7 @@ class IntentKind(StrEnum):
     FILE_OPERATION = "file_operation"
     DEVELOPMENT = "development"
     WEB = "web"
+    MESSAGING = "messaging"
     MEMORY = "memory"
     REMINDER = "reminder"
 

@@ -107,10 +107,27 @@ class GoalLedger:
                 {"read_text_file", "read_artifact"},
             )
 
+        telegram_context = _contains(normalized, (
+            "telegram", "телеграм", "телегу",
+        ))
+        messaging_requested = _contains(normalized, (
+            "напиши", "написать", "ответь", "ответить", "отправь",
+            "отправить", "сообщение", "send ", "reply ",
+        ))
+        if telegram_context and messaging_requested:
+            require(
+                "telegram_send",
+                "Отправить сообщение точному Telegram-получателю после подтверждения.",
+                {
+                    "mcp_telegram_business_send_message",
+                    "mcp_telegram_send_message",
+                },
+            )
+
         app_context = _contains(normalized, (
-            "приложен", "программ", "блокнот", "калькулятор", "telegram",
-            "телеграм", "discord", "vscode", "vs code",
-        )) and not browser_context
+            "приложен", "программ", "блокнот", "калькулятор",
+            "discord", "vscode", "vs code",
+        )) and not browser_context and not telegram_context
         writing_requested = _contains(normalized, (
             "напиши", "введи", "вставь", "напечатай", "отправь",
         ))

@@ -32,6 +32,20 @@ def test_code_change_requires_mutation_and_verification() -> None:
     assert ledger.tool_hints == {"apply_text_patch", "run_project_tests"}
 
 
+def test_telegram_message_requires_real_send_not_application_typing() -> None:
+    ledger = GoalLedger.from_request(
+        "Напиши Владу в Telegram: привет",
+        {
+            "mcp_telegram_business_resolve_chat",
+            "mcp_telegram_business_send_message",
+            "write_in_application",
+        },
+    )
+
+    assert [item.key for item in ledger.requirements] == ["telegram_send"]
+    assert ledger.tool_hints == {"mcp_telegram_business_send_message"}
+
+
 def test_ledger_counts_only_successful_tool_results() -> None:
     ledger = GoalLedger.from_request(
         "Открой сайт и проверь страницу",

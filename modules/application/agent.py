@@ -22,6 +22,7 @@ from modules.input_hub.models import (
 )
 from modules.routing.decision import (
     ExecutionStrategy,
+    IntentKind,
 )
 from modules.routing.intent import (
     DeterministicIntentRouter,
@@ -42,6 +43,7 @@ from modules.brain.tool_calls import (
     canonical_tool_signature,
     deduplicate_tool_calls,
     extract_xml_tool_calls,
+    extract_json_tool_calls,
 )
 from modules.domain.results import AssistantResponse, ToolResult
 from modules.tools.runtime import ToolRegistry, ToolRunner
@@ -123,6 +125,17 @@ TOOL CALL REPAIR:
 готового узкого инструмента нет, используй подходящий высокоуровневый plan/tool.
 Задай вопрос только когда без одного конкретного значения невозможно безопасно
 сформировать даже первый вызов.
+""".strip()
+
+TELEGRAM_EXECUTION_PROMPT = """
+TELEGRAM RECIPIENT CONTRACT:
+For an outgoing Telegram message, never invent a contact identifier and never
+print a JSON/tool-shaped promise as the answer. First call the available
+Telegram resolve_chat or list_chats tool with the user's spoken name. If one
+chat is resolved, call the actual registered send_message tool with its exact
+title or username. If several chats match, ask one short question listing the
+candidates. Sending is complete only after the send tool returns sent=true;
+the normal network-write confirmation must show the recipient and exact text.
 """.strip()
 
 TOOL_CONTINUATION_PROMPT = """
@@ -1349,6 +1362,11 @@ class AgentService:
             if action_was_requested
             else ""
         )
+        telegram_prompt = (
+            "\n\n" + TELEGRAM_EXECUTION_PROMPT
+            if execution_decision.intent == IntentKind.MESSAGING
+            else ""
+        )
         learned_prompt = (
             "\n\n" + learned_execution_prompt
             if learned_execution_prompt
@@ -1411,6 +1429,7 @@ class AgentService:
                 "content": (
                     SYSTEM_PROMPT
                     + execution_prompt
+                    + telegram_prompt
                     + learned_prompt
                     + interactive_browser_prompt
                     + contextual_prompt
@@ -1468,8 +1487,9 @@ class AgentService:
                     else set()
                 ),
             )
+            json_tool_calls = extract_json_tool_calls(response.text)
             calls = deduplicate_tool_calls(
-                native_tool_calls + xml_tool_calls
+                native_tool_calls + xml_tool_calls + json_tool_calls
             )
             for call in calls:
                 function = call.get("function", {})
@@ -1558,6 +1578,7 @@ class AgentService:
                             + "\n\n"
                             + CAPABILITY_RECOVERY_PROMPT
                             + execution_prompt
+                            + telegram_prompt
                             + learned_prompt
                             + interactive_browser_prompt
                             + skill_prompt
@@ -1625,6 +1646,7 @@ class AgentService:
                         + "\n\n"
                         + TOOL_CALL_REPAIR_PROMPT
                         + execution_prompt
+                        + telegram_prompt
                         + learned_prompt
                         + interactive_browser_prompt
                         + skill_prompt
@@ -2021,6 +2043,7 @@ class AgentService:
                         + "\n\n"
                         + TOOL_CONTINUATION_PROMPT
                         + execution_prompt
+                        + telegram_prompt
                         + learned_prompt
                         + interactive_browser_prompt
                         + skill_prompt
@@ -2080,6 +2103,7 @@ class AgentService:
                             + "\n\n"
                             + goal_ledger.gate_prompt(gate_requirements)
                             + execution_prompt
+                            + telegram_prompt
                             + learned_prompt
                             + interactive_browser_prompt
                             + skill_prompt

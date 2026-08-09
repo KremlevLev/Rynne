@@ -362,6 +362,25 @@ def test_open_telegram_chat_uses_guarded_direct_skill() -> None:
     assert decision.expected_model_calls == 0
 
 
+def test_send_telegram_message_is_never_routed_as_chat() -> None:
+    decision = create_router().route(
+        'Ну что, Nova, ты можешь написать Владу в Telegram "Привет, я Nova".'
+    )
+
+    assert decision.intent == IntentKind.MESSAGING
+    assert decision.strategy == ExecutionStrategy.SKILL
+    assert decision.needs_tools
+    assert "mcp_telegram_business_resolve_chat" in decision.required_tools
+    assert "mcp_telegram_business_send_message" in decision.required_tools
+
+
+def test_reply_in_telegram_is_never_routed_as_chat() -> None:
+    decision = create_router().route("Ответь Владу в телеграме: привет")
+
+    assert decision.intent == IntentKind.MESSAGING
+    assert decision.needs_tools
+
+
 def test_impatient_follow_up_does_not_open_filler_as_application() -> None:
     decision = create_router().route("Так открой, ало")
 

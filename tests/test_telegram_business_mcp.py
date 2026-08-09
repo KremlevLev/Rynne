@@ -74,6 +74,87 @@ def test_business_update_is_cached_and_resolved(monkeypatch, tmp_path: Path) -> 
         connection.close()
 
 
+def test_spoken_short_name_resolves_full_contact(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "names.sqlite3"))
+    connection = _connect()
+    try:
+        _store_update(connection, {
+            "business_message": {
+                "business_connection_id": "connection-1",
+                "message_id": 10,
+                "date": 1_786_200_002,
+                "from": {"id": 44},
+                "chat": {
+                    "id": 44,
+                    "first_name": "Владислав",
+                    "last_name": "Бородинский",
+                    "username": "vladislav_b",
+                },
+                "text": "привет",
+            }
+        })
+        connection.commit()
+
+        chat = _resolve_chat(connection, "Влад")
+        assert chat["title"] == "Владислав Бородинский"
+    finally:
+        connection.close()
+
+
+def test_cyrillic_name_resolves_transliterated_username(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "translit.sqlite3"))
+    connection = _connect()
+    try:
+        _store_update(connection, {
+            "business_message": {
+                "business_connection_id": "connection-1",
+                "message_id": 11,
+                "date": 1_786_200_003,
+                "from": {"id": 47},
+                "chat": {
+                    "id": 47,
+                    "first_name": "son😭✌️🥀",
+                    "username": "Vladosik585",
+                },
+                "text": "привет",
+            }
+        })
+        connection.commit()
+
+        assert _resolve_chat(connection, "Влад")["username"] == "Vladosik585"
+        assert _resolve_chat(connection, "Владу")["username"] == "Vladosik585"
+    finally:
+        connection.close()
+
+
+def test_ambiguous_short_name_requires_clarification(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "ambiguous.sqlite3"))
+    connection = _connect()
+    try:
+        for chat_id, last_name in ((45, "Бородинский"), (46, "Петров")):
+            _store_update(connection, {
+                "business_message": {
+                    "business_connection_id": "connection-1",
+                    "message_id": chat_id,
+                    "date": 1_786_200_000 + chat_id,
+                    "from": {"id": chat_id},
+                    "chat": {
+                        "id": chat_id,
+                        "first_name": "Владислав",
+                        "last_name": last_name,
+                        "username": f"vlad{chat_id}",
+                    },
+                    "text": "test",
+                }
+            })
+        connection.commit()
+
+        with pytest.raises(LookupError, match="ambiguous"):
+            _resolve_chat(connection, "Влад")
+    finally:
+        connection.close()
+
+
 def test_unknown_business_chat_has_actionable_error(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "empty.sqlite3"))
     connection = _connect()
@@ -114,8 +195,11 @@ def test_read_messages_without_chat_returns_global_recent_messages(monkeypatch, 
 
 def test_business_mcp_surface_and_send_security() -> None:
     tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
-    assert set(tools) == {"get_status", "list_chats", "read_messages", "send_message"}
+    assert set(tools) == {
+        "get_status", "list_chats", "read_messages", "resolve_chat", "send_message",
+    }
     assert tools["read_messages"].annotations.readOnlyHint is True
+    assert tools["resolve_chat"].annotations.readOnlyHint is True
     assert tools["send_message"].annotations.readOnlyHint is False
 
     name = "mcp_telegram_business_send_message"
@@ -143,6 +227,7 @@ def test_business_mcp_stdio_discovery_does_not_contact_telegram() -> None:
                 "mcp_telegram_business_get_status",
                 "mcp_telegram_business_list_chats",
                 "mcp_telegram_business_read_messages",
+                "mcp_telegram_business_resolve_chat",
                 "mcp_telegram_business_send_message",
             }
         finally:

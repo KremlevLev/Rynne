@@ -193,10 +193,14 @@ def test_tool_calls_import() -> None:
     """Проверяет импорт парсера tool calls."""
     from modules.brain.tool_calls import (
         deduplicate_tool_calls,
+        extract_json_tool_calls,
         extract_xml_tool_calls,
     )
 
     assert deduplicate_tool_calls is not None
+    assert extract_json_tool_calls(
+        '{"tool":"telegram_send_message","arguments":{"chat":"Влад"}}'
+    )[0]["function"]["name"] == "telegram_send_message"
     assert extract_xml_tool_calls is not None
 
 

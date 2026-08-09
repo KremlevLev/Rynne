@@ -116,6 +116,41 @@ def extract_xml_tool_calls(
     return deduplicate_tool_calls(found)
 
 
+def extract_json_tool_calls(text: str) -> list[dict[str, Any]]:
+    """Recover a tool call when a provider prints one as plain JSON.
+
+    Some OpenAI-compatible providers occasionally put ``{"tool": ...}`` in
+    assistant content instead of the native ``tool_calls`` field.  Treating
+    that as user-visible text is misleading; the registry still decides
+    whether the named capability actually exists.
+    """
+    raw = str(text or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+
+    function = payload.get("function")
+    if isinstance(function, dict):
+        name = function.get("name")
+        arguments = function.get("arguments", {})
+    else:
+        name = payload.get("tool") or payload.get("name")
+        arguments = payload.get("arguments", payload.get("parameters", {}))
+    if not isinstance(name, str) or not name.strip():
+        return []
+    normalized = normalize_tool_call({
+        "type": "function",
+        "function": {"name": name, "arguments": arguments},
+    })
+    return [normalized] if normalized is not None else []
+
+
 def canonical_tool_signature(tool_call: dict[str, Any]) -> str:
     normalized = normalize_tool_call(tool_call)
     if normalized is None:

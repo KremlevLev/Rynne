@@ -728,7 +728,29 @@ class ToolRegistry:
             for registered in self._tools
             if re.sub(r"[^a-z0-9]", "", registered.casefold()) == compact
         ]
-        return matches[0] if len(matches) == 1 else None
+        if len(matches) == 1:
+            return matches[0]
+
+        # Providers sometimes omit the MCP namespace and print a JSON-shaped
+        # call such as ``telegram_send_message``.  Resolve only a unique MCP
+        # suffix match, so this repairs harmless formatting drift without
+        # guessing between two enabled integrations.
+        raw_parts = [part for part in re.split(r"[^a-z0-9]+", str(name).casefold()) if part]
+        if len(raw_parts) >= 2:
+            service = raw_parts[0]
+            operation = "_".join(raw_parts[1:])
+            mcp_matches = [
+                registered
+                for registered in self._tools
+                if (
+                    registered.startswith("mcp_")
+                    and service in registered.casefold().split("_")
+                    and registered.casefold().endswith("_" + operation)
+                )
+            ]
+            if len(mcp_matches) == 1:
+                return mcp_matches[0]
+        return None
 
 
 class ToolRunner:

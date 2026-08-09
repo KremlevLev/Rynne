@@ -192,6 +192,25 @@ def test_registry_resolves_case_and_separator_drift_without_guessing() -> None:
     assert registry.get("OpenApplication") is definition
 
 
+def test_registry_resolves_unique_mcp_service_suffix() -> None:
+    registry = ToolRegistry()
+    definition = ToolDefinition(
+        name="mcp_telegram_business_send_message",
+        description="Sends a Telegram message.",
+        parameters={"type": "object", "properties": {}},
+        handler=lambda: "ok",
+        category=ToolCategory.NETWORK_WRITE,
+        risk=RiskLevel.EXECUTE,
+        idempotent=False,
+    )
+    registry.register_definition(definition)
+
+    assert (
+        registry.resolve_name("telegram_send_message")
+        == "mcp_telegram_business_send_message"
+    )
+
+
 def test_registry_rejects_duplicate_definition() -> None:
     registry = ToolRegistry()
 

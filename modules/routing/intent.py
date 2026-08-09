@@ -207,6 +207,23 @@ GENERAL_ACTION_MARKERS = (
     "заполни",
     "собери",
     "выполни",
+    "напиши",
+    "написать",
+    "ответь",
+    "ответить",
+    "отправь сообщение",
+    "send a message",
+    "reply",
+    "respond",
+)
+
+TELEGRAM_MESSAGE_ACTIONS = (
+    "напиши", "написать", "ответь", "ответить", "отправь", "отправить",
+    "сообщение", "send", "reply", "respond",
+)
+
+TELEGRAM_MARKERS = (
+    "telegram", "телеграм", "телеграме", "телегу",
 )
 
 
@@ -554,6 +571,36 @@ class DeterministicIntentRouter:
                 reason=(
                     "Массовый запуск без ограниченного списка "
                     "небезопасен и неэффективен."
+                ),
+            )
+
+        # Telegram messages are external actions, never ordinary chat.  The
+        # model needs the read-only resolver as well as the guarded send tool:
+        # a nickname such as "Влад" may map to a longer contact name or to
+        # several chats and must not be guessed.
+        if (
+            _contains_any(text, TELEGRAM_MARKERS)
+            and _contains_any(text, TELEGRAM_MESSAGE_ACTIONS)
+        ):
+            return ExecutionDecision(
+                strategy=ExecutionStrategy.SKILL,
+                intent=IntentKind.MESSAGING,
+                required_tools={
+                    "mcp_telegram_business_resolve_chat",
+                    "mcp_telegram_business_list_chats",
+                    "mcp_telegram_business_send_message",
+                    "mcp_telegram_resolve_chat",
+                    "mcp_telegram_list_chats",
+                    "mcp_telegram_send_message",
+                },
+                needs_model=True,
+                needs_tools=True,
+                expected_model_calls=1,
+                expected_tool_calls=2,
+                confidence=0.99,
+                reason=(
+                    "Telegram message requires recipient resolution and a "
+                    "confirmed network-write tool call."
                 ),
             )
 

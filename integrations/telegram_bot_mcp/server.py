@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -209,20 +210,130 @@ async def _sync_updates() -> int:
     return await asyncio.to_thread(_sync_updates_sync)
 
 
-def _resolve_chat(connection: sqlite3.Connection, query: str) -> sqlite3.Row:
-    needle = " ".join(str(query).casefold().split()).lstrip("@")
-    if not needle:
+def _normalize_chat_query(value: str) -> str:
+    return " ".join(
+        re.sub(r"[^a-zа-яё0-9@]+", " ", str(value).casefold()).split()
+    ).lstrip("@")
+
+
+_CYRILLIC_TO_LATIN = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e",
+    "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k",
+    "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r",
+    "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts",
+    "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "",
+    "э": "e", "ю": "yu", "я": "ya",
+})
+
+
+def _chat_query_variants(value: str) -> set[str]:
+    normalized = _normalize_chat_query(value)
+    variants = {normalized}
+    # Common spoken Russian cases: "Владу" should still search for "Влад".
+    if len(normalized) >= 4 and normalized.endswith("у"):
+        variants.add(normalized[:-1])
+    for item in tuple(variants):
+        latin = item.translate(_CYRILLIC_TO_LATIN)
+        if latin:
+            variants.add(latin)
+    return {item for item in variants if item}
+
+
+def _chat_candidates(
+    connection: sqlite3.Connection,
+    query: str,
+) -> tuple[list[sqlite3.Row], str]:
+    needles = _chat_query_variants(query)
+    if not needles:
         raise ValueError("Chat name is empty.")
     rows = connection.execute("SELECT * FROM chats ORDER BY last_message_at DESC").fetchall()
-    exact = [row for row in rows if needle in {row["title"].casefold(), row["username"].casefold()}]
-    partial = [row for row in rows if needle in row["title"].casefold() or needle in row["username"].casefold()]
-    matches = exact or partial
+    exact = [
+        row for row in rows
+        if any(needle in {
+            _normalize_chat_query(row["title"]),
+            _normalize_chat_query(row["username"]),
+        } for needle in needles)
+    ]
+    if exact:
+        return exact, "exact"
+
+    # A short spoken name should resolve a full Telegram contact, for example
+    # "Влад" -> "Владислав Бородинский".  Prefix/token matching is deliberate;
+    # arbitrary fuzzy guesses are unsafe for outgoing messages.
+    partial = []
+    for row in rows:
+        title = _normalize_chat_query(row["title"])
+        username = _normalize_chat_query(row["username"])
+        tokens = title.split()
+        searchable = (title, username, title.translate(_CYRILLIC_TO_LATIN))
+        if any(
+            needle in field
+            or any(token.startswith(needle) for token in tokens)
+            or field.startswith(needle)
+            for needle in needles
+            for field in searchable
+        ):
+            partial.append(row)
+    return partial, "partial"
+
+
+def _resolve_chat(connection: sqlite3.Connection, query: str) -> sqlite3.Row:
+    matches, match_type = _chat_candidates(connection, query)
     if not matches:
         raise LookupError(
             f"Telegram Business chat '{query}' has not been observed yet. "
             "Ask that person to send a message after the bot is connected."
         )
+    if len(matches) > 1:
+        candidates = ", ".join(
+            f"{row['title']} (@{row['username']})" if row["username"] else row["title"]
+            for row in matches[:8]
+        )
+        raise LookupError(
+            f"Telegram recipient '{query}' is ambiguous: {candidates}. "
+            "Ask the user which exact chat they mean before sending."
+        )
     return matches[0]
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+async def resolve_chat(query: str) -> dict[str, Any]:
+    """Resolve a spoken nickname to an observed Telegram Business chat."""
+    await _sync_updates()
+    with _database() as connection:
+        matches, match_type = _chat_candidates(connection, query)
+        candidates = [
+            {
+                "title": row["title"],
+                "username": row["username"],
+                "chat_id": row["chat_id"],
+            }
+            for row in matches[:8]
+        ]
+    if not candidates:
+        return {
+            "status": "not_found",
+            "query": query,
+            "candidates": [],
+            "instruction": "Ask the user for another name or username.",
+        }
+    if len(candidates) > 1:
+        return {
+            "status": "ambiguous",
+            "query": query,
+            "candidates": candidates,
+            "instruction": "Ask the user to choose one exact recipient.",
+        }
+    return {
+        "status": "resolved",
+        "match": match_type,
+        "query": query,
+        "recipient": candidates[0],
+        "instruction": (
+            "Use the exact returned title or username in send_message. "
+            "The send action still requires user confirmation."
+        ),
+    }
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))

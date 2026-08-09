@@ -23,6 +23,17 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
     "open_telegram_chat": {
         "чат с", "чат со", "telegram chat", "телеграм чат",
     },
+    "mcp_telegram_business_resolve_chat": {
+        "telegram", "телеграм", "напиши", "ответь", "сообщение",
+        "send", "reply", "recipient", "получатель",
+    },
+    "mcp_telegram_business_list_chats": {
+        "telegram", "телеграм", "чат", "контакт", "получатель",
+    },
+    "mcp_telegram_business_send_message": {
+        "telegram", "телеграм", "напиши", "ответь", "отправь",
+        "сообщение", "send", "reply",
+    },
     "open_application_batch": {
         "несколько приложений", "несколько программ",
         "приложений", "программ",
