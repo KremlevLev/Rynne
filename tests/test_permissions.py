@@ -15,6 +15,7 @@ from modules.tools.policy import (
 )
 from modules.tools.permissions import (
     PermissionManager,
+    PermissionMode,
 )
 
 
@@ -69,6 +70,40 @@ def test_execute_risk_requires_confirmation() -> None:
 
     assert not allowed
     assert reason is None
+
+
+def test_full_access_skips_confirmation_but_keeps_hard_denials() -> None:
+    manager = PermissionManager(mode=PermissionMode.FULL_ACCESS)
+
+    allowed, reason = manager.check(create_policy_context(
+        "run_terminal_command",
+        risk=RiskLevel.EXECUTE,
+    ))
+    denied, denied_reason = manager.check(create_policy_context(
+        "shutdown_system",
+        risk=RiskLevel.CRITICAL,
+    ))
+
+    assert allowed and reason is None
+    assert not denied and denied_reason is not None
+
+
+def test_always_ask_requires_confirmation_even_for_read_only_tools() -> None:
+    manager = PermissionManager(mode="always_ask")
+
+    allowed, reason = manager.check(create_policy_context(
+        "get_system_status",
+        risk=RiskLevel.READ_ONLY,
+    ))
+
+    assert not allowed
+    assert reason is None
+
+
+def test_unknown_permission_mode_falls_back_to_risky_only() -> None:
+    manager = PermissionManager(mode="not-a-real-mode")
+
+    assert manager.mode == PermissionMode.RISKY_ONLY
 
 
 def test_denied_tool_is_rejected() -> None:

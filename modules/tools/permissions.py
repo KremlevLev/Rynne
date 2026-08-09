@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Callable
 
 from modules.tools.policy import (
@@ -17,6 +19,32 @@ from modules.tools.policy import (
 
 
 logger = logging.getLogger("Permissions")
+
+
+class PermissionMode(StrEnum):
+    """How often Nova asks before executing a tool."""
+
+    FULL_ACCESS = "full_access"
+    RISKY_ONLY = "risky_only"
+    ALWAYS_ASK = "always_ask"
+
+    @classmethod
+    def parse(cls, value: str | None) -> "PermissionMode":
+        normalized = str(value or "").strip().lower()
+        aliases = {
+            "full": cls.FULL_ACCESS,
+            "autonomous": cls.FULL_ACCESS,
+            "balanced": cls.RISKY_ONLY,
+            "safe": cls.RISKY_ONLY,
+            "strict": cls.ALWAYS_ASK,
+            "always": cls.ALWAYS_ASK,
+        }
+        if normalized in aliases:
+            return aliases[normalized]
+        try:
+            return cls(normalized)
+        except ValueError:
+            return cls.RISKY_ONLY
 
 
 @dataclass(slots=True)
@@ -92,6 +120,7 @@ class PermissionManager:
         self,
         *,
         event_sink: Callable[[str, dict[str, Any]], Any] | None = None,
+        mode: PermissionMode | str | None = None,
     ) -> None:
         self._pending: dict[
             str,
@@ -105,6 +134,22 @@ class PermissionManager:
 
         self._lock = threading.RLock()
         self._event_sink = event_sink
+        self.mode = PermissionMode.parse(
+            mode if mode is not None else os.getenv("NOVA_PERMISSION_MODE")
+        )
+
+    def _decision(self, policy_context: PolicyContext) -> PolicyDecision:
+        """Apply the user-selected approval cadence over the hard policy."""
+        decision = evaluate_policy(policy_context)
+        if decision == PolicyDecision.DENY:
+            return decision
+        if self.mode == PermissionMode.FULL_ACCESS:
+            return PolicyDecision.ALLOW
+        if self.mode == PermissionMode.ALWAYS_ASK:
+            if policy_context.risk.value == "destructive":
+                return PolicyDecision.REQUIRE_STRONG_CONFIRMATION
+            return PolicyDecision.REQUIRE_CONFIRMATION
+        return decision
 
     def set_event_sink(
         self,
@@ -126,9 +171,7 @@ class PermissionManager:
         *,
         expires_after_seconds: float = 60.0,
     ) -> PermissionRequest:
-        decision = evaluate_policy(
-            policy_context
-        )
+        decision = self._decision(policy_context)
 
         request = PermissionRequest(
             operation_id=(
@@ -182,9 +225,7 @@ class PermissionManager:
         self,
         policy_context: PolicyContext,
     ) -> tuple[bool, str | None]:
-        decision = evaluate_policy(
-            policy_context
-        )
+        decision = self._decision(policy_context)
 
         if decision == PolicyDecision.DENY:
             return (

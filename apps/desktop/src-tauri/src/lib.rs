@@ -316,6 +316,29 @@ fn write_service_secret(env_path: &Path, variable: &str, value: Option<&str>) ->
         .map_err(|error| format!("Cannot save Nova integration settings: {error}"))
 }
 
+const PERMISSION_MODE_VARIABLE: &str = "NOVA_PERMISSION_MODE";
+
+fn normalize_permission_mode(mode: &str) -> Result<&str, String> {
+    match mode.trim() {
+        "full_access" => Ok("full_access"),
+        "risky_only" => Ok("risky_only"),
+        "always_ask" => Ok("always_ask"),
+        _ => Err("Unsupported permission mode.".to_owned()),
+    }
+}
+
+fn write_plain_setting(env_path: &Path, variable: &str, value: &str) -> Result<(), String> {
+    let current = std::fs::read_to_string(env_path).unwrap_or_default();
+    let mut lines: Vec<String> = current
+        .lines()
+        .filter(|line| line.split_once('=').map(|(name, _)| name.trim()) != Some(variable))
+        .map(str::to_owned)
+        .collect();
+    lines.push(format!("{variable}={value}"));
+    std::fs::write(env_path, format!("{}\n", lines.join("\n")))
+        .map_err(|error| format!("Cannot save Nova settings: {error}"))
+}
+
 #[tauri::command]
 fn nova_connect(app: AppHandle, state: State<'_, Arc<CoreState>>) -> bool {
     ensure_core_running(&app, state.inner())
@@ -486,6 +509,30 @@ fn nova_remove_service_secret(
     let variable = service_variable(&service)?;
     let env_path = provider_env_path(&app)?;
     write_service_secret(&env_path, variable, None)?;
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)
+}
+
+#[tauri::command]
+fn nova_get_permission_mode(app: AppHandle) -> Result<String, String> {
+    let env_path = provider_env_path(&app)?;
+    let contents = std::fs::read_to_string(env_path).unwrap_or_default();
+    let value = env_value(&contents, PERMISSION_MODE_VARIABLE)
+        .or_else(|| std::env::var(PERMISSION_MODE_VARIABLE).ok())
+        .unwrap_or_else(|| "risky_only".to_owned());
+    Ok(normalize_permission_mode(&value)?.to_owned())
+}
+
+#[tauri::command]
+fn nova_set_permission_mode(
+    mode: String,
+    app: AppHandle,
+    state: State<'_, Arc<CoreState>>,
+) -> Result<(), String> {
+    let mode = normalize_permission_mode(&mode)?;
+    let env_path = provider_env_path(&app)?;
+    write_plain_setting(&env_path, PERMISSION_MODE_VARIABLE, mode)?;
     let core_state = state.inner().clone();
     stop_core(&core_state);
     spawn_core(app, core_state)
@@ -687,6 +734,11 @@ fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<
             }
         }
     }
+    if let Some(value) = env_value(&contents, PERMISSION_MODE_VARIABLE) {
+        command.env(PERMISSION_MODE_VARIABLE, normalize_permission_mode(&value)?);
+    } else if let Ok(value) = std::env::var(PERMISSION_MODE_VARIABLE) {
+        command.env(PERMISSION_MODE_VARIABLE, normalize_permission_mode(&value)?);
+    }
     Ok(())
 }
 
@@ -870,7 +922,9 @@ pub fn run() {
             nova_remove_provider_key,
             nova_list_service_secrets,
             nova_set_service_secret,
-            nova_remove_service_secret
+            nova_remove_service_secret,
+            nova_get_permission_mode,
+            nova_set_permission_mode
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -906,7 +960,15 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_provider_keys, key_hint, split_key_list};
+    use super::{file_provider_keys, key_hint, normalize_permission_mode, split_key_list};
+
+    #[test]
+    fn permission_modes_are_explicit_and_validated() {
+        assert_eq!(normalize_permission_mode("full_access").unwrap(), "full_access");
+        assert_eq!(normalize_permission_mode("risky_only").unwrap(), "risky_only");
+        assert_eq!(normalize_permission_mode("always_ask").unwrap(), "always_ask");
+        assert!(normalize_permission_mode("anything").is_err());
+    }
 
     #[test]
     fn provider_key_hint_keeps_only_safe_edges() {

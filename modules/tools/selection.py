@@ -160,6 +160,12 @@ ACTION_MARKERS = (
     "find ", "search ", "read ", "check ", "fix ", "update ", "send ",
 )
 
+PRIVATE_OR_LOCAL_MARKERS = (
+    "telegram", "телеграм", "сообщение", "переписк", "контакт", "получател",
+    "файл", "папк", "директор", "workspace", "буфер", "clipboard", "секрет",
+    "парол", "api key", "апи ключ", "токен", "мой аккаунт", "личн",
+)
+
 INTERACTIVE_BROWSER_ACTION_MARKERS = (
     "открой", "зайди", "перейди", "включи браузер", "включи в браузере",
     "open ", "visit ", "go to ", "navigate ",
@@ -395,6 +401,12 @@ def request_prefers_interactive_browser(request_text: str) -> bool:
     )
 
 
+def request_allows_uncertainty_web_research(request_text: str) -> bool:
+    """Keep recovery search public: never turn private/local context into a query."""
+    lowered = _normalize(request_text)
+    return not _contains_any(lowered, PRIVATE_OR_LOCAL_MARKERS)
+
+
 def _schema_descriptions(
     schemas: list[dict[str, Any]] | None,
 ) -> dict[str, str]:
@@ -504,6 +516,17 @@ def select_tools_for_request(
             scores.pop(tool_name, None)
 
     action_requested = _contains_any(f"{lowered} ", ACTION_MARKERS)
+
+    # ``broaden`` means the router/model did not have a confident narrow path.
+    # Give public web research a real chance before asking the user to restate
+    # an unfamiliar product/API command, without leaking local/private context.
+    if (
+        broaden
+        and action_requested
+        and not interactive_browser
+        and request_allows_uncertainty_web_research(request_text)
+    ):
+        add("search_web_tavily", 82)
 
     if broaden or (action_requested and len(scores) < 6):
         for index, tool_name in enumerate(FALLBACK_ACTION_TOOLS):

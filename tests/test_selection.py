@@ -365,6 +365,32 @@ def test_interactive_account_navigation_excludes_search_substitute() -> None:
     assert "open_website" not in result
 
 
+def test_broadened_unknown_public_action_can_research_before_clarifying() -> None:
+    available = {"open_application", "search_web_tavily", "get_system_status"}
+
+    result = select_tools_for_request(
+        "Настрой новый сервис CloudWhistle и подключи его API",
+        available,
+        max_tools=2,
+        broaden=True,
+    )
+
+    assert "search_web_tavily" in result
+
+
+def test_broadened_private_action_does_not_promote_web_search() -> None:
+    available = {"search_web_tavily", "mcp_telegram_business_send_message"}
+
+    result = select_tools_for_request(
+        "Отправь личное сообщение контакту Влад в Telegram",
+        available,
+        max_tools=1,
+        broaden=True,
+    )
+
+    assert result == {"mcp_telegram_business_send_message"}
+
+
 def test_openrouter_activity_uses_browser_session_and_screenshot() -> None:
     available = {
         "open_application",

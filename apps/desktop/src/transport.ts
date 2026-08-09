@@ -13,6 +13,7 @@ export type EventListener = (event: NovaEvent) => void;
 export type ConnectionListener = (state: ConnectionState) => void;
 export type ProviderName = "groq" | "openrouter" | "gemini";
 export type ServiceName = "telegram" | "tavily";
+export type PermissionMode = "full_access" | "risky_only" | "always_ask";
 export interface ProviderKeySummary {
   provider: ProviderName;
   index: number;
@@ -38,6 +39,8 @@ export interface NovaTransport {
   listServiceSecrets(): Promise<ServiceSecretSummary[]>;
   setServiceSecret(service: ServiceName, secret: string): Promise<void>;
   removeServiceSecret(service: ServiceName): Promise<void>;
+  getPermissionMode(): Promise<PermissionMode>;
+  setPermissionMode(mode: PermissionMode): Promise<void>;
 }
 
 export class TauriNovaTransport implements NovaTransport {
@@ -151,6 +154,14 @@ export class TauriNovaTransport implements NovaTransport {
   async removeServiceSecret(service: ServiceName): Promise<void> {
     await invoke("nova_remove_service_secret", { service });
   }
+
+  async getPermissionMode(): Promise<PermissionMode> {
+    return invoke<PermissionMode>("nova_get_permission_mode");
+  }
+
+  async setPermissionMode(mode: PermissionMode): Promise<void> {
+    await invoke("nova_set_permission_mode", { mode });
+  }
 }
 
 class DemoNovaTransport implements NovaTransport {
@@ -159,6 +170,7 @@ class DemoNovaTransport implements NovaTransport {
   private seeded = false;
   private voiceActive = false;
   private inputMode = "sleep";
+  private permissionMode: PermissionMode = "risky_only";
 
   async connect(
     onEvent: EventListener,
@@ -327,6 +339,14 @@ class DemoNovaTransport implements NovaTransport {
 
   async removeServiceSecret(): Promise<void> {
     return Promise.resolve();
+  }
+
+  async getPermissionMode(): Promise<PermissionMode> {
+    return this.permissionMode;
+  }
+
+  async setPermissionMode(mode: PermissionMode): Promise<void> {
+    this.permissionMode = mode;
   }
 
   private push(event_type: NovaEvent["event_type"], payload: JsonObject): void {

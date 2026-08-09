@@ -32,6 +32,7 @@ import {
   createNovaTransport,
   type ConnectionState,
   type NovaTransport,
+  type PermissionMode,
   type ProviderKeySummary,
   type ProviderName,
   type ServiceName,
@@ -659,6 +660,8 @@ export function App() {
   const [confirmingSuggestionId, setConfirmingSuggestionId] = useState<string | null>(null);
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
   const [permissionPending, setPermissionPending] = useState(false);
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("risky_only");
+  const [permissionModePending, setPermissionModePending] = useState(false);
   const runtime = runtimePresentation(runtimeState, locale);
   const nav = navigation(locale);
   const modes = uiModeOptions(locale);
@@ -887,6 +890,7 @@ export function App() {
     if (connection === "connected") {
       void refreshProviderKeys();
       void refreshServiceSecrets();
+      void refreshPermissionMode();
     }
   }, [connection]);
 
@@ -1089,6 +1093,33 @@ export function App() {
       setSettingsStatus(
         error instanceof Error ? error.message : tx(locale, "Не удалось загрузить интеграции.", "Could not load integrations."),
       );
+    }
+  }
+
+  async function refreshPermissionMode() {
+    try {
+      setPermissionMode(await transport.getPermissionMode());
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось загрузить режим доступа.", "Could not load access mode."),
+      );
+    }
+  }
+
+  async function selectPermissionMode(mode: PermissionMode) {
+    if (mode === permissionMode || permissionModePending) return;
+    setPermissionModePending(true);
+    setSettingsStatus(tx(locale, "Сохраняю режим и перезапускаю Nova Core…", "Saving mode and restarting Nova Core…"));
+    try {
+      await transport.setPermissionMode(mode);
+      setPermissionMode(mode);
+      setSettingsStatus(tx(locale, "Режим доступа изменён.", "Access mode updated."));
+    } catch (error) {
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось изменить режим доступа.", "Could not update access mode."),
+      );
+    } finally {
+      setPermissionModePending(false);
     }
   }
 
@@ -1509,8 +1540,16 @@ export function App() {
               </div>
               <p>{tx(
                 locale,
-                "Enter — отправить · Shift Enter — новая строка · Nova попросит подтверждение перед рискованным действием",
-                "Enter — send · Shift Enter — new line · Nova asks for confirmation before risky actions",
+                permissionMode === "full_access"
+                  ? "Enter — отправить · Shift Enter — новая строка · Полный доступ: без запросов подтверждения"
+                  : permissionMode === "always_ask"
+                    ? "Enter — отправить · Shift Enter — новая строка · Подтверждение перед каждым инструментом"
+                    : "Enter — отправить · Shift Enter — новая строка · Подтверждение только рискованных действий",
+                permissionMode === "full_access"
+                  ? "Enter — send · Shift Enter — new line · Full access: no approval prompts"
+                  : permissionMode === "always_ask"
+                    ? "Enter — send · Shift Enter — new line · Approval before every tool"
+                    : "Enter — send · Shift Enter — new line · Approval for risky actions only",
               )}</p>
             </div>
           </div>
@@ -1560,6 +1599,51 @@ export function App() {
                       <strong>{option.label}</strong>
                       <small>{option.description}</small>
                     </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-card access-card">
+              <span className="settings-icon"><ShieldCheck size={22} /></span>
+              <div>
+                <span className="eyebrow">{tx(locale, "РАЗРЕШЕНИЯ", "PERMISSIONS")}</span>
+                <h2>{tx(locale, "Когда Nova должна спрашивать", "When Nova should ask")}</h2>
+                <p>{tx(
+                  locale,
+                  "Выберите, насколько автономно Nova выполняет инструменты. Жёсткие системные запреты и защита проактивного режима остаются во всех вариантах.",
+                  "Choose how autonomously Nova executes tools. Hard system blocks and proactive-mode safeguards remain active in every mode.",
+                )}</p>
+              </div>
+              <div className="permission-mode-options">
+                {([
+                  {
+                    key: "full_access" as const,
+                    title: tx(locale, "Полный доступ", "Full access"),
+                    description: tx(locale, "Выполняет разрешённые действия сразу, без вопросов.", "Runs allowed actions immediately without asking."),
+                    badge: tx(locale, "Автономно", "Autonomous"),
+                  },
+                  {
+                    key: "risky_only" as const,
+                    title: tx(locale, "Только опасные", "Risky only"),
+                    description: tx(locale, "Спрашивает перед отправкой, командами, удалением и другими рискованными действиями.", "Asks before sending, commands, deletion, and other risky actions."),
+                    badge: tx(locale, "Рекомендуется", "Recommended"),
+                  },
+                  {
+                    key: "always_ask" as const,
+                    title: tx(locale, "Спрашивать всегда", "Always ask"),
+                    description: tx(locale, "Запрашивает подтверждение перед каждым инструментом, даже чтением.", "Requests confirmation before every tool, including read-only actions."),
+                    badge: tx(locale, "Строго", "Strict"),
+                  },
+                ]).map((option) => (
+                  <button
+                    key={option.key}
+                    className={permissionMode === option.key ? "permission-mode-option active" : "permission-mode-option"}
+                    onClick={() => void selectPermissionMode(option.key)}
+                    disabled={permissionModePending}
+                    aria-pressed={permissionMode === option.key}
+                  >
+                    <span><strong>{option.title}</strong><b>{option.badge}</b></span>
+                    <small>{option.description}</small>
                   </button>
                 ))}
               </div>
