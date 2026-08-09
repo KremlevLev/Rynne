@@ -280,7 +280,7 @@ LLAMA_BEST = MODEL_CV_BASE
 FALLBACK_MODEL = "openrouter/free"
 
 LLM_REQUEST_TIMEOUT = float(
-    os.getenv("NOVA_LLM_REQUEST_TIMEOUT", "90")
+    os.getenv("NOVA_LLM_REQUEST_TIMEOUT", "30")
 )
 
 GROQ_RATE_LIMIT_COOLDOWN = float(

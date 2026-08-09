@@ -123,6 +123,7 @@ def test_cyrillic_name_resolves_transliterated_username(monkeypatch, tmp_path: P
 
         assert _resolve_chat(connection, "Влад")["username"] == "Vladosik585"
         assert _resolve_chat(connection, "Владу")["username"] == "Vladosik585"
+        assert _resolve_chat(connection, "Влада")["username"] == "Vladosik585"
     finally:
         connection.close()
 

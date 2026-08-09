@@ -223,12 +223,14 @@ def request_requires_action(text: str) -> bool:
 
 
 CONTEXTUAL_FOLLOW_UP_RE = re.compile(
-    r"^(?:а\s+)?(?:ответь|reply|respond|теперь|тогда|дальше|потом|так|там|туда|здесь|сюда|"
-    r"в\s+н[её]м|на\s+н[её]м|с\s+н[и]м|это|этот|эту|тот|его|е[её]|их)\b",
+    r"^(?:ну\s+)?(?:а\s+)?(?:ответь|reply|respond|попробуй\s+еще\s+раз|"
+    r"теперь|тогда|дальше|потом|так|там|туда|здесь|сюда|у\s+него|у\s+нее|"
+    r"в\s+н[её]м|на\s+н[её]м|с\s+н[и]м|это|этот|эту|тот|его|е[её]|их|@)\b",
     re.IGNORECASE,
 )
 CONTEXTUAL_REFERENCE_RE = re.compile(
     r"\b(?:там|туда|оттуда|в\s+н[её]м|на\s+н[её]м|с\s+н[и]м|его|е[её]|их|"
+    r"ему|ей|у\s+него|у\s+нее|ник|юзер(?:нейм)?|username|получател[ья]|"
     r"этот|эту|это|дальше|сайт|страниц[ауе])\b",
     re.IGNORECASE,
 )
@@ -634,7 +636,7 @@ class AgentService:
 
     def can_resolve_contextual_follow_up(self, text: str) -> bool:
         """True, когда неоднозначную короткую команду можно раскрыть из истории."""
-        if not self.history or not is_contextual_follow_up(text):
+        if not self.history:
             return False
 
         previous_user = self._last_message_text(self.history, "user")
@@ -644,9 +646,17 @@ class AgentService:
             for marker in (
                 "уточните", "уточни", "выберите", "выбери",
                 "какой чат", "в какой чат", "название", "username",
+                "какой текст", "получател", "кому именно",
             )
         )
-        short_answer = len(str(text).strip().split()) <= 4
+        short_answer = len(str(text).strip().split()) <= 12
+        contextual_shape = is_contextual_follow_up(text)
+        answering_question = short_answer and (
+            assistant_requests_detail
+            or previous_assistant.rstrip().endswith(("?", "？"))
+        )
+        if not contextual_shape and not answering_question:
+            return False
         return bool(
             previous_user
             and (
@@ -1362,9 +1372,18 @@ class AgentService:
             if action_was_requested
             else ""
         )
+        messaging_context = (
+            execution_decision.intent == IntentKind.MESSAGING
+            or (
+                contextual_follow_up
+                and any(marker in selection_text.casefold() for marker in (
+                    "telegram", "телеграм", "телегу",
+                ))
+            )
+        )
         telegram_prompt = (
             "\n\n" + TELEGRAM_EXECUTION_PROMPT
-            if execution_decision.intent == IntentKind.MESSAGING
+            if messaging_context
             else ""
         )
         learned_prompt = (
@@ -1495,6 +1514,18 @@ class AgentService:
                 function = call.get("function", {})
                 raw_name = str(function.get("name") or "")
                 resolved_name = self.registry.resolve_name(raw_name)
+                if resolved_name is None and messaging_context and raw_name.casefold() in {
+                    "send", "send_message", "telegram_send_message",
+                }:
+                    candidates = sorted(
+                        name for name in self.registry.names
+                        if "telegram" in name.casefold() and name.casefold().endswith("_send_message")
+                    )
+                    business = [name for name in candidates if "telegram_business" in name]
+                    if len(business) == 1:
+                        resolved_name = business[0]
+                    elif len(candidates) == 1:
+                        resolved_name = candidates[0]
                 if resolved_name is not None:
                     function["name"] = resolved_name
             return deduplicate_tool_calls(calls)

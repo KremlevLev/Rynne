@@ -230,7 +230,7 @@ def _chat_query_variants(value: str) -> set[str]:
     normalized = _normalize_chat_query(value)
     variants = {normalized}
     # Common spoken Russian cases: "Владу" should still search for "Влад".
-    if len(normalized) >= 4 and normalized.endswith("у"):
+    if len(normalized) >= 4 and normalized.endswith(("у", "а")):
         variants.add(normalized[:-1])
     for item in tuple(variants):
         latin = item.translate(_CYRILLIC_TO_LATIN)

@@ -975,6 +975,20 @@ class ToolRunner:
                     arguments["app_name"] = value.strip()
                     break
 
+        if "chat" in properties and not arguments.get("chat"):
+            for alias in ("chat_identifier", "recipient", "contact", "username"):
+                value = arguments.get(alias)
+                if isinstance(value, str) and value.strip():
+                    arguments["chat"] = value.strip()
+                    break
+
+        if "text" in properties and not arguments.get("text"):
+            for alias in ("message", "content", "body"):
+                value = arguments.get(alias)
+                if isinstance(value, str) and value.strip():
+                    arguments["text"] = value.strip()
+                    break
+
         arguments = strip_unknown_properties(
             arguments,
             definition.parameters,
