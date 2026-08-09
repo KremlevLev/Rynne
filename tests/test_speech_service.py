@@ -80,6 +80,27 @@ def test_start_does_not_warm_heavy_local_tts_by_default(
     asyncio.run(scenario())
 
 
+def test_explicit_start_warms_tts_and_publishes_ready(monkeypatch) -> None:
+    async def scenario() -> None:
+        events: list[tuple[str, dict]] = []
+        monkeypatch.setattr(speech_module, "warm_up_tts", lambda: True)
+        service = SpeechService(
+            RuntimeState(),
+            event_handler=lambda event_type, payload: events.append((event_type, payload)),
+            warm_up_on_start=True,
+        )
+
+        await service.start()
+        assert service._warmup_task is not None
+        assert await service._warmup_task is True
+        assert [payload["status"] for event, payload in events if event == "voice_status"] == [
+            "loading", "ready",
+        ]
+        await service.close()
+
+    asyncio.run(scenario())
+
+
 def test_interrupt_does_not_cancel_caller(
     monkeypatch,
 ) -> None:

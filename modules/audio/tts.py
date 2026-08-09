@@ -191,18 +191,26 @@ MODEL_PATH = "data/v5_ru.pt"
 _silero_model = None
 _torch_module = None
 _silero_engine_lock = threading.Lock()
+_silero_load_error: str | None = None
+_silero_retry_after = 0.0
 
 def _get_silero_engine():
     """Ленивая инициализация Silero TTS v5 на CPU"""
-    global _silero_model, _torch_module
+    global _silero_model, _torch_module, _silero_load_error, _silero_retry_after
     if _silero_model is not None:
         return _silero_model
+    if _silero_load_error and time.monotonic() < _silero_retry_after:
+        logger.error("Silero временно недоступен: %s", _silero_load_error)
+        return None
 
     # Startup warm-up and the first reply can arrive at the same time. Torch
     # PackageImporter is not safe to initialize twice in parallel.
     with _silero_engine_lock:
         if _silero_model is not None:
             return _silero_model
+        if _silero_load_error and time.monotonic() < _silero_retry_after:
+            return None
+        started_at = time.monotonic()
         if _torch_module is None:
             logger.info("Загрузка локального TTS runtime...")
             import torch
@@ -221,16 +229,32 @@ def _get_silero_engine():
                 logger.info("Модель Silero v5 успешно загружена на диск.")
             except Exception as e:
                 logger.error(f"Не удалось скачать модель Silero v5: {e}")
+                _silero_load_error = str(e)
+                _silero_retry_after = time.monotonic() + 60.0
                 return None
                 
         try:
             logger.info("Загрузка Silero v5 в оперативную память...")
-            torch.set_num_threads(4)  # Ограничение потоков для предотвращения перегрузки CPU
+            torch.set_num_threads(2)
+            try:
+                torch.set_num_interop_threads(1)
+            except RuntimeError:
+                # PyTorch разрешает менять interop pool только до первой
+                # параллельной операции; повторный warm-up не должен падать.
+                pass
             _silero_model = torch.package.PackageImporter(MODEL_PATH).load_pickle("tts_models", "model")
             _silero_model.to(device)
-            logger.info("Модель Silero v5 готова к синтезу речи.")
+            _silero_load_error = None
+            _silero_retry_after = 0.0
+            logger.info(
+                "Модель Silero v5 готова к синтезу речи за %.1f сек.",
+                time.monotonic() - started_at,
+            )
         except Exception as e:
             logger.error(f"Ошибка при инициализации Silero v5: {e}")
+            _silero_model = None
+            _silero_load_error = str(e)
+            _silero_retry_after = time.monotonic() + 60.0
     return _silero_model
 
 def warm_up_tts() -> bool:

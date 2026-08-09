@@ -27,6 +27,25 @@ struct CoreProcess {
     started_at: Instant,
 }
 
+fn terminate_core_process(process: &mut CoreProcess) {
+    #[cfg(windows)]
+    {
+        // Python may be launched through the WindowsApps shim. Killing only
+        // that parent leaks the real Core and its loaded PyTorch model.
+        let process_id = process.child.id().to_string();
+        let mut command = Command::new("taskkill");
+        command
+            .args(["/PID", &process_id, "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command.creation_flags(CREATE_NO_WINDOW);
+        let _ = command.status();
+    }
+    #[cfg(not(windows))]
+    let _ = process.child.kill();
+    let _ = process.child.wait();
+}
+
 #[derive(Default)]
 struct CoreState {
     process: Mutex<Option<CoreProcess>>,
@@ -375,8 +394,7 @@ fn ensure_core_running(app: &AppHandle, core_state: &Arc<CoreState>) -> bool {
 
     core_state.connected.store(false, Ordering::Release);
     if let Some(mut process) = guard.take() {
-        let _ = process.child.kill();
-        let _ = process.child.wait();
+        terminate_core_process(&mut process);
     }
     drop(guard);
 
@@ -891,8 +909,7 @@ fn stop_core(state: &Arc<CoreState>) {
     state.generation.fetch_add(1, Ordering::AcqRel);
     if let Ok(mut guard) = state.process.lock() {
         if let Some(mut process) = guard.take() {
-            let _ = process.child.kill();
-            let _ = process.child.wait();
+            terminate_core_process(&mut process);
         }
     }
 }

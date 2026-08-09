@@ -5,6 +5,7 @@ import asyncio
 import itertools
 import logging
 import re
+import time
 
 from modules.audio.tts import (
     reset_interrupt_flag,
@@ -334,11 +335,27 @@ class SpeechService:
             )
             if self.warm_up_on_start:
                 self._warmup_task = asyncio.create_task(
-                    asyncio.to_thread(warm_up_tts),
+                    self._warm_up(),
                     name="nova-tts-warmup",
                 )
 
             logger.info("TTS worker запущен.")
+
+    async def _warm_up(self) -> bool:
+        started_at = time.monotonic()
+        self._publish_status("loading", "Загружаю локальный голос Nova…")
+        try:
+            ready = bool(await asyncio.to_thread(warm_up_tts))
+        except Exception:
+            logger.exception("Ошибка фоновой подготовки TTS.")
+            ready = False
+        elapsed = time.monotonic() - started_at
+        if ready:
+            logger.info("TTS подготовлен за %.1f сек.", elapsed)
+            self._publish_status("ready", f"Голос Nova готов · {elapsed:.1f} с")
+        else:
+            self._publish_status("error", "Локальный голос не загрузился. Проверьте журнал TTS.")
+        return ready
 
     async def say(
         self,
@@ -627,6 +644,13 @@ class SpeechService:
                             completed.set_result(None)
 
                         continue
+
+                    if (
+                        self._warmup_task is not None
+                        and not self._warmup_task.done()
+                    ):
+                        self._publish_status("loading", "Завершаю подготовку голоса…")
+                        await asyncio.shield(self._warmup_task)
 
                     reset_interrupt_flag()
 

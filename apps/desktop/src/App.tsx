@@ -655,6 +655,8 @@ export function App() {
   const [followingConversation, setFollowingConversation] = useState(true);
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voicePhase, setVoicePhase] = useState("idle");
+  const [ttsStatus, setTtsStatus] = useState("");
+  const [ttsPhase, setTtsPhase] = useState("idle");
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [voiceSource, setVoiceSource] = useState("stt");
   const [confirmingSuggestionId, setConfirmingSuggestionId] = useState<string | null>(null);
@@ -805,10 +807,15 @@ export function App() {
             setConfirmingSuggestionId(null);
           }
           if (event.event_type === "voice_status") {
-            setVoiceStatus(text(event.payload, "message"));
             const status = text(event.payload, "status");
-            if (status) setVoicePhase(status);
-            setVoicePending(false);
+            if (text(event.payload, "mode") === "tts") {
+              setTtsStatus(text(event.payload, "message"));
+              if (status) setTtsPhase(status);
+            } else {
+              setVoiceStatus(text(event.payload, "message"));
+              if (status) setVoicePhase(status);
+              setVoicePending(false);
+            }
           }
           if (event.event_type === "voice_activity") {
             const phase = text(event.payload, "phase", "idle");
@@ -1518,6 +1525,11 @@ export function App() {
                   <span />{voiceStatus || (wakeWordActive
                     ? tx(locale, `Жду «${wakeWord}» · Vosk локально`, `Waiting for “${wakeWord}” · local Vosk`)
                     : tx(locale, "Слушаю микрофон…", "Listening…"))}
+                </div>
+              )}
+              {ttsStatus && ttsPhase !== "idle" && (
+                <div className={`tts-runtime-status phase-${ttsPhase}`} role="status" aria-live="polite">
+                  <span />{ttsStatus}
                 </div>
               )}
               <div className="composer-voice-modes" aria-label={tx(locale, "Режим микрофона", "Microphone mode")}>

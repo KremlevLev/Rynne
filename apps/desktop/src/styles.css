@@ -208,6 +208,11 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .composer-actions { display: flex; gap: 6px; }
 .voice-status { display: flex; align-items: center; gap: 7px; margin: 7px 4px 0; color: #86dfe8; font-size: 10px; }
 .voice-status span { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px rgba(91,207,154,.8); animation: voice-pulse 1.8s ease-in-out infinite; }
+.tts-runtime-status { display: flex; align-items: center; gap: 7px; margin: 7px 4px 0; color: #8ba49a; font-size: 10px; }
+.tts-runtime-status span { width: 6px; height: 6px; border-radius: 50%; background: #5bcf9a; box-shadow: 0 0 10px rgba(91,207,154,.55); }
+.tts-runtime-status.phase-loading span, .tts-runtime-status.phase-queued span, .tts-runtime-status.phase-speaking span { animation: voice-pulse 1.2s ease-in-out infinite; }
+.tts-runtime-status.phase-error { color: #e7a5ad; }
+.tts-runtime-status.phase-error span { background: #fb7185; box-shadow: 0 0 10px rgba(251,113,133,.45); }
 .composer-voice-modes { display: flex; gap: 5px; margin: 6px 3px 0; }
 .composer-voice-modes button { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 7px; color: #697386; background: transparent; font: inherit; font-size: 9px; cursor: pointer; }
 .composer-voice-modes button:hover { color: #aeb7c7; background: rgba(255,255,255,.035); }
