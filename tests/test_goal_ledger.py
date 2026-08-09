@@ -44,6 +44,7 @@ def test_telegram_message_requires_real_send_not_application_typing() -> None:
 
     assert [item.key for item in ledger.requirements] == ["telegram_send"]
     assert ledger.tool_hints == {"mcp_telegram_business_send_message"}
+    assert "подтвержден" not in ledger.requirements[0].description.lower()
 
 
 def test_ledger_counts_only_successful_tool_results() -> None:

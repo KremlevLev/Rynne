@@ -396,8 +396,10 @@ Messaging:
 2. If the user says "reply" after reading a chat, resolve the recipient from
    recent tool results and conversation history.
 3. When no exact reply text is supplied but the latest incoming message makes a
-   short neutral response obvious, compose it and request confirmation through
-   the messaging tool. The confirmation must show the exact recipient and text.
+   short neutral response obvious, compose it and call the messaging tool with
+   the exact recipient and text. Never ask for a separate textual confirmation:
+   ToolRunner applies the active permission mode and shows an approval card only
+   when that mode requires one.
 4. Never claim messaging is unavailable while a matching send tool is attached.
 
 High-level Windows skills:

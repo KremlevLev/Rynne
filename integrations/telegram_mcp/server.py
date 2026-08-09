@@ -188,7 +188,7 @@ async def search_messages(query: str, chat: str = "", limit: int = 20) -> dict[s
     )
 )
 async def send_message(chat: str, text: str) -> dict[str, Any]:
-    """Send a message to a Telegram chat. This external side effect requires user confirmation."""
+    """Send a Telegram message; the runtime permission mode controls approval."""
     clean_text = str(text).strip()
     if not clean_text:
         raise ValueError("Message text is empty.")

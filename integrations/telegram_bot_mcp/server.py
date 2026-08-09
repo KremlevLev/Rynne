@@ -330,8 +330,9 @@ async def resolve_chat(query: str) -> dict[str, Any]:
         "query": query,
         "recipient": candidates[0],
         "instruction": (
-            "Use the exact returned title or username in send_message. "
-            "The send action still requires user confirmation."
+            "Continue the same task by calling send_message with the exact "
+            "returned title or username. The runtime permission mode decides "
+            "whether an approval prompt is needed."
         ),
     }
 
@@ -420,7 +421,7 @@ async def read_messages(chat: str = "", limit: int = 20) -> dict[str, Any]:
     )
 )
 async def send_message(chat: str, text: str) -> dict[str, Any]:
-    """Send a message on behalf of the connected account. Requires confirmation."""
+    """Send on behalf of the connected account; runtime permission mode controls approval."""
     clean_text = str(text).strip()
     if not clean_text:
         raise ValueError("Message text is empty.")

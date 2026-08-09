@@ -277,7 +277,7 @@ def infer_mcp_tool_risk(tool_name: str, description: str = "") -> RiskLevel:
         return RiskLevel.WRITE
     
     # Sending data to a person/service is an external side effect. Classify it
-    # as execute so Nova's permission layer must obtain explicit confirmation.
+    # as execute so Nova's selected permission mode can make the final decision.
     if any(word in lowered for word in [
         "execute", "run", "command", "shell", "bash",
         "send", "reply", "publish", "post_message",

@@ -128,6 +128,35 @@ def test_cyrillic_name_resolves_transliterated_username(monkeypatch, tmp_path: P
         connection.close()
 
 
+def test_resolver_defers_approval_to_runtime_permission_mode(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "permission-mode.sqlite3"))
+    connection = _connect()
+    try:
+        _store_update(connection, {
+            "business_message": {
+                "business_connection_id": "connection-1",
+                "message_id": 12,
+                "date": 1_786_200_004,
+                "from": {"id": 48},
+                "chat": {"id": 48, "first_name": "Vlad", "username": "vladosik585"},
+                "text": "hello",
+            }
+        })
+        connection.commit()
+    finally:
+        connection.close()
+
+    async def no_updates() -> int:
+        return 0
+
+    monkeypatch.setattr(business_server, "_sync_updates", no_updates)
+    result = asyncio.run(business_server.resolve_chat("@vladosik585"))
+
+    assert result["status"] == "resolved"
+    assert "runtime permission mode" in result["instruction"]
+    assert "still requires user confirmation" not in result["instruction"]
+
+
 def test_ambiguous_short_name_requires_clarification(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "ambiguous.sqlite3"))
     connection = _connect()

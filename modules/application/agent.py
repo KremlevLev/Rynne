@@ -135,7 +135,11 @@ Telegram resolve_chat or list_chats tool with the user's spoken name. If one
 chat is resolved, call the actual registered send_message tool with its exact
 title or username. If several chats match, ask one short question listing the
 candidates. Sending is complete only after the send tool returns sent=true;
-the normal network-write confirmation must show the recipient and exact text.
+never stop after resolve_chat. Approval is controlled only by the runtime
+permission mode: do not ask for confirmation in model text and do not wait for
+a separate «да». If runtime approval is required, ToolRunner will display the
+approval card itself. When the user already supplied an exact @username, call
+send_message directly unless the tool explicitly requires prior resolution.
 """.strip()
 
 TOOL_CONTINUATION_PROMPT = """

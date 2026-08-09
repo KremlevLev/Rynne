@@ -117,7 +117,7 @@ class GoalLedger:
         if telegram_context and messaging_requested:
             require(
                 "telegram_send",
-                "Отправить сообщение точному Telegram-получателю после подтверждения.",
+                "Отправить сообщение точному Telegram-получателю реальным send tool.",
                 {
                     "mcp_telegram_business_send_message",
                     "mcp_telegram_send_message",

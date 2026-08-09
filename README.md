@@ -328,7 +328,7 @@ See [`docs/desktop_architecture.md`](docs/desktop_architecture.md) for the archi
 Create a bot with `@BotFather`, enable its Business Mode, connect it to your
 Telegram account, and paste the Bot Token in **Settings → Integrations**. Nova
 then receives permitted new business messages, keeps a local searchable cache,
-and can reply on behalf of the connected account after confirmation. The Bot
+and can reply on behalf of the connected account according to the selected permission mode. The Bot
 API does not expose arbitrary old history: a chat appears after a new message
 is observed through the connection. The same settings screen accepts a Tavily
 API key for higher-quality web search.
