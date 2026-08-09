@@ -5,6 +5,7 @@ import asyncio
 import sys
 
 import pytest
+import integrations.telegram_bot_mcp.server as business_server
 
 from integrations.telegram_bot_mcp.server import (
     _connect,
@@ -81,6 +82,34 @@ def test_unknown_business_chat_has_actionable_error(monkeypatch, tmp_path: Path)
             _resolve_chat(connection, "Nobody")
     finally:
         connection.close()
+
+
+def test_read_messages_without_chat_returns_global_recent_messages(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "global.sqlite3"))
+    connection = _connect()
+    try:
+        _store_update(connection, {
+            "business_message": {
+                "business_connection_id": "connection-1",
+                "message_id": 9,
+                "date": 1_786_200_001,
+                "from": {"id": 43},
+                "chat": {"id": 43, "first_name": "XIII", "username": "xiii"},
+                "text": "приветствую",
+            }
+        })
+        connection.commit()
+    finally:
+        connection.close()
+
+    async def no_updates() -> int:
+        return 0
+
+    monkeypatch.setattr(business_server, "_sync_updates", no_updates)
+    result = asyncio.run(business_server.read_messages())
+    assert result["scope"] == "all_observed_chats"
+    assert result["messages"][0]["chat"] == "XIII"
+    assert result["messages"][0]["text"] == "приветствую"
 
 
 def test_business_mcp_surface_and_send_security() -> None:

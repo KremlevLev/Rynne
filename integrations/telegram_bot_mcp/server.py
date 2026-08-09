@@ -7,6 +7,7 @@ account's arbitrary historical chat list.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
@@ -166,6 +167,22 @@ def _store_update(connection: sqlite3.Connection, update: dict[str, Any]) -> Non
 
 def _sync_updates_sync() -> int:
     with _database() as connection:
+        fingerprint = hashlib.sha256(_token().encode("utf-8")).hexdigest()[:24]
+        identity = connection.execute(
+            "SELECT value FROM meta WHERE key='bot_token_fingerprint'"
+        ).fetchone()
+        if identity is not None and identity["value"] != fingerprint:
+            # Offsets belong to one Bot API update stream. Reusing an offset
+            # from another token can acknowledge and lose the new bot's first
+            # business_connection event.
+            connection.execute("DELETE FROM connections")
+            connection.execute("DELETE FROM chats")
+            connection.execute("DELETE FROM messages")
+            connection.execute("DELETE FROM meta")
+        connection.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES('bot_token_fingerprint', ?)",
+            (fingerprint,),
+        )
         row = connection.execute("SELECT value FROM meta WHERE key='update_offset'").fetchone()
         offset = int(row["value"]) if row else 0
         updates = _api("getUpdates", {
@@ -211,15 +228,34 @@ def _resolve_chat(connection: sqlite3.Connection, query: str) -> sqlite3.Row:
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
 async def get_status() -> dict[str, Any]:
     """Validate the Bot token and report connected Telegram Business accounts."""
-    me, update_count = await asyncio.gather(
-        asyncio.to_thread(_api, "getMe"),
-        _sync_updates(),
-    )
+    me = await asyncio.to_thread(_api, "getMe")
+    update_count = await _sync_updates()
     with _database() as connection:
-        connections = [dict(row) for row in connection.execute(
-            "SELECT id, user_id, username, enabled FROM connections ORDER BY rowid DESC"
-        )]
-    return {"bot": me, "business_connections": connections, "new_updates": update_count}
+        connections = []
+        for row in connection.execute(
+            "SELECT id, user_id, username, enabled, rights_json FROM connections ORDER BY rowid DESC"
+        ):
+            item = dict(row)
+            item["rights"] = json.loads(item.pop("rights_json") or "{}")
+            connections.append(item)
+    ready = any(item["enabled"] for item in connections)
+    diagnostic = (
+        "Telegram Business connection is ready."
+        if ready
+        else (
+            "Bot token is valid and Business Mode is available, but Telegram has not "
+            "sent a business_connection update. In Telegram open Settings > Telegram "
+            "Business > Chatbots, disconnect this bot, connect it again, enable reply "
+            "rights, and include the test chat in the selected recipients."
+        )
+    )
+    return {
+        "bot": me,
+        "connection_ready": ready,
+        "business_connections": connections,
+        "new_updates": update_count,
+        "diagnostic": diagnostic,
+    }
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
@@ -231,15 +267,33 @@ async def list_chats(query: str = "", limit: int = 30) -> dict[str, Any]:
     with _database() as connection:
         rows = connection.execute("SELECT * FROM chats ORDER BY last_message_at DESC").fetchall()
     chats = [dict(row) for row in rows if not clean or clean in row["title"].casefold() or clean in row["username"].casefold()]
-    return {"count": min(len(chats), bounded), "chats": chats[:bounded]}
+    result = {"count": min(len(chats), bounded), "chats": chats[:bounded]}
+    if not chats:
+        result["diagnostic"] = (
+            "No Business chats have been observed. Reconnect the bot if status has no "
+            "business connection, then send a new message from an included account."
+        )
+    return result
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
-async def read_messages(chat: str, limit: int = 20) -> dict[str, Any]:
-    """Read locally cached messages received through the Business connection."""
+async def read_messages(chat: str = "", limit: int = 20) -> dict[str, Any]:
+    """Read cached Business messages from one chat, or latest messages globally."""
     await _sync_updates()
     bounded = max(1, min(100, int(limit)))
     with _database() as connection:
+        if not str(chat).strip():
+            rows = connection.execute(
+                """SELECT m.message_id, m.date, m.sender_id, m.outgoing, m.text,
+                          c.title AS chat, c.username AS username
+                   FROM messages m JOIN chats c ON c.chat_id=m.chat_id
+                   ORDER BY m.date DESC, m.message_id DESC LIMIT ?""",
+                (bounded,),
+            ).fetchall()
+            return {
+                "scope": "all_observed_chats",
+                "messages": [dict(row) for row in reversed(rows)],
+            }
         resolved = _resolve_chat(connection, chat)
         rows = connection.execute(
             """SELECT message_id, date, sender_id, outgoing, text FROM messages
@@ -264,6 +318,17 @@ async def send_message(chat: str, text: str) -> dict[str, Any]:
     await _sync_updates()
     with _database() as connection:
         resolved = _resolve_chat(connection, chat)
+        connection_row = connection.execute(
+            "SELECT enabled, rights_json FROM connections WHERE id=?",
+            (resolved["connection_id"],),
+        ).fetchone()
+        rights = json.loads(connection_row["rights_json"] or "{}") if connection_row else {}
+        if connection_row is None or not connection_row["enabled"]:
+            raise RuntimeError("Telegram Business connection is disabled.")
+        if not rights.get("can_reply"):
+            raise PermissionError(
+                "The connected Telegram Business bot does not have permission to reply."
+            )
     result = await asyncio.to_thread(
         _api,
         "sendMessage",

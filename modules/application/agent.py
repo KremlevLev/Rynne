@@ -86,6 +86,9 @@ ACTION_PATTERNS = (
     r"\bобнови\b",
     r"\bпереименуй\b",
     r"\bотправь\b",
+    r"\bответь\b",
+    r"\breply\b",
+    r"\brespond\b",
     r"\bзаполни\b",
     r"\bсобери\b",
     r"\bзайди\b",
@@ -207,7 +210,7 @@ def request_requires_action(text: str) -> bool:
 
 
 CONTEXTUAL_FOLLOW_UP_RE = re.compile(
-    r"^(?:а\s+)?(?:теперь|тогда|дальше|потом|так|там|туда|здесь|сюда|"
+    r"^(?:а\s+)?(?:ответь|reply|respond|теперь|тогда|дальше|потом|так|там|туда|здесь|сюда|"
     r"в\s+н[её]м|на\s+н[её]м|с\s+н[и]м|это|этот|эту|тот|его|е[её]|их)\b",
     re.IGNORECASE,
 )
@@ -623,11 +626,20 @@ class AgentService:
 
         previous_user = self._last_message_text(self.history, "user")
         previous_assistant = self._last_message_text(self.history, "assistant")
+        assistant_requests_detail = any(
+            marker in previous_assistant.casefold()
+            for marker in (
+                "уточните", "уточни", "выберите", "выбери",
+                "какой чат", "в какой чат", "название", "username",
+            )
+        )
+        short_answer = len(str(text).strip().split()) <= 4
         return bool(
             previous_user
             and (
                 request_requires_action(previous_user)
                 or previous_assistant.rstrip().endswith(("?", "？"))
+                or (short_answer and assistant_requests_detail)
                 or any(message.get("role") == "tool" for message in self.history)
             )
         )

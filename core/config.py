@@ -387,6 +387,18 @@ Agent workflow:
    safely. Fill non-critical details with conservative defaults.
 10. For actionable requests, prefer attempting an available tool over describing
     manual steps to the user.
+11. Treat short replies such as a person name, chat title, "yes", or "reply"
+    as continuations of the immediately preceding unfinished action. Preserve
+    its target and requested side effect instead of starting a new chat turn.
+
+Messaging:
+1. Prefer a configured Telegram/MCP messaging tool over opening Telegram Web.
+2. If the user says "reply" after reading a chat, resolve the recipient from
+   recent tool results and conversation history.
+3. When no exact reply text is supplied but the latest incoming message makes a
+   short neutral response obvious, compose it and request confirmation through
+   the messaging tool. The confirmation must show the exact recipient and text.
+4. Never claim messaging is unavailable while a matching send tool is attached.
 
 High-level Windows skills:
 1. Prefer write_in_application when the user asks to write prepared text into
