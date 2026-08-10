@@ -767,7 +767,7 @@ fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<
             command.env(model_variable, models.join(","));
         }
     }
-    for service in ["telegram", "tavily"] {
+    for service in ["telegram", "telegram_remote", "tavily"] {
         let variable = service_variable(service)?;
         if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
             command.env(variable, value);
@@ -1002,7 +1002,23 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_provider_keys, key_hint, normalize_permission_mode, split_key_list};
+    use super::{
+        file_provider_keys, key_hint, normalize_permission_mode, service_variable,
+        split_key_list, validate_telegram_control_ids,
+    };
+
+    #[test]
+    fn telegram_remote_uses_the_core_owner_allowlist() {
+        assert_eq!(
+            service_variable("telegram_remote").unwrap(),
+            "TELEGRAM_CONTROL_USER_IDS"
+        );
+        assert_eq!(
+            validate_telegram_control_ids("1430664133, 1430664133,987654321").unwrap(),
+            "1430664133,987654321"
+        );
+        assert!(validate_telegram_control_ids("@username").is_err());
+    }
 
     #[test]
     fn permission_modes_are_explicit_and_validated() {
