@@ -283,6 +283,12 @@ LLM_REQUEST_TIMEOUT = float(
     os.getenv("NOVA_LLM_REQUEST_TIMEOUT", "30")
 )
 
+# Один логический шаг может перебирать несколько ключей и провайдеров. Без
+# общего дедлайна последовательные сетевые таймауты складываются в минуты.
+LOGICAL_MODEL_TIMEOUT_SECONDS = float(
+    os.getenv("NOVA_LOGICAL_MODEL_TIMEOUT_SECONDS", "60")
+)
+
 GROQ_RATE_LIMIT_COOLDOWN = float(
     os.getenv("NOVA_GROQ_RATE_LIMIT_COOLDOWN", "90")
 )

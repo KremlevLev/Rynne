@@ -29,6 +29,7 @@ from modules.routing.intent import (
 )
 
 from core.config import (
+    LOGICAL_MODEL_TIMEOUT_SECONDS,
     MAX_CONTEXT_ESTIMATED_TOKENS,
     MAX_TOOL_CALLS,
     SYSTEM_PROMPT,
@@ -58,6 +59,54 @@ from modules.agent.skill_library import SkillBundle, SkillLibrary
 
 
 logger = logging.getLogger("AgentService")
+
+
+TELEGRAM_QUOTED_MESSAGE_RE = re.compile(
+    r"[«\"](?P<message>.+?)[»\"]\s*$",
+    re.DOTALL,
+)
+
+
+def parse_telegram_message_request(text: str) -> tuple[str, str] | None:
+    """Parse explicit recipient + quoted text without spending an LLM call."""
+    match = TELEGRAM_QUOTED_MESSAGE_RE.search(str(text).strip())
+    if match is None:
+        return None
+    message = " ".join(match.group("message").split()).strip()
+    prefix = str(text)[:match.start()].strip()
+    prefix = re.sub(
+        r"^\s*(?:напиши|отправь|send|message)\s+",
+        "",
+        prefix,
+        flags=re.IGNORECASE,
+    )
+    prefix = re.sub(
+        r"\b(?:в\s+)?(?:telegram|телеграм(?:е|м)?|телегу|тг)\b",
+        " ",
+        prefix,
+        flags=re.IGNORECASE,
+    )
+    prefix = re.sub(
+        r"\b(?:пользователю|юзеру|контакту|сообщение)\b",
+        " ",
+        prefix,
+        flags=re.IGNORECASE,
+    )
+    recipient = " ".join(prefix.split()).strip(" ,:-")
+    if not recipient or not message:
+        return None
+    return recipient, message
+
+
+def _mcp_payload(result: ToolResult) -> dict[str, Any]:
+    structured = result.data.get("structured_content")
+    if isinstance(structured, dict):
+        return structured
+    try:
+        parsed = json.loads(result.message)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 ACTION_PATTERNS = (
@@ -572,6 +621,7 @@ class AgentService:
         # cache prevents a long session from putting the whole registry back
         # into every model context.
         self._sticky_tool_names: list[str] = []
+        self._pending_telegram_message: str | None = None
 
     def _budget_for_available_capacity(self) -> AgentBudget:
         """Scale useful work with independent model lanes, while keeping hard caps."""
@@ -739,12 +789,143 @@ class AgentService:
                 f"Для режима '{complexity.value}' нет моделей."
             )
 
-        return await self.llm.complete(
-            candidates=candidates,
-            messages=messages,
-            tools=tools,
-            allow_tools=allow_tools,
-            requires_vision=has_image,
+        try:
+            return await asyncio.wait_for(
+                self.llm.complete(
+                    candidates=candidates,
+                    messages=messages,
+                    tools=tools,
+                    allow_tools=allow_tools,
+                    requires_vision=has_image,
+                ),
+                timeout=LOGICAL_MODEL_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise TimeoutError(
+                "Модель не ответила за отведённое время. Попробуй ещё раз."
+            ) from exc
+
+    async def _try_fast_telegram_message(
+        self,
+        *,
+        user_text: str,
+        turn_id: str,
+        response_language: str,
+        workspace_path: str | None,
+    ) -> AssistantResponse | None:
+        parsed = parse_telegram_message_request(user_text)
+        if parsed is None:
+            exact_username = re.fullmatch(
+                r"\s*@?[A-Za-z0-9_]{5,}\s*",
+                user_text,
+            )
+            if exact_username is None or self._pending_telegram_message is None:
+                return None
+            recipient = user_text.strip()
+            message = self._pending_telegram_message
+        else:
+            recipient, message = parsed
+
+        def choose_tool(suffix: str) -> str | None:
+            candidates = sorted(
+                name for name in self.registry.names
+                if "telegram" in name.casefold()
+                and name.casefold().endswith(suffix)
+            )
+            business = [name for name in candidates if "business" in name.casefold()]
+            return business[0] if business else candidates[0] if candidates else None
+
+        resolve_name = choose_tool("_resolve_chat")
+        send_name = choose_tool("_send_message")
+        if resolve_name is None or send_name is None:
+            return None
+
+        self._emit_progress(
+            "telegram_resolving",
+            turn_id=turn_id,
+            progress=30,
+            message="Resolving the Telegram recipient locally without a model call.",
+            tool_names=[resolve_name],
+        )
+        context = ToolContext.create(
+            session_id=self.session_id,
+            turn_id=turn_id,
+            working_directory=workspace_path,
+            metadata={"user_request": user_text, "fast_path": "telegram_message"},
+        )
+        resolve_call = {
+            "id": f"call_{uuid.uuid4().hex}",
+            "type": "function",
+            "function": {
+                "name": resolve_name,
+                "arguments": json.dumps({"query": recipient}, ensure_ascii=False),
+            },
+        }
+        resolved = await self.runner.execute(resolve_call, context=context)
+        records = [self._tool_result_record(resolve_call, resolved)]
+        payload = _mcp_payload(resolved)
+        if not resolved.success or payload.get("status") != "resolved":
+            self._pending_telegram_message = message
+            response = build_assistant_response_from_tools(
+                records,
+                language=response_language,
+            )
+            response.success = False
+            response.error_code = "TELEGRAM_RECIPIENT_NOT_RESOLVED"
+            return response
+
+        target = payload.get("recipient")
+        if not isinstance(target, dict):
+            self._pending_telegram_message = message
+            return AssistantResponse(
+                display_text=(
+                    "Не удалось определить получателя. Назови точный @username."
+                    if response_language == "ru"
+                    else "I couldn't resolve the recipient. Send the exact @username."
+                ),
+                speech_text=(
+                    "Не удалось определить получателя. Назови точное имя пользователя."
+                    if response_language == "ru"
+                    else "I couldn't resolve the recipient. Send the exact username."
+                ),
+                success=False,
+                error_code="TELEGRAM_RECIPIENT_NOT_RESOLVED",
+            )
+        exact_target = str(target.get("username") or target.get("title") or "").strip()
+        if not exact_target:
+            self._pending_telegram_message = message
+            return None
+
+        self._emit_progress(
+            "telegram_sending",
+            turn_id=turn_id,
+            progress=60,
+            message="Recipient resolved; sending through Telegram MCP.",
+            tool_names=[send_name],
+        )
+        send_call = {
+            "id": f"call_{uuid.uuid4().hex}",
+            "type": "function",
+            "function": {
+                "name": send_name,
+                "arguments": json.dumps(
+                    {"chat": exact_target, "text": message},
+                    ensure_ascii=False,
+                ),
+            },
+        }
+        sent = await self.runner.execute(send_call, context=ToolContext.create(
+            session_id=self.session_id,
+            turn_id=turn_id,
+            working_directory=workspace_path,
+            metadata={"user_request": user_text, "fast_path": "telegram_message"},
+        ))
+        records.append(self._tool_result_record(send_call, sent))
+        if sent.success:
+            self._pending_telegram_message = None
+        return build_assistant_response_from_tools(
+            records,
+            language=response_language,
         )
 
     @staticmethod
@@ -1229,6 +1410,30 @@ class AgentService:
             if request_object is not None
             else ""
         )
+        if (
+            execution_decision.intent == IntentKind.MESSAGING
+            or self._pending_telegram_message is not None
+        ):
+            fast_telegram_response = await self._try_fast_telegram_message(
+                user_text=user_text,
+                turn_id=turn_id,
+                response_language=response_language,
+                workspace_path=workspace_path or None,
+            )
+            if fast_telegram_response is not None:
+                self.history.append({
+                    "role": "assistant",
+                    "content": fast_telegram_response.display_text,
+                })
+                self._emit_progress(
+                    "finalizing",
+                    turn_id=turn_id,
+                    progress=100,
+                    message="Telegram action finished without a model call.",
+                    success=fast_telegram_response.success,
+                    fast_path="telegram_message",
+                )
+                return fast_telegram_response
         skill_bundle = SkillBundle()
         if self.skill_library is not None and not proactive_autonomous_request:
             try:

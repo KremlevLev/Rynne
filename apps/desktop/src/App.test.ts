@@ -105,6 +105,22 @@ describe("eventToItem", () => {
     expect(tool?.body).toContain("application, text");
   });
 
+  it("shows deterministic Telegram fast-path stages", () => {
+    const resolving = eventToItem({
+      event_type: "agent_progress",
+      payload: { phase: "telegram_resolving", progress: 30 },
+      created_at: 8,
+    });
+    const sending = eventToItem({
+      event_type: "agent_progress",
+      payload: { phase: "telegram_sending", progress: 60 },
+      created_at: 9,
+    });
+
+    expect(resolving?.title).toBe("Ищу получателя в Telegram");
+    expect(sending?.title).toBe("Отправляю сообщение в Telegram");
+  });
+
   it("shows wake capture before the command reaches the model", () => {
     const detected = eventToItem({
       event_type: "voice_activity",

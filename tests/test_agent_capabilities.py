@@ -6,6 +6,7 @@ from modules.application.agent import (
     AgentService,
     DYNAMIC_TOOL_DISCOVERY_NAME,
     is_contextual_follow_up,
+    parse_telegram_message_request,
 )
 from modules.agent.execution_memory import ExecutionMemory
 from modules.agent.skill_library import SkillLibrary
@@ -13,6 +14,103 @@ from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
 from modules.tools.runtime import ToolRegistry, ToolRunner
 from modules.tools.base import RiskLevel
+
+
+def test_parses_explicit_telegram_message_without_model() -> None:
+    assert parse_telegram_message_request(
+        'напиши son в телегу "здарова заебал"'
+    ) == ("son", "здарова заебал")
+    assert parse_telegram_message_request(
+        'Отправь в Telegram пользователю @vladosik585 сообщение «Привет»'
+    ) == ("@vladosik585", "Привет")
+
+
+def test_explicit_telegram_message_uses_fast_path() -> None:
+    class LLMThatMustNotRun:
+        history: list[dict] = []
+
+        async def complete(self, **kwargs):
+            raise AssertionError("Telegram fast path must not call the LLM")
+
+    calls: list[tuple[str, str]] = []
+    schemas = [
+        {
+            "type": "function",
+            "function": {
+                "name": "mcp_telegram_business_resolve_chat",
+                "description": "Resolve Telegram recipient.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "mcp_telegram_business_send_message",
+                "description": "Send Telegram message.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "chat": {"type": "string"},
+                        "text": {"type": "string"},
+                    },
+                    "required": ["chat", "text"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+    ]
+
+    def resolve_chat(query: str) -> ToolResult:
+        calls.append(("resolve", query))
+        payload = {
+            "status": "resolved",
+            "recipient": {"title": "son", "username": "Vladosik585"},
+        }
+        return ToolResult.ok(
+            "resolved",
+            data={"structured_content": payload},
+        )
+
+    def send_message(chat: str, text: str) -> ToolResult:
+        calls.append((chat, text))
+        return ToolResult.ok(
+            "sent",
+            data={
+                "structured_content": {
+                    "sent": True,
+                    "chat": "son",
+                    "message_id": 1,
+                }
+            },
+        )
+
+    registry = ToolRegistry.from_legacy(
+        schemas,
+        {
+            "mcp_telegram_business_resolve_chat": resolve_chat,
+            "mcp_telegram_business_send_message": send_message,
+        },
+    )
+    agent = AgentService(
+        LLMThatMustNotRun(),
+        registry,
+        ToolRunner(registry),
+    )
+    response = asyncio.run(
+        agent.run('напиши son в телегу "здарова заебал"')
+    )
+
+    assert response.success
+    assert calls == [
+        ("resolve", "son"),
+        ("Vladosik585", "здарова заебал"),
+    ]
+    assert response.display_text == "Готово. Сообщение отправлено пользователю son."
 
 
 class RefusalThenToolLLM:
