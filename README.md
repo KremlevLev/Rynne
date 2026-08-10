@@ -501,6 +501,8 @@ The detailed backlog and completed milestones live in [`roadmap.md`](roadmap.md)
 
 Nova releases that include the current [`LICENSE`](LICENSE) are available under the **Functional Source License 1.1, Apache 2.0 Future License** (`FSL-1.1-ALv2`). Personal use, internal use, education, research, modification, and redistribution for permitted purposes are allowed. Offering Nova or substantially similar functionality as a competing commercial product or service is not allowed under the FSL grant.
 
-This licensing model applies to covered versions first made available on or after **August 10, 2026**. Each covered version becomes available under the Apache License 2.0 on the second anniversary of the date that version was first made available. Earlier versions released under Apache 2.0 remain under their original license. Alternative commercial terms may be requested from the copyright holder through the repository owner contact.
+This licensing model applies to covered versions first made available on or after **August 10, 2026**. Each covered version becomes available under the Apache License 2.0 on the second anniversary of the date that version was first made available. Earlier versions released under Apache 2.0 remain under their original license.
+
+See [commercial licensing](COMMERCIAL-LICENSE.md) to request competing-product, managed-service, OEM, or white-label rights. The proposed boundary between the useful public desktop agent and private Nova Cloud infrastructure is documented in [open-core and private-service boundaries](docs/open-core-boundaries.md).
 
 If you want a Windows agent that can do more than rephrase a task — try Nova on a real workflow and tell us where it saved you time and where it got in the way.

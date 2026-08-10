@@ -2318,3 +2318,5 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Правообладателем указан Кремлёв Лев Андреевич, copyright 2026.
 - [x] Каждая покрытая версия автоматически получает Apache 2.0 через два года после первой публикации; ранее выпущенные Apache-версии сохраняют исходные условия.
 - [x] Английский и русский README прямо описывают разрешённое использование и запрет конкурирующего коммерческого продукта или сервиса.
+- [x] Добавлен двуязычный `COMMERCIAL-LICENSE.md` с условиями обращения за OEM, white-label, managed-service и другими коммерческими правами по адресу `kremlevlev888@gmail.com`.
+- [x] Зафиксирована open-core граница: полноценный публичный BYOK desktop остаётся в `nova`, а аккаунты, billing, managed inference, remote task broker, premium entitlements и production ops выносятся в отдельные закрытые репозитории.
