@@ -1,6 +1,6 @@
 # Nova commercial licensing
 
-Copyright 2026 Кремлёв Лев Андреевич
+Copyright 2026 Kremlev Lev Andreevich
 
 Nova versions covered by the repository's current [`LICENSE`](LICENSE) are made available under the **Functional Source License 1.1, Apache 2.0 Future License** (`FSL-1.1-ALv2`). The FSL license text is controlling. This document is a practical explanation and does not replace or modify it.
 
