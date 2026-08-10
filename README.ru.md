@@ -313,7 +313,7 @@ JSONL bridge и supervisor уже реализованы, но полноцен�
 проверяется отдельной командой:
 
 ```powershell
-cd C:\Users\Utest\Desktop\nova
+cd C:\Users\Utest\Desktop\rynne
 .\scripts\dev-desktop.ps1
 ```
 
