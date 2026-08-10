@@ -12,7 +12,7 @@ export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type EventListener = (event: NovaEvent) => void;
 export type ConnectionListener = (state: ConnectionState) => void;
 export type ProviderName = "groq" | "openrouter" | "gemini";
-export type ServiceName = "telegram" | "tavily";
+export type ServiceName = "telegram" | "telegram_remote" | "tavily";
 export type PermissionMode = "full_access" | "risky_only" | "always_ask";
 export interface ProviderKeySummary {
   provider: ProviderName;

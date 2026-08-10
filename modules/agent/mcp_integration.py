@@ -82,6 +82,9 @@ def create_bundled_telegram_bot_server_config(
         logger.warning("Bundled Telegram Business MCP server is missing: %s", server_path)
         return None
     env = {"TELEGRAM_BOT_TOKEN": token}
+    control_user_ids = os.environ.get("TELEGRAM_CONTROL_USER_IDS", "").strip()
+    if control_user_ids:
+        env["TELEGRAM_CONTROL_USER_IDS"] = control_user_ids
     store_path = os.environ.get("TELEGRAM_BOT_STORE_PATH", "").strip()
     if store_path:
         env["TELEGRAM_BOT_STORE_PATH"] = store_path

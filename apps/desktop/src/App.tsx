@@ -651,6 +651,7 @@ export function App() {
   const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretSummary[]>([]);
   const [serviceDrafts, setServiceDrafts] = useState<Record<ServiceName, string>>({
     telegram: "",
+    telegram_remote: "",
     tavily: "",
   });
   const [settingsStatus, setSettingsStatus] = useState("");
@@ -1161,7 +1162,7 @@ export function App() {
 
   async function saveServiceSecret(service: ServiceName) {
     const secret = serviceDrafts[service].trim();
-    if (secret.length < 12) return;
+    if (secret.length < (service === "telegram_remote" ? 5 : 12)) return;
     setSettingsStatus(tx(locale, "Сохраняю ключ и перезапускаю Nova Core…", "Saving the key and restarting Nova Core…"));
     try {
       await transport.setServiceSecret(service, secret);
@@ -2090,6 +2091,13 @@ export function App() {
                     placeholder: "123456789:AA…",
                   },
                   {
+                    service: "telegram_remote" as const,
+                    title: "Telegram Remote",
+                    descriptionRu: "ID аккаунтов, которым разрешено ставить задачи Nova через этого бота. Отправьте боту /start, скопируйте показанный ID и вставьте сюда. Несколько ID разделяются запятыми.",
+                    descriptionEn: "Telegram account IDs allowed to control Nova through this bot. Send /start to the bot, copy the displayed ID, and paste it here. Separate multiple IDs with commas.",
+                    placeholder: "123456789,987654321",
+                  },
+                  {
                     service: "tavily" as const,
                     title: "Tavily Search",
                     descriptionRu: "Ключ Tavily для качественного веб-поиска. Без него Nova продолжит использовать бесплатный резервный поиск.",
@@ -2132,7 +2140,7 @@ export function App() {
                           <button
                             className="save-settings"
                             onClick={() => void saveServiceSecret(option.service)}
-                            disabled={serviceDrafts[option.service].trim().length < 12}
+                            disabled={serviceDrafts[option.service].trim().length < (option.service === "telegram_remote" ? 5 : 12)}
                           >
                             <Plus size={14} /> {tx(locale, "Подключить", "Connect")}
                           </button>

@@ -78,6 +78,7 @@ struct ServiceSecretSummary {
 fn service_variable(service: &str) -> Result<&'static str, String> {
     match service.trim().to_lowercase().as_str() {
         "telegram" => Ok("TELEGRAM_BOT_TOKEN"),
+        "telegram_remote" => Ok("TELEGRAM_CONTROL_USER_IDS"),
         "tavily" => Ok("TAVILY_API_KEY"),
         _ => Err("Unsupported integration service.".to_owned()),
     }
@@ -320,6 +321,26 @@ fn validate_service_secret(secret: &str) -> Result<&str, String> {
     Ok(value)
 }
 
+fn validate_telegram_control_ids(value: &str) -> Result<String, String> {
+    let mut ids = Vec::new();
+    for raw in value.split(|character: char| character == ',' || character == ';' || character.is_whitespace()) {
+        let id = raw.trim();
+        if id.is_empty() {
+            continue;
+        }
+        if id.len() < 5 || id.len() > 20 || !id.chars().all(|character| character.is_ascii_digit()) {
+            return Err("Telegram Remote accepts numeric Telegram user IDs separated by commas.".to_owned());
+        }
+        if !ids.iter().any(|known| known == id) {
+            ids.push(id.to_owned());
+        }
+    }
+    if ids.is_empty() {
+        return Err("Add at least one Telegram user ID.".to_owned());
+    }
+    Ok(ids.join(","))
+}
+
 fn write_service_secret(env_path: &Path, variable: &str, value: Option<&str>) -> Result<(), String> {
     let current = std::fs::read_to_string(env_path).unwrap_or_default();
     let mut lines: Vec<String> = current
@@ -476,7 +497,7 @@ fn nova_list_service_secrets(app: AppHandle) -> Result<Vec<ServiceSecretSummary>
     let env_path = provider_env_path(&app)?;
     let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
     let mut summaries = Vec::new();
-    for service in ["telegram", "tavily"] {
+    for service in ["telegram", "telegram_remote", "tavily"] {
         let variable = service_variable(service)?;
         if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
             summaries.push(ServiceSecretSummary {
@@ -507,12 +528,16 @@ fn nova_set_service_secret(
     state: State<'_, Arc<CoreState>>,
 ) -> Result<(), String> {
     let variable = service_variable(&service)?;
-    let value = validate_service_secret(&secret)?;
+    let value = if service.eq_ignore_ascii_case("telegram_remote") {
+        validate_telegram_control_ids(&secret)?
+    } else {
+        validate_service_secret(&secret)?.to_owned()
+    };
     if service.eq_ignore_ascii_case("telegram") && !value.contains(':') {
         return Err("Telegram Bot token must contain a colon.".to_owned());
     }
     let env_path = provider_env_path(&app)?;
-    write_service_secret(&env_path, variable, Some(value))?;
+    write_service_secret(&env_path, variable, Some(&value))?;
     let core_state = state.inner().clone();
     stop_core(&core_state);
     spawn_core(app, core_state)

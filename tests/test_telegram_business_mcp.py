@@ -9,6 +9,7 @@ import integrations.telegram_bot_mcp.server as business_server
 
 from integrations.telegram_bot_mcp.server import (
     _connect,
+    _control_start_text,
     _resolve_chat,
     _store_update,
     mcp,
@@ -226,15 +227,61 @@ def test_read_messages_without_chat_returns_global_recent_messages(monkeypatch, 
 def test_business_mcp_surface_and_send_security() -> None:
     tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
     assert set(tools) == {
-        "get_status", "list_chats", "read_messages", "resolve_chat", "send_message",
+        "get_status", "list_chats", "poll_control_commands", "read_messages",
+        "resolve_chat", "send_control_reply", "send_message",
     }
     assert tools["read_messages"].annotations.readOnlyHint is True
     assert tools["resolve_chat"].annotations.readOnlyHint is True
     assert tools["send_message"].annotations.readOnlyHint is False
+    assert tools["poll_control_commands"].annotations.readOnlyHint is True
+    assert tools["send_control_reply"].annotations.readOnlyHint is False
 
     name = "mcp_telegram_business_send_message"
     assert infer_mcp_tool_risk(name, "Send a Telegram message") == RiskLevel.EXECUTE
     assert infer_mcp_tool_category(name, "Send a Telegram message") == ToolCategory.NETWORK_WRITE
+
+
+def test_start_text_explains_pairing_and_authorized_usage() -> None:
+    pairing = _control_start_text(123456789, authorized=False)
+    assert "123456789" in pairing
+    assert "Настройки" in pairing
+    authorized = _control_start_text(123456789, authorized=True)
+    assert "Nova Remote подключена" in authorized
+    assert "обычным сообщением" in authorized
+
+
+def test_authorized_bot_message_becomes_remote_command(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "remote.sqlite3"))
+    monkeypatch.setenv("TELEGRAM_CONTROL_USER_IDS", "42")
+    connection = _connect()
+    try:
+        _store_update(connection, {
+            "update_id": 101,
+            "message": {
+                "message_id": 7,
+                "date": 1_786_200_000,
+                "from": {"id": 42, "username": "lev"},
+                "chat": {"id": 42, "type": "private"},
+                "text": "проверь статус проекта",
+            },
+        })
+        _store_update(connection, {
+            "update_id": 102,
+            "message": {
+                "message_id": 8,
+                "date": 1_786_200_001,
+                "from": {"id": 99, "username": "stranger"},
+                "chat": {"id": 99, "type": "private"},
+                "text": "удали все файлы",
+            },
+        })
+        connection.commit()
+        rows = connection.execute("SELECT * FROM control_commands").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["user_id"] == 42
+        assert rows[0]["text"] == "проверь статус проекта"
+    finally:
+        connection.close()
 
 
 def test_telegram_api_error_keeps_description_without_leaking_token(monkeypatch) -> None:
@@ -280,8 +327,10 @@ def test_business_mcp_stdio_discovery_does_not_contact_telegram() -> None:
             assert gateway.get_available_tools() == {
                 "mcp_telegram_business_get_status",
                 "mcp_telegram_business_list_chats",
+                "mcp_telegram_business_poll_control_commands",
                 "mcp_telegram_business_read_messages",
                 "mcp_telegram_business_resolve_chat",
+                "mcp_telegram_business_send_control_reply",
                 "mcp_telegram_business_send_message",
             }
         finally:

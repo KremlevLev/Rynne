@@ -82,6 +82,15 @@ def _connect() -> sqlite3.Connection:
             text TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (connection_id, chat_id, message_id)
         );
+        CREATE TABLE IF NOT EXISTS control_commands (
+            update_id INTEGER PRIMARY KEY,
+            chat_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            username TEXT NOT NULL DEFAULT '',
+            text TEXT NOT NULL,
+            date INTEGER NOT NULL DEFAULT 0,
+            delivered INTEGER NOT NULL DEFAULT 0
+        );
         """
     )
     return connection
@@ -129,7 +138,68 @@ def _chat_title(chat: dict[str, Any]) -> str:
     )
 
 
+def _control_user_ids() -> set[int]:
+    result: set[int] = set()
+    for item in re.split(r"[,;\s]+", os.getenv("TELEGRAM_CONTROL_USER_IDS", "")):
+        if item.strip().isdigit():
+            result.add(int(item.strip()))
+    return result
+
+
+def _control_start_text(user_id: int, *, authorized: bool) -> str:
+    if not authorized:
+        return (
+            "Привет. Я Nova Remote — безопасный пульт для Nova на вашем Windows-компьютере.\n\n"
+            f"Ваш Telegram ID: {user_id}\n"
+            "Добавьте этот ID в Nova → Настройки → Telegram Remote и перезапустите Core. "
+            "До привязки команды с этого аккаунта выполняться не будут."
+        )
+    return (
+        "Nova Remote подключена.\n\n"
+        "Отправьте задачу обычным сообщением, например:\n"
+        "• открой Obsidian и создай заметку\n"
+        "• проверь статус проекта и запусти тесты\n"
+        "• найди файл отчёта на компьютере\n\n"
+        "Ответ Nova придёт сюда. Действуют те же режимы доступа и подтверждения, "
+        "что выбраны в Desktop UI. /start или /help — эта памятка."
+    )
+
+
+def _store_control_update(connection: sqlite3.Connection, update: dict[str, Any]) -> None:
+    message = update.get("message")
+    if not isinstance(message, dict):
+        return
+    chat = message.get("chat") or {}
+    sender = message.get("from") or {}
+    text = str(message.get("text") or "").strip()
+    user_id = sender.get("id")
+    chat_id = chat.get("id")
+    if (
+        chat.get("type") != "private"
+        or not text
+        or user_id is None
+        or chat_id is None
+        or int(user_id) not in _control_user_ids()
+        or text.casefold().split(maxsplit=1)[0] in {"/start", "/help"}
+    ):
+        return
+    connection.execute(
+        """INSERT OR IGNORE INTO control_commands
+           (update_id, chat_id, user_id, username, text, date, delivered)
+           VALUES(?, ?, ?, ?, ?, ?, 0)""",
+        (
+            int(update.get("update_id", 0)),
+            int(chat_id),
+            int(user_id),
+            str(sender.get("username") or ""),
+            text[:8000],
+            int(message.get("date", 0)),
+        ),
+    )
+
+
 def _store_update(connection: sqlite3.Connection, update: dict[str, Any]) -> None:
+    _store_control_update(connection, update)
     business = update.get("business_connection")
     if isinstance(business, dict) and business.get("id"):
         user = business.get("user") or {}
@@ -189,6 +259,7 @@ def _sync_updates_sync() -> int:
             connection.execute("DELETE FROM connections")
             connection.execute("DELETE FROM chats")
             connection.execute("DELETE FROM messages")
+            connection.execute("DELETE FROM control_commands")
             connection.execute("DELETE FROM meta")
         connection.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES('bot_token_fingerprint', ?)",
@@ -201,12 +272,33 @@ def _sync_updates_sync() -> int:
             "timeout": 0,
             "limit": 100,
             "allowed_updates": [
+                "message",
                 "business_connection", "business_message",
                 "edited_business_message", "deleted_business_messages",
             ],
         }) or []
         for update in updates:
             _store_update(connection, update)
+            message = update.get("message")
+            if isinstance(message, dict):
+                text = str(message.get("text") or "").strip().casefold()
+                chat = message.get("chat") or {}
+                sender = message.get("from") or {}
+                user_id = sender.get("id")
+                chat_id = chat.get("id")
+                if (
+                    chat.get("type") == "private"
+                    and user_id is not None
+                    and chat_id is not None
+                    and text.split(maxsplit=1)[0] in {"/start", "/help"}
+                ):
+                    _api("sendMessage", {
+                        "chat_id": int(chat_id),
+                        "text": _control_start_text(
+                            int(user_id),
+                            authorized=int(user_id) in _control_user_ids(),
+                        ),
+                    })
             offset = max(offset, int(update.get("update_id", 0)) + 1)
         if updates:
             connection.execute(
@@ -423,6 +515,50 @@ async def read_messages(chat: str = "", limit: int = 20) -> dict[str, Any]:
             (resolved["connection_id"], resolved["chat_id"], bounded),
         ).fetchall()
     return {"chat": resolved["title"], "messages": [dict(row) for row in reversed(rows)]}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+async def poll_control_commands(limit: int = 10) -> dict[str, Any]:
+    """Claim new commands sent directly to the bot by authorized owners."""
+    await _sync_updates()
+    bounded = max(1, min(25, int(limit)))
+    with _database() as connection:
+        rows = connection.execute(
+            """SELECT update_id, chat_id, user_id, username, text, date
+               FROM control_commands WHERE delivered=0
+               ORDER BY update_id LIMIT ?""",
+            (bounded,),
+        ).fetchall()
+        if rows:
+            connection.executemany(
+                "UPDATE control_commands SET delivered=1 WHERE update_id=?",
+                [(row["update_id"],) for row in rows],
+            )
+    return {"count": len(rows), "commands": [dict(row) for row in rows]}
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True,
+    )
+)
+async def send_control_reply(chat_id: int, text: str) -> dict[str, Any]:
+    """Return Nova's result to an authorized Telegram Remote owner."""
+    clean_text = str(text).strip()
+    if not clean_text:
+        raise ValueError("Reply text is empty.")
+    if int(chat_id) not in _control_user_ids():
+        raise PermissionError("This Telegram account is not an authorized Nova Remote owner.")
+    result = await asyncio.to_thread(
+        _api,
+        "sendMessage",
+        {"chat_id": int(chat_id), "text": clean_text[:4096]},
+    )
+    return {
+        "sent": True,
+        "chat_id": int(chat_id),
+        "message_id": result.get("message_id") if isinstance(result, dict) else None,
+    }
 
 
 @mcp.tool(

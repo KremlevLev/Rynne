@@ -34,6 +34,7 @@ from modules.input_hub.coordinator import (
 from modules.input_hub.models import (
     Attachment,
     AttachmentType,
+    RequestSource,
     UserRequest,
 )
 from modules.routing.direct_executor import (
@@ -1556,6 +1557,20 @@ async def async_main() -> None:
     # Функция должна быть объявлена ДО создания RequestService.
     # =========================================================
 
+    async def send_telegram_remote_reply(chat_id: int, text: str) -> bool:
+        if mcp_gateway is None:
+            return False
+        tool_name = "mcp_telegram_business_send_control_reply"
+        if tool_name not in mcp_gateway.get_available_tools():
+            return False
+        result = await mcp_gateway.call_tool(
+            tool_name,
+            {"chat_id": int(chat_id), "text": str(text)[:4096]},
+        )
+        if not result.success:
+            logger.warning("Telegram Remote reply failed: %s", result.message)
+        return result.success
+
     async def handle_request_response(
         request: UserRequest,
         response: AssistantResponse,
@@ -1586,6 +1601,16 @@ async def async_main() -> None:
             },
         )
 
+        remote_chat_id = request.metadata.get("telegram_remote_chat_id")
+        if remote_chat_id is not None:
+            try:
+                await send_telegram_remote_reply(
+                    int(remote_chat_id),
+                    response.display_text,
+                )
+            except Exception:
+                logger.exception("Could not return Nova response through Telegram Remote.")
+
         preferences_snapshot = (
             preferences.snapshot()
         )
@@ -1593,7 +1618,8 @@ async def async_main() -> None:
         # В режиме с отключённым TTS экранный ответ всё равно
         # публикуется, но голос не воспроизводится.
         if (
-            preferences_snapshot.tts_enabled
+            remote_chat_id is None
+            and preferences_snapshot.tts_enabled
             and response.speech_text.strip()
         ):
             await speech.say(
@@ -1705,6 +1731,58 @@ async def async_main() -> None:
             runtime.shutdown_event
         ),
         name="nova-request-service",
+    )
+
+    async def telegram_remote_worker() -> None:
+        if mcp_gateway is None:
+            return
+        poll_tool = "mcp_telegram_business_poll_control_commands"
+        if poll_tool not in mcp_gateway.get_available_tools():
+            return
+        while not runtime.shutdown_event.is_set():
+            try:
+                result = await mcp_gateway.call_tool(poll_tool, {"limit": 10})
+                payload = result.data.get("structured_content")
+                commands = payload.get("commands") if isinstance(payload, dict) else None
+                if result.success and isinstance(commands, list):
+                    for command in commands:
+                        if not isinstance(command, dict):
+                            continue
+                        text = str(command.get("text") or "").strip()
+                        chat_id = command.get("chat_id")
+                        user_id = command.get("user_id")
+                        if not text or chat_id is None or user_id is None:
+                            continue
+                        request = await input_coordinator.submit_text(
+                            text,
+                            source=RequestSource.API,
+                            session_id=f"telegram_remote:{chat_id}",
+                            metadata={
+                                "telegram_remote": True,
+                                "telegram_remote_chat_id": int(chat_id),
+                                "telegram_remote_user_id": int(user_id),
+                                "telegram_remote_username": str(command.get("username") or ""),
+                            },
+                        )
+                        if request is not None:
+                            await send_telegram_remote_reply(
+                                int(chat_id),
+                                "Принято. Передаю задачу Nova Core.",
+                            )
+                elif not result.success:
+                    logger.warning("Telegram Remote polling failed: %s", result.message)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Telegram Remote worker failed.")
+            try:
+                await asyncio.wait_for(runtime.shutdown_event.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                pass
+
+    telegram_remote_task = asyncio.create_task(
+        telegram_remote_worker(),
+        name="nova-telegram-remote",
     )
     wake_detector = WakeWordDetector(
         activity_callback=publish_voice_activity("wake_word"),
@@ -1926,6 +2004,7 @@ async def async_main() -> None:
         reminder_task.cancel()
         voice_task.cancel()
         request_service_task.cancel()
+        telegram_remote_task.cancel()
         desktop_bridge_task.cancel()
         wake_runtime_task.cancel()
         proactive_task.cancel()
@@ -1935,6 +2014,7 @@ async def async_main() -> None:
             reminder_task,
             voice_task,
             request_service_task,
+            telegram_remote_task,
             wake_runtime_task,
             desktop_bridge_task,
             proactive_task,
