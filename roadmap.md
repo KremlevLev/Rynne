@@ -2409,3 +2409,12 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Добавлен специализированный `git_clone_repository`: без shell-инъекции, с сетевым таймаутом 150/180 секунд и обязательной проверкой созданного `.git`.
 - [x] Команды «скачай/клонируй репозиторий» идут в локальный fast path без LLM, Playwright, ZIP и браузерного recovery; `nano gpt` и «любой репозиторий Карпатого» разрешаются в официальный `karpathy/nanoGPT`.
 - [x] Для Telegram Remote destination строится от безопасного Desktop workspace, поэтому репозиторий не попадает внутрь исходников Nova.
+
+# Разделение public и private репозиториев (10.08.2026)
+
+- [x] Публичный репозиторий закреплён как `KremlevLev/rynne`: локальный BYOK desktop, Core, инструменты, permissions, публичные skills, протоколы и тесты остаются доступными пользователю.
+- [x] Создан отдельный локальный Git-репозиторий `rynne-cloud` с proprietary-лицензией; туда вынесена первая закрытая часть — capacity-aware маршрутизация managed-моделей.
+- [x] Добавлена карта репозиториев `docs/repository-routing.md`, чтобы cloud, billing, entitlements, private evals и production ops больше случайно не попадали в public.
+- [x] Старые имена `nova-cloud`, `nova-premium-skills`, `nova-evals-private` и `nova-ops` заменены на актуальные Rynne-имена в open-core документации.
+- [ ] Создать private GitHub repository `KremlevLev/rynne-cloud`, привязать локальный remote и включить branch protection + secret scanning.
+- [ ] Добавить в public `rynne` версионированный `CloudGateway` contract, не нарушая полностью автономный BYOK режим.

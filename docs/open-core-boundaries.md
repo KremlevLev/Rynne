@@ -15,7 +15,7 @@ The commercial product should sell managed infrastructure and convenience:
 - curated premium integrations;
 - managed updates, support, and organization controls.
 
-## Public repository: `nova`
+## Public repository: `rynne`
 
 The public repository should contain:
 
@@ -34,7 +34,7 @@ The public repository should contain:
 
 Security decisions must stay local. A response received from any model or Rynne Cloud must still pass through the local tool registry, permission manager, argument validation, and execution ledger.
 
-## Private repository: `nova-cloud`
+## Private repository: `rynne-cloud`
 
 The managed backend should be a separate private repository. It can contain:
 
@@ -51,7 +51,7 @@ The managed backend should be a separate private repository. It can contain:
 
 The desktop application must never contain Rynne Cloud master provider keys. It should receive only short-lived, scoped credentials or send model requests through an authenticated gateway.
 
-## Optional private repository: `nova-premium-skills`
+## Optional private repository: `rynne-premium-skills`
 
 High-maintenance or commercially valuable integrations can be distributed as signed skill bundles:
 
@@ -63,7 +63,7 @@ High-maintenance or commercially valuable integrations can be distributed as sig
 
 The public skill SDK and signature verification must remain public. Only the premium implementations and distribution service need to be private.
 
-## Optional private repository: `nova-evals-private`
+## Optional private repository: `rynne-evals-private`
 
 The test runner and basic scenarios should remain public. A private evaluation repository may contain:
 
@@ -75,7 +75,7 @@ The test runner and basic scenarios should remain public. A private evaluation r
 
 This data can become an important product advantage without hiding the public verification framework.
 
-## Optional private repository: `nova-ops`
+## Optional private repository: `rynne-ops`
 
 Deployment and operational material should normally remain private:
 
@@ -121,7 +121,7 @@ The public client should define versioned request and event schemas. Rynne Cloud
 ## Suggested extraction order
 
 1. Introduce a public `CloudGateway` interface without changing BYOK behavior.
-2. Move account, billing, quotas, and managed provider access into `nova-cloud`.
+2. Move account, billing, quotas, and managed provider access into `rynne-cloud`.
 3. Add device enrollment and short-lived scoped tokens.
 4. Add an encrypted remote task stream for Telegram and web clients.
 5. Introduce signed premium skill manifests and entitlement checks.
