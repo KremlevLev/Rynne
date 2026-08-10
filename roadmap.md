@@ -2416,5 +2416,17 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Создан отдельный локальный Git-репозиторий `rynne-cloud` с proprietary-лицензией; туда вынесена первая закрытая часть — capacity-aware маршрутизация managed-моделей.
 - [x] Добавлена карта репозиториев `docs/repository-routing.md`, чтобы cloud, billing, entitlements, private evals и production ops больше случайно не попадали в public.
 - [x] Старые имена `nova-cloud`, `nova-premium-skills`, `nova-evals-private` и `nova-ops` заменены на актуальные Rynne-имена в open-core документации.
-- [ ] Создать private GitHub repository `KremlevLev/rynne-cloud`, привязать локальный remote и включить branch protection + secret scanning.
+- [x] Создан private GitHub repository `KremlevLev/rynne-cloud`, локальный remote привязан и первый cloud-каркас опубликован.
 - [ ] Добавить в public `rynne` версионированный `CloudGateway` contract, не нарушая полностью автономный BYOK режим.
+
+# Публичный сайт Rynne (11.08.2026)
+
+- [x] Создан отдельный Next.js-репозиторий `rynne-web`, готовый к zero-config деплою на Vercel.
+- [x] Собран двуязычный RU/EN landing в новой чёрно-мятной айдентике без фиолетового визуального наследия Nova.
+- [x] Добавлены сложные, но оптимизированные анимации: интерактивное поле, голосовая волна, исполнение задачи, tool cloud, vision scan, поток данных и scroll reveal.
+- [x] Сайт показывает реальную модель работы Rynne: understand → act → verify → recover, живые статусы и локальную границу безопасности.
+- [x] Кнопки установки ведут на `KremlevLev/rynne/releases/latest`, поэтому новый installer автоматически становится доступен без пересборки сайта.
+- [x] Добавлены mobile layout, `prefers-reduced-motion`, SEO metadata, sitemap, robots и отдельная Open Graph обложка.
+- [x] Фоновый canvas ограничен примерно 30 FPS и полностью засыпает вне viewport, чтобы сложная графика не превращалась в постоянную нагрузку.
+- [ ] Создать public GitHub repository `KremlevLev/rynne-web`, запушить сайт и импортировать его в Vercel.
+- [ ] После первого деплоя установить фактический `NEXT_PUBLIC_SITE_URL` и подключить собственный домен.

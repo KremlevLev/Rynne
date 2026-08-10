@@ -27,6 +27,17 @@ Commit server-side commercial infrastructure here:
 
 This repository is proprietary. The public desktop client talks to it only through versioned contracts and must keep working in BYOK mode without it.
 
+## `KremlevLev/rynne-web` — public website
+
+Commit the marketing and download surface here:
+
+- public product pages and interactive demos;
+- GitHub Release download links;
+- search, social preview, analytics, and future account entry points;
+- Vercel deployment configuration.
+
+The website must not contain provider keys, cloud business logic, customer data, or a second copy of the local execution runtime.
+
 ## Later private repositories
 
 - `KremlevLev/rynne-premium-skills`: signed maintained integrations and commercial workflow packs.
