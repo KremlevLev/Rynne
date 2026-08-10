@@ -1410,8 +1410,11 @@ class AgentService:
             if request_object is not None
             else ""
         )
+        # Explicit Telegram syntax is more reliable than the generic intent
+        # classifier (especially for short Russian aliases such as "тг").
         if (
-            execution_decision.intent == IntentKind.MESSAGING
+            parse_telegram_message_request(user_text) is not None
+            or execution_decision.intent == IntentKind.MESSAGING
             or self._pending_telegram_message is not None
         ):
             fast_telegram_response = await self._try_fast_telegram_message(

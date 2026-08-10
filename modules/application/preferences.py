@@ -33,6 +33,7 @@ class PreferencesSnapshot:
     cloud_enabled: bool
     history_enabled: bool
     proactive_vision_enabled: bool
+    ui_performance_mode: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +49,7 @@ class PreferencesSnapshot:
             "proactive_vision_enabled": (
                 self.proactive_vision_enabled
             ),
+            "ui_performance_mode": self.ui_performance_mode,
         }
 
 
@@ -95,6 +97,7 @@ class PreferencesManager:
         self._selected_model: str | None = None
 
         self._tts_enabled = self._load_tts_enabled()
+        self._ui_performance_mode = self._load_ui_performance_mode()
         self._cloud_enabled = True
         self._history_enabled = True
         self._proactive_vision_enabled = os.getenv(
@@ -126,6 +129,7 @@ class PreferencesManager:
                 proactive_vision_enabled=(
                     self._proactive_vision_enabled
                 ),
+                ui_performance_mode=self._ui_performance_mode,
             )
 
     def set_input_mode(
@@ -244,6 +248,40 @@ class PreferencesManager:
             encoding="utf-8",
         )
         temporary.replace(PREFERENCES_PATH)
+
+    def _load_ui_performance_mode(self) -> str:
+        try:
+            payload = json.loads(PREFERENCES_PATH.read_text(encoding="utf-8"))
+            value = str(payload.get("ui_performance_mode", "aura"))
+            if value in {"aura", "focus", "console"}:
+                return value
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+        return "aura"
+
+    def set_ui_performance_mode(self, mode: str) -> PreferencesSnapshot:
+        value = str(mode).strip().casefold()
+        if value not in {"aura", "focus", "console"}:
+            raise ValueError(f"Unknown UI performance mode: {mode}")
+        with self._lock:
+            self._ui_performance_mode = value
+            payload: dict[str, Any] = {}
+            try:
+                current = json.loads(PREFERENCES_PATH.read_text(encoding="utf-8"))
+                if isinstance(current, dict):
+                    payload.update(current)
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                pass
+            payload["ui_performance_mode"] = value
+            payload["tts_enabled"] = self._tts_enabled
+            PREFERENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+            temporary = PREFERENCES_PATH.with_suffix(".tmp")
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            temporary.replace(PREFERENCES_PATH)
+            return self.snapshot()
 
     def set_history_enabled(
         self,

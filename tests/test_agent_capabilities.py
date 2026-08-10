@@ -25,6 +25,12 @@ def test_parses_explicit_telegram_message_without_model() -> None:
     ) == ("@vladosik585", "Привет")
 
 
+def test_parses_short_telegram_alias_without_model() -> None:
+    assert parse_telegram_message_request(
+        'напиши son в тг "привет влад"'
+    ) == ("son", "привет влад")
+
+
 def test_explicit_telegram_message_uses_fast_path() -> None:
     class LLMThatMustNotRun:
         history: list[dict] = []

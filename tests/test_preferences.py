@@ -32,6 +32,30 @@ def test_default_preferences() -> None:
     assert snapshot.cloud_enabled
     assert snapshot.history_enabled
     assert not snapshot.proactive_vision_enabled
+    assert snapshot.ui_performance_mode == "aura"
+
+
+def test_ui_performance_mode_is_persisted_and_validated(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from modules.application import preferences as preferences_module
+
+    monkeypatch.setattr(
+        preferences_module,
+        "PREFERENCES_PATH",
+        tmp_path / "preferences.json",
+    )
+    manager = PreferencesManager()
+    assert manager.set_ui_performance_mode("console").ui_performance_mode == "console"
+    assert PreferencesManager().snapshot().ui_performance_mode == "console"
+
+    try:
+        manager.set_ui_performance_mode("turbo")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unknown UI mode must be rejected")
 
 
 def test_privacy_mode_disables_cloud_and_history() -> None:

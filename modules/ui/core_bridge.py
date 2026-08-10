@@ -4,8 +4,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
+
+import psutil
 
 from modules.tools.permissions import (
     PermissionManager,
@@ -104,6 +107,64 @@ class CoreDesktopBridge:
         self._reported_completed_ids: set[str] = set()
         self._plan_fingerprints: dict[str, tuple[str, ...]] = {}
         self._bg_fingerprints: dict[str, str] = {}
+        self._started_at = time.monotonic()
+        self._snapshot_collection_ms = 0.0
+        self._metrics_processes: dict[int, psutil.Process] = {}
+
+    def _snapshot_interval(self) -> float:
+        mode = (
+            self.preferences.snapshot().ui_performance_mode
+            if self.preferences is not None
+            else "aura"
+        )
+        return {"aura": 0.5, "focus": 2.0, "console": 5.0}.get(mode, 0.5)
+
+    def _resource_metrics(self) -> dict[str, Any]:
+        current = psutil.Process(os.getpid())
+        candidates = [("Nova Core", current)]
+        try:
+            parent = current.parent()
+            if parent is not None:
+                candidates.append(("Desktop UI", parent))
+        except (psutil.Error, OSError):
+            pass
+        try:
+            candidates.extend(
+                (f"Child: {child.name()}", child)
+                for child in current.children(recursive=True)
+            )
+        except (psutil.Error, OSError):
+            pass
+
+        items: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for component, process in candidates:
+            if process.pid in seen:
+                continue
+            seen.add(process.pid)
+            try:
+                tracked = self._metrics_processes.setdefault(process.pid, process)
+                items.append({
+                    "component": component,
+                    "pid": process.pid,
+                    "name": process.name(),
+                    "memory_mb": round(process.memory_info().rss / 1024 / 1024, 1),
+                    "cpu_percent": round(tracked.cpu_percent(interval=None), 1),
+                })
+            except (psutil.Error, OSError):
+                continue
+        return {
+            "profile": (
+                self.preferences.snapshot().ui_performance_mode
+                if self.preferences is not None
+                else "aura"
+            ),
+            "sample_interval_seconds": self._snapshot_interval(),
+            "snapshot_collection_ms": round(self._snapshot_collection_ms, 1),
+            "uptime_seconds": round(time.monotonic() - self._started_at, 1),
+            "total_memory_mb": round(sum(item["memory_mb"] for item in items), 1),
+            "processes": items,
+        }
 
     def _preferences_payload(self, snapshot=None) -> dict[str, Any]:
         current = snapshot or (
@@ -163,12 +224,13 @@ class CoreDesktopBridge:
             try:
                 await asyncio.wait_for(
                     shutdown_event.wait(),
-                    timeout=0.5,
+                    timeout=self._snapshot_interval(),
                 )
             except asyncio.TimeoutError:
                 pass
 
     async def publish_snapshots(self) -> None:
+        started = time.perf_counter()
         process_result = await asyncio.to_thread(
             self.process_manager.list_processes
         )
@@ -233,6 +295,8 @@ class CoreDesktopBridge:
                 "items": self._integration_snapshot(),
             },
         )
+        self._snapshot_collection_ms = (time.perf_counter() - started) * 1000
+        self.desktop.publish("resource_metrics", self._resource_metrics())
 
         # Публикуем события жизненного цикла задач
         if self.plan_service is not None:
@@ -527,6 +591,8 @@ class CoreDesktopBridge:
                             bool(value)
                         )
                     )
+                elif key == "ui_performance_mode":
+                    snapshot = self.preferences.set_ui_performance_mode(str(value))
                 else:
                     raise ValueError(
                         f"Неизвестная настройка: {key}"

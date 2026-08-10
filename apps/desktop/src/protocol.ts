@@ -40,6 +40,7 @@ export const NOVA_EVENT_TYPES = [
   "subagent_critic_completed",
   "subagent_team_completed",
   "models",
+  "resource_metrics",
   "command_result",
   "shutdown",
 ] as const;

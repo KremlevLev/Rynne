@@ -105,6 +105,20 @@ type ProviderRuntime = {
     in_flight: number;
   };
 };
+type ResourceMetrics = {
+  profile: UiMode;
+  sample_interval_seconds: number;
+  snapshot_collection_ms: number;
+  uptime_seconds: number;
+  total_memory_mb: number;
+  processes: Array<{
+    component: string;
+    pid: number;
+    name: string;
+    memory_mb: number;
+    cpu_percent: number;
+  }>;
+};
 
 const DEFAULT_TTS_SETTINGS: TtsSettings = {
   language: "auto",
@@ -667,6 +681,7 @@ export function App() {
   const [permissionPending, setPermissionPending] = useState(false);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("risky_only");
   const [permissionModePending, setPermissionModePending] = useState(false);
+  const [resourceMetrics, setResourceMetrics] = useState<ResourceMetrics | null>(null);
   const runtime = runtimePresentation(runtimeState, locale);
   const nav = navigation(locale);
   const modes = uiModeOptions(locale);
@@ -795,6 +810,9 @@ export function App() {
               setProactivePhase("idle");
             }
           }
+          if (event.event_type === "resource_metrics") {
+            setResourceMetrics(event.payload as unknown as ResourceMetrics);
+          }
           if (event.event_type === "proactive_status") {
             const phase = text(event.payload, "phase", "idle");
             const message = text(event.payload, "message", tx(localeRef.current, "Nova рядом работает", "Nova Nearby is running"));
@@ -910,7 +928,13 @@ export function App() {
       typeof window === "undefined" ? null : window.localStorage,
       uiMode,
     );
-  }, [uiMode]);
+    if (connection === "connected") {
+      void transport.send("set_preference", {
+        key: "ui_performance_mode",
+        value: uiMode,
+      });
+    }
+  }, [uiMode, connection, transport]);
 
   useEffect(() => {
     localeRef.current = locale;
@@ -1406,7 +1430,7 @@ export function App() {
               aria-label={tx(locale, "История диалога", "Conversation history")}
             >
               <div className="date-divider"><span>{tx(locale, "Сегодня", "Today")}</span></div>
-              {timeline.map((item) => (
+              {timeline.slice(uiMode === "console" ? -150 : uiMode === "focus" ? -400 : 0).map((item) => (
                 <article key={item.id} className={`timeline ${item.kind}`}>
                   <div className="timeline-rail">
                     <span className={`timeline-dot ${item.status ?? ""}`}>
@@ -1637,6 +1661,34 @@ export function App() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="settings-card resource-metrics-card">
+              <span className="settings-icon"><Cpu size={22} /></span>
+              <div>
+                <span className="eyebrow">{tx(locale, "РЕСУРСЫ", "RESOURCES")}</span>
+                <h2>{tx(locale, "Что потребляет Nova", "What Nova consumes")}</h2>
+                <p>{tx(
+                  locale,
+                  "Живые метрики процессов. Лёгкий режим опрашивает Core раз в 5 секунд, средний раз в 2 секунды, красивый каждые 0.5 секунды.",
+                  "Live process metrics. Light polls Core every 5 seconds, Balanced every 2 seconds, and Beautiful every 0.5 seconds.",
+                )}</p>
+              </div>
+              {resourceMetrics ? (
+                <div className="resource-metrics-grid">
+                  <div className="resource-metric-summary">
+                    <span><strong>{resourceMetrics.total_memory_mb.toFixed(1)} MB</strong><small>{tx(locale, "всего по процессам Nova", "total Nova processes")}</small></span>
+                    <b>{resourceMetrics.snapshot_collection_ms.toFixed(1)} ms</b>
+                    <em>{tx(locale, "опрос", "poll")}: {resourceMetrics.sample_interval_seconds}s</em>
+                  </div>
+                  {resourceMetrics.processes.map((process) => (
+                    <div className="resource-process" key={`${process.component}-${process.pid}`}>
+                      <span><strong>{process.component}</strong><small>{process.name} · PID {process.pid}</small></span>
+                      <b>{process.memory_mb.toFixed(1)} MB</b>
+                      <em>{process.cpu_percent.toFixed(1)}% CPU</em>
+                    </div>
+                  ))}
+                </div>
+              ) : <small>{tx(locale, "Жду первый замер Core…", "Waiting for the first Core sample…")}</small>}
             </div>
             <div className="settings-card access-card">
               <span className="settings-icon"><ShieldCheck size={22} /></span>

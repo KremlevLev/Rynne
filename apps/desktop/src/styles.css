@@ -704,6 +704,15 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .ui-console .settings-card { max-width: 760px; border-radius: 10px; background: #0d1118; }
 .ui-console .guide-hero, .ui-console .guide-card { border-radius: 9px; background: #0d1118; box-shadow: none; }
 .ui-console .appearance-options, .ui-console .voice-mode-options { gap: 6px; }
+.ui-console *, .ui-console *::before, .ui-console *::after { animation: none !important; transition: none !important; backdrop-filter: none !important; }
+.ui-console .timeline-content, .ui-console .composer, .ui-console .settings-card { box-shadow: none !important; }
+
+.resource-metrics-grid { grid-column: 1 / -1; display: grid; gap: 7px; }
+.resource-metric-summary, .resource-process { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); background: rgba(8,11,16,.48); }
+.resource-metric-summary strong { color: var(--green); font-size: 20px; }
+.resource-metric-summary small, .resource-process small { display: block; color: #687486; }
+.resource-metric-summary em, .resource-process em { color: #7f8b9d; font-size: 11px; font-style: normal; }
+.resource-process b, .resource-metric-summary b { color: #c5cdd8; font-size: 12px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes breathe { 50% { box-shadow: 0 0 58px rgba(67,166,115,.27), inset 0 0 20px rgba(255,255,255,.05); } }
