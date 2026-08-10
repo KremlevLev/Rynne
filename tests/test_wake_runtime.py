@@ -18,13 +18,13 @@ def test_wake_only_phrase_opens_real_one_shot_follow_up(tmp_path: Path) -> None:
 
         class Detector:
             available = True
-            config = SimpleNamespace(wake_word="нова")
+            config = SimpleNamespace(wake_word="рин")
 
             def wait_for_command(self, _should_abort):
                 return WakeCapture(
                     detected=True,
                     audio_path=audio_path,
-                    detected_text="нова",
+                    detected_text="рин",
                 )
 
             def stop(self) -> None:
@@ -34,7 +34,7 @@ def test_wake_only_phrase_opens_real_one_shot_follow_up(tmp_path: Path) -> None:
             follow_up_calls = 0
 
             def transcribe_file(self, _path) -> str:
-                return "Нова"
+                return "Рин"
 
             def listen(self, _should_abort) -> str:
                 self.follow_up_calls += 1
@@ -71,7 +71,7 @@ def test_wake_only_phrase_opens_real_one_shot_follow_up(tmp_path: Path) -> None:
                 "открой браузер",
                 True,
                 {
-                    "wake_detected_text": "нова",
+                    "wake_detected_text": "рин",
                     "follow_up_after_wake": True,
                 },
             )

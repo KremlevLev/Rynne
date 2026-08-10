@@ -1,6 +1,6 @@
-# MCP Integration Guide for Nova
+# MCP Integration Guide for Rynne
 
-Nova uses the official MCP Python SDK for the protocol lifecycle, transport,
+Rynne uses the official MCP Python SDK for the protocol lifecycle, transport,
 tool discovery and tool calls. Do not add ad-hoc JSON-RPC subprocess code and
 do not assume that an npm package exists merely because its name looks right.
 
@@ -44,7 +44,7 @@ Supported transports:
 - `streamable_http` — default when only `url` is present;
 - `sse` — compatibility with legacy servers.
 
-Use `${ENV_NAME}` for secrets. Nova resolves the value locally when starting
+Use `${ENV_NAME}` for secrets. Rynne resolves the value locally when starting
 the server; the value does not become part of a tool schema or model prompt.
 
 ## Runtime flow
@@ -59,7 +59,7 @@ the server; the value does not become part of a tool schema or model prompt.
 6. Tool calls reuse the same live SDK session.
 7. `MCPGateway.close()` shuts down sessions and stdio subprocesses.
 
-Auto-discovery is optional and disabled by default. When enabled, Nova probes
+Auto-discovery is optional and disabled by default. When enabled, Rynne probes
 configured localhost ports using a real SDK handshake, not a raw `tools/list`
 POST. Prefer an explicit config for predictable startup and a clear trust
 boundary.
@@ -70,7 +70,7 @@ Before adding a server:
 
 1. Verify it in the official MCP Registry or its audited source repository.
 2. Review filesystem/network access and all destructive tools.
-3. Pin the server version outside Nova where possible.
+3. Pin the server version outside Rynne where possible.
 4. Put credentials in environment variables, never in committed JSON.
 5. Start with read-only tools and test discovery plus one real tool call.
 
@@ -78,14 +78,14 @@ Before adding a server:
 
 Add `TELEGRAM_BOT_TOKEN` in the desktop Settings → Integrations screen. The
 official Bot API connection requires no `api_id` or `api_hash`. After the bot is
-connected to the user's Telegram Business account, Nova exposes status,
+connected to the user's Telegram Business account, Rynne exposes status,
 observed chats, cached messages, and confirmed sending as MCP tools. Only events
 received after connection are available; Telegram does not provide arbitrary
 historical chats to bots.
 
 ## Bundled personal Telegram MCP (advanced)
 
-Nova includes an opt-in, local MTProto MCP server with a deliberately small
+Rynne includes an opt-in, local MTProto MCP server with a deliberately small
 surface: connection status, chat listing, recent messages, message search and
 sending. It runs as a separate stdio process and uses the user's real Telegram
 account through Telethon; it is not a Telegram bot.
@@ -99,13 +99,13 @@ py -m pip install -r requirements.txt
 py scripts/setup_telegram_mcp.py
 ```
 
-3. Restart Nova Core. The server is registered automatically when
+3. Restart Rynne Core. The server is registered automatically when
    `NOVA_TELEGRAM_MCP_ENABLED=true` is present in the local `.env`.
 
-The Telethon session is stored under `%LOCALAPPDATA%\Nova\telegram-mcp` by
+The Telethon session is stored under `%LOCALAPPDATA%\Rynne\telegram-mcp` by
 default. Never commit `.env` or the `.session` file. Reading tools run without
 prompts; `send_message` is classified as a network write and always requires
-visible confirmation in Nova before the MCP call is allowed.
+visible confirmation in Rynne before the MCP call is allowed.
 
 Protocol and SDK references:
 

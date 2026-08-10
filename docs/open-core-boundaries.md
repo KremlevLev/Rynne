@@ -1,6 +1,6 @@
-# Nova open-core and private-service boundaries
+# Rynne open-core and private-service boundaries
 
-This document defines which parts of Nova should remain in the public desktop repository and which parts can become separate private services. The goal is to keep the public edition useful and verifiable while protecting the infrastructure that makes a managed Nova subscription convenient, reliable, and difficult to clone.
+This document defines which parts of Rynne should remain in the public desktop repository and which parts can become separate private services. The goal is to keep the public edition useful and verifiable while protecting the infrastructure that makes a managed Rynne subscription convenient, reliable, and difficult to clone.
 
 ## Product rule
 
@@ -20,7 +20,7 @@ The commercial product should sell managed infrastructure and convenience:
 The public repository should contain:
 
 - React, TypeScript, and Tauri desktop UI;
-- Nova Core request pipeline and local orchestrator;
+- Rynne Core request pipeline and local orchestrator;
 - local permission enforcement and confirmation modes;
 - Windows, browser, file, Git, terminal, voice, and application tools;
 - BYOK providers for Groq, OpenRouter, Gemini, and Tavily;
@@ -32,7 +32,7 @@ The public repository should contain:
 - deterministic tests, acceptance harness, and public security tests;
 - public cloud API schemas and a replaceable `CloudGateway` interface.
 
-Security decisions must stay local. A response received from any model or Nova Cloud must still pass through the local tool registry, permission manager, argument validation, and execution ledger.
+Security decisions must stay local. A response received from any model or Rynne Cloud must still pass through the local tool registry, permission manager, argument validation, and execution ledger.
 
 ## Private repository: `nova-cloud`
 
@@ -49,7 +49,7 @@ The managed backend should be a separate private repository. It can contain:
 - abuse prevention, operational telemetry, alerts, and support tooling;
 - server-side feature flags and experiment configuration.
 
-The desktop application must never contain Nova Cloud master provider keys. It should receive only short-lived, scoped credentials or send model requests through an authenticated gateway.
+The desktop application must never contain Rynne Cloud master provider keys. It should receive only short-lived, scoped credentials or send model requests through an authenticated gateway.
 
 ## Optional private repository: `nova-premium-skills`
 
@@ -87,13 +87,13 @@ Deployment and operational material should normally remain private:
 
 ## Trust and privacy boundary
 
-Nova Cloud should receive the minimum information required for the selected feature.
+Rynne Cloud should receive the minimum information required for the selected feature.
 
 - Local execution remains the default.
 - Raw screenshots, microphone audio, file contents, and message history are not retained by default.
 - Cloud processing is explicit in the UI.
 - Sensitive payloads use transport encryption and short retention periods.
-- Users can continue with BYOK when Nova Cloud is unavailable or disabled.
+- Users can continue with BYOK when Rynne Cloud is unavailable or disabled.
 - Remote commands are authenticated, recorded locally, and subject to the selected local permission mode.
 - The cloud cannot silently bypass local confirmation or execute Windows tools directly.
 
@@ -102,21 +102,21 @@ Nova Cloud should receive the minimum information required for the selected feat
 Keep the boundary replaceable and documented:
 
 ```text
-Nova Desktop
+Rynne Desktop
   -> CloudGateway interface
       -> managed inference
       -> account and entitlement API
       -> remote task stream
       -> encrypted sync API
 
-Nova Desktop
+Rynne Desktop
   -> local ToolRegistry
       -> PermissionManager
       -> local execution
       -> verification and audit ledger
 ```
 
-The public client should define versioned request and event schemas. Nova Cloud implements those schemas, but the proprietary routing, billing, and operational logic stays server-side.
+The public client should define versioned request and event schemas. Rynne Cloud implements those schemas, but the proprietary routing, billing, and operational logic stays server-side.
 
 ## Suggested extraction order
 
@@ -130,11 +130,11 @@ The public client should define versioned request and event schemas. Nova Cloud 
 
 ## Licensing boundary
 
-- Covered public Nova versions use `FSL-1.1-ALv2` and receive Apache 2.0 after two years.
+- Covered public Rynne versions use `FSL-1.1-ALv2` and receive Apache 2.0 after two years.
 - Earlier Apache 2.0 releases retain their original license.
 - Private services are not automatically distributed with the public desktop repository.
 - Third-party components remain under their own licenses and notices.
 - Commercial permissions for competing products, hosting, OEM distribution, or white-label use are described in [`../COMMERCIAL-LICENSE.md`](../COMMERCIAL-LICENSE.md).
 
-Before accepting substantial external contributions, Nova should adopt a contributor agreement or another explicit mechanism that preserves the ability to offer alternative commercial terms.
+Before accepting substantial external contributions, Rynne should adopt a contributor agreement or another explicit mechanism that preserves the ability to offer alternative commercial terms.
 

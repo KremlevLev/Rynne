@@ -347,7 +347,7 @@ INTERACTIVE BROWSER:
 поисковой выдачей. Сначала вызови browser_open_url с известным официальным URL,
 затем browser_get_page_text и продолжай кликами/заполнением до всей цели. Если
 страница требует входа, открой её и коротко попроси пользователя войти в
-появившемся окне; профиль Nova сохранит эту авторизацию для следующих задач.
+появившемся окне; профиль Rynne сохранит эту авторизацию для следующих задач.
 Для OpenRouter Activity используй https://openrouter.ai/activity. Если пользователь
 просит скрин или снимок результата, обязательно заверши browser_screenshot после
 навигации и проверки страницы. Не вызывай open_application для браузерной задачи.
@@ -368,7 +368,7 @@ DYNAMIC_TOOL_DISCOVERY_SCHEMA = {
     "function": {
         "name": DYNAMIC_TOOL_DISCOVERY_NAME,
         "description": (
-            "Ищет и подгружает недоступные сейчас инструменты Nova из полного "
+            "Ищет и подгружает недоступные сейчас инструменты Rynne из полного "
             "локального и MCP-каталога. Используй, когда среди показанных tools "
             "нет возможности для следующего шага задачи."
         ),
@@ -1923,7 +1923,7 @@ class AgentService:
                 team_result = await self.subagent_pool.run(
                     goal=selection_text,
                     context=(
-                        "Последний ответ Nova:\n" + self._last_message_text(
+                        "Последний ответ Rynne:\n" + self._last_message_text(
                             previous_history,
                             "assistant",
                         )

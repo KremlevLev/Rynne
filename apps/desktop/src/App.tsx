@@ -27,11 +27,11 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { JsonObject, NovaEvent } from "./protocol";
+import type { JsonObject, RynneEvent } from "./protocol";
 import {
-  createNovaTransport,
+  createRynneTransport,
   type ConnectionState,
-  type NovaTransport,
+  type RynneTransport,
   type PermissionMode,
   type ProviderKeySummary,
   type ProviderName,
@@ -39,7 +39,7 @@ import {
   type ServiceSecretSummary,
 } from "./transport";
 import { Guide, type GuideLocale } from "./Guide";
-import { NovaMark } from "./NovaMark";
+import { RynneMark } from "./RynneMark";
 
 type ViewKey = "dialog" | "tasks" | "automations" | "guide" | "settings";
 export type UiMode = "aura" | "focus" | "console";
@@ -277,27 +277,27 @@ export function writeUiMode(
 }
 
 const runtimeLabelsRu: Record<string, string> = {
-  "СПИТ": "Nova готова",
-  "СЛУШАЕТ": "Nova слушает",
+  "СПИТ": "Rynne готова",
+  "СЛУШАЕТ": "Rynne слушает",
   "РАСПОЗНАЕТ": "Распознаю речь",
-  "ДУМАЕТ": "Nova думает",
+  "ДУМАЕТ": "Rynne думает",
   "ЖДЕТ РАЗРЕШЕНИЕ": "Нужно подтверждение",
-  "ВЫПОЛНЯЕТ": "Nova выполняет",
-  "ГОВОРИТ": "Nova отвечает",
+  "ВЫПОЛНЯЕТ": "Rynne выполняет",
+  "ГОВОРИТ": "Rynne отвечает",
   "ОШИБКА": "Нужна проверка",
-  "ЗАВЕРШАЕТ РАБОТУ": "Nova завершает работу",
+  "ЗАВЕРШАЕТ РАБОТУ": "Rynne завершает работу",
 };
 
 const runtimeLabelsEn: Record<string, string> = {
-  "СПИТ": "Nova is ready",
-  "СЛУШАЕТ": "Nova is listening",
+  "СПИТ": "Rynne is ready",
+  "СЛУШАЕТ": "Rynne is listening",
   "РАСПОЗНАЕТ": "Recognizing speech",
-  "ДУМАЕТ": "Nova is thinking",
+  "ДУМАЕТ": "Rynne is thinking",
   "ЖДЕТ РАЗРЕШЕНИЕ": "Confirmation required",
-  "ВЫПОЛНЯЕТ": "Nova is working",
-  "ГОВОРИТ": "Nova is speaking",
+  "ВЫПОЛНЯЕТ": "Rynne is working",
+  "ГОВОРИТ": "Rynne is speaking",
   "ОШИБКА": "Check required",
-  "ЗАВЕРШАЕТ РАБОТУ": "Nova is shutting down",
+  "ЗАВЕРШАЕТ РАБОТУ": "Rynne is shutting down",
 };
 
 export function runtimePresentation(state: unknown, locale: UiLocale = "ru"): {
@@ -307,7 +307,7 @@ export function runtimePresentation(state: unknown, locale: UiLocale = "ru"): {
   const value = typeof state === "string" ? state : "СПИТ";
   return {
     label: (locale === "ru" ? runtimeLabelsRu : runtimeLabelsEn)[value]
-      ?? tx(locale, "Nova готова", "Nova is ready"),
+      ?? tx(locale, "Rynne готова", "Rynne is ready"),
     working: !["СПИТ", "ОШИБКА", "ЗАВЕРШАЕТ РАБОТУ"].includes(value),
   };
 }
@@ -343,7 +343,7 @@ function initialTimeline(locale: UiLocale): TimelineItem[] { return [
   {
     id: "welcome",
     kind: "assistant",
-    title: "Nova",
+    title: "Rynne",
     body: tx(
       locale,
       "Я рядом. Поставь задачу — найду нужные инструменты, выполню и покажу проверяемый результат.",
@@ -389,14 +389,14 @@ function agentProgressCopy(payload: JsonObject, locale: UiLocale): {
     verifying: ["Проверяю конечный результат", "Verifying the outcome", `Инструментов выполнено: ${completed}. Сверяю результат с исходной задачей.`, `${completed} tool action(s) completed. Comparing the result with the original request.`],
     finalizing: ["Формирую итог", "Preparing the final response", "Проверка завершена. Готовлю честный отчёт без ложного «готово».", "Verification finished. Preparing an evidence-based final report."],
   };
-  const copy = copies[phase] ?? ["Nova работает", "Nova is working", text(payload, "message"), text(payload, "message")];
+  const copy = copies[phase] ?? ["Rynne работает", "Rynne is working", text(payload, "message"), text(payload, "message")];
   return {
     title: locale === "ru" ? copy[0] : copy[1],
     body: locale === "ru" ? copy[2] : copy[3],
   };
 }
 
-export function pendingPermissionFromEvent(event: NovaEvent): PendingPermission | null {
+export function pendingPermissionFromEvent(event: RynneEvent): PendingPermission | null {
   if (event.event_type !== "permissions" && event.event_type !== "approval_requested") return null;
   const candidate = event.event_type === "approval_requested"
     ? event.payload
@@ -417,7 +417,7 @@ export function pendingPermissionFromEvent(event: NovaEvent): PendingPermission 
   };
 }
 
-export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): TimelineItem | null {
+export function eventToItem(event: RynneEvent, locale: UiLocale = "ru"): TimelineItem | null {
   const id = `${event.event_type}_${event.created_at}_${Math.random()}`;
   const payload = event.payload;
   switch (event.event_type) {
@@ -425,7 +425,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "progress",
-        title: tx(locale, "Передаю задачу Nova Core", "Sending the task to Nova Core"),
+        title: tx(locale, "Передаю задачу Rynne Core", "Sending the task to Rynne Core"),
         body: tx(locale, "Запрос получен и поставлен в выполнение.", "The request was received and queued for execution."),
         status: "working",
         progress: 3,
@@ -435,7 +435,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "progress",
-        title: tx(locale, "Nova всё ещё работает", "Nova is still working"),
+        title: tx(locale, "Rynne всё ещё работает", "Rynne is still working"),
         body: tx(
           locale,
           `Core отвечает, текущий этап длится ${elapsed} сек. Дождитесь результата или таймаута провайдера.`,
@@ -451,7 +451,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "progress",
-        title: tx(locale, "Услышала «Нова»", "Wake word detected"),
+        title: tx(locale, "Услышала «Рин»", "Wake word detected"),
         body: tx(locale, "Записываю команду и автоматически завершу фразу после короткой паузы.", "Recording the command; the utterance will end automatically after a short pause."),
         status: "working",
         progress: 6,
@@ -490,7 +490,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "assistant",
-        title: "Nova",
+        title: "Rynne",
         body: text(
           payload,
           "display_text",
@@ -502,7 +502,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "assistant",
-        title: "Nova",
+        title: "Rynne",
         body: text(payload, "error", tx(locale, "Не удалось выполнить запрос.", "The request could not be completed.")),
         status: "error",
       };
@@ -510,7 +510,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "assistant",
-        title: "Nova",
+        title: "Rynne",
         body: tx(locale, "Задача остановлена.", "Task stopped."),
         status: "error",
       };
@@ -545,7 +545,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "suggestion",
-        title: text(payload, "title", tx(locale, "Nova заметила кое-что", "Nova noticed something")),
+        title: text(payload, "title", tx(locale, "Rynne заметила кое-что", "Rynne noticed something")),
         body: text(payload, "message"),
         action: text(payload, "suggested_request"),
         actionLabel: text(payload, "action_label", tx(locale, "Помочь с этим", "Help with this")),
@@ -556,7 +556,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "assistant",
-        title: tx(locale, "Nova рядом", "Nova Nearby"),
+        title: tx(locale, "Rynne рядом", "Rynne Nearby"),
         body: text(payload, "message", tx(locale, "Проверка активного окна завершена.", "Active-window check completed.")),
         status: text(payload, "outcome") === "blocked" ? "error" : "success",
       };
@@ -564,7 +564,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
       return {
         id,
         kind: "tool",
-        title: tx(locale, "Nova собрала команду", "Nova assembled a team"),
+        title: tx(locale, "Rynne собрала команду", "Rynne assembled a team"),
         body: tx(
           locale,
           `Параллельных агентов: ${Number(payload.agents ?? 0)} · доступная ёмкость: ${Number(payload.capacity ?? 0)}`,
@@ -620,7 +620,7 @@ export function eventToItem(event: NovaEvent, locale: UiLocale = "ru"): Timeline
 }
 
 export function App() {
-  const transport = useMemo<NovaTransport>(() => createNovaTransport(), []);
+  const transport = useMemo<RynneTransport>(() => createRynneTransport(), []);
   const [locale, setLocale] = useState<UiLocale>(() => (
     readUiLocale(typeof window === "undefined" ? null : window.localStorage)
   ));
@@ -640,7 +640,7 @@ export function App() {
   const [proactiveStatus, setProactiveStatus] = useState(() => tx(locale, "Выключено", "Off"));
   const [proactivePhase, setProactivePhase] = useState("idle");
   const [wakeWordAvailable, setWakeWordAvailable] = useState(false);
-  const [wakeWord, setWakeWord] = useState("Нова");
+  const [wakeWord, setWakeWord] = useState("Рин");
   const [wakeSensitivity, setWakeSensitivity] = useState(0.72);
   const [provider, setProvider] = useState<ProviderName>("groq");
   const [apiKey, setApiKey] = useState("");
@@ -803,7 +803,7 @@ export function App() {
             setVoicePending(false);
             setProactivePending(false);
             if (event.payload.proactive_vision_enabled === true) {
-              setActiveTool(tx(localeRef.current, "Nova рядом наблюдает за активным окном", "Nova Nearby is observing the active window"));
+              setActiveTool(tx(localeRef.current, "Rynne рядом наблюдает за активным окном", "Rynne Nearby is observing the active window"));
               setProactiveStatus((current) => ["Выключено", "Off"].includes(current)
                 ? tx(localeRef.current, "Запускаю…", "Starting…")
                 : current);
@@ -817,7 +817,7 @@ export function App() {
           }
           if (event.event_type === "proactive_status") {
             const phase = text(event.payload, "phase", "idle");
-            const message = text(event.payload, "message", tx(localeRef.current, "Nova рядом работает", "Nova Nearby is running"));
+            const message = text(event.payload, "message", tx(localeRef.current, "Rynne рядом работает", "Rynne Nearby is running"));
             setProactivePhase(phase);
             setProactiveStatus(message);
             if (phase === "scanning") setActiveTool(message);
@@ -959,7 +959,7 @@ export function App() {
     const localId = Date.now();
     setBusy(true);
     setTaskProgress(1);
-    setActiveTool(tx(locale, "Передаю запрос Nova Core", "Sending request to Nova Core"));
+    setActiveTool(tx(locale, "Передаю запрос Rynne Core", "Sending request to Rynne Core"));
     setTimeline((current) => [
       ...current,
       {
@@ -972,7 +972,7 @@ export function App() {
         id: `local_progress_${localId}`,
         kind: "progress",
         title: tx(locale, "Отправляю запрос", "Sending request"),
-        body: tx(locale, "Жду подтверждения от Nova Core…", "Waiting for Nova Core to acknowledge the request…"),
+        body: tx(locale, "Жду подтверждения от Rynne Core…", "Waiting for Rynne Core to acknowledge the request…"),
         status: "working",
         progress: 1,
       },
@@ -992,7 +992,7 @@ export function App() {
         {
           id: `local_error_${localId}`,
           kind: "assistant",
-          title: "Nova",
+          title: "Rynne",
           body: error instanceof Error ? error.message : tx(locale, "Не удалось передать запрос Core.", "Could not send the request to Core."),
           status: "error",
         },
@@ -1025,7 +1025,7 @@ export function App() {
     } catch (error) {
       setProactivePending(false);
       setSettingsStatus(
-        error instanceof Error ? error.message : tx(locale, "Не удалось переключить Nova рядом.", "Could not toggle Nova Nearby."),
+        error instanceof Error ? error.message : tx(locale, "Не удалось переключить Rynne рядом.", "Could not toggle Rynne Nearby."),
       );
     }
   }
@@ -1146,7 +1146,7 @@ export function App() {
   async function selectPermissionMode(mode: PermissionMode) {
     if (mode === permissionMode || permissionModePending) return;
     setPermissionModePending(true);
-    setSettingsStatus(tx(locale, "Сохраняю режим и перезапускаю Nova Core…", "Saving mode and restarting Nova Core…"));
+    setSettingsStatus(tx(locale, "Сохраняю режим и перезапускаю Rynne Core…", "Saving mode and restarting Rynne Core…"));
     try {
       await transport.setPermissionMode(mode);
       setPermissionMode(mode);
@@ -1163,7 +1163,7 @@ export function App() {
   async function saveServiceSecret(service: ServiceName) {
     const secret = serviceDrafts[service].trim();
     if (secret.length < (service === "telegram_remote" ? 5 : 12)) return;
-    setSettingsStatus(tx(locale, "Сохраняю ключ и перезапускаю Nova Core…", "Saving the key and restarting Nova Core…"));
+    setSettingsStatus(tx(locale, "Сохраняю ключ и перезапускаю Rynne Core…", "Saving the key and restarting Rynne Core…"));
     try {
       await transport.setServiceSecret(service, secret);
       setServiceDrafts((current) => ({ ...current, [service]: "" }));
@@ -1186,12 +1186,12 @@ export function App() {
 
   async function addProviderKey() {
     if (apiKey.trim().length < 12) return;
-    setSettingsStatus(tx(locale, "Добавляю ключ и перезапускаю Nova Core…", "Adding the key and restarting Nova Core…"));
+    setSettingsStatus(tx(locale, "Добавляю ключ и перезапускаю Rynne Core…", "Adding the key and restarting Rynne Core…"));
     try {
       await transport.addProviderKey(provider, apiKey.trim(), apiModel.trim());
       setApiKey("");
       setApiModel("");
-      setSettingsStatus(tx(locale, "Ключ добавлен. Nova Core переподключается.", "Key added. Nova Core is reconnecting."));
+      setSettingsStatus(tx(locale, "Ключ добавлен. Rynne Core переподключается.", "Key added. Rynne Core is reconnecting."));
       await refreshProviderKeys();
     } catch (error) {
       setSettingsStatus(
@@ -1202,7 +1202,7 @@ export function App() {
 
   async function updateProviderModel(key: ProviderKeySummary, model: string) {
     if (!key.removable || model === key.model) return;
-    setSettingsStatus(tx(locale, "Сохраняю модель ключа и перезапускаю Nova Core…", "Saving the key model and restarting Nova Core…"));
+    setSettingsStatus(tx(locale, "Сохраняю модель ключа и перезапускаю Rynne Core…", "Saving the key model and restarting Rynne Core…"));
     try {
       await transport.updateProviderKeyModel(key.provider, key.index, model.trim());
       setProviderKeys((current) => current.map((item) => (
@@ -1221,7 +1221,7 @@ export function App() {
     setSettingsStatus(tx(locale, `Удаляю ключ ${key.hint}…`, `Removing key ${key.hint}…`));
     try {
       await transport.removeProviderKey(key.provider, key.index);
-      setSettingsStatus(tx(locale, "Ключ удалён. Nova Core переподключается.", "Key removed. Nova Core is reconnecting."));
+      setSettingsStatus(tx(locale, "Ключ удалён. Rynne Core переподключается.", "Key removed. Rynne Core is reconnecting."));
       await refreshProviderKeys();
     } catch (error) {
       setSettingsStatus(
@@ -1237,7 +1237,7 @@ export function App() {
     setSettingsStatus(tx(locale, "Сохраняю настройки голоса…", "Saving voice settings…"));
     try {
       await transport.send("set_tts_settings", next);
-      setSettingsStatus(tx(locale, "Голос Nova настроен.", "Nova's voice is configured."));
+      setSettingsStatus(tx(locale, "Голос Rynne настроен.", "Rynne's voice is configured."));
     } catch (error) {
       setTtsPending(false);
       setSettingsStatus(
@@ -1294,7 +1294,7 @@ export function App() {
     "paused_tts",
   ].includes(voicePhase);
   const voiceCaptureTitle = voicePhase === "paused_tts"
-    ? tx(locale, "Микрофон на паузе, пока Nova говорит", "Microphone paused while Nova speaks")
+    ? tx(locale, "Микрофон на паузе, пока Rynne говорит", "Microphone paused while Rynne speaks")
     : voicePhase === "transcribing" || voicePhase === "wake_word_detected"
     ? tx(locale, "Распознаю речь…", "Transcribing speech…")
     : voicePhase === "recording" || voicePhase === "wake_detected"
@@ -1316,9 +1316,9 @@ export function App() {
     <main className={`app-shell ui-${uiMode}`} data-ui-mode={uiMode}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-orb"><NovaMark size={42} /></div>
+          <div className="brand-orb"><RynneMark size={42} /></div>
           <div>
-            <strong>Nova</strong>
+            <strong>Rynne</strong>
             <span>
               <i className={`status-dot ${connection}`} />
               {connection === "connected"
@@ -1351,7 +1351,7 @@ export function App() {
 
         <div className="sidebar-footer">
           <div className="core-load">
-            <span><Cpu size={15} /> Nova Core</span>
+            <span><Cpu size={15} /> Rynne Core</span>
             <small>GPT OSS 120B</small>
           </div>
           <button className="profile"><span>ЛК</span><div><strong>Lev</strong><small>{tx(locale, "Локальный профиль", "Local profile")}</small></div></button>
@@ -1364,7 +1364,7 @@ export function App() {
             <span className="eyebrow">{tx(locale, "ПЕРСОНАЛЬНЫЙ АГЕНТ", "PERSONAL AGENT")}</span>
             <h1>{nav.find((item) => item.key === view)?.label}</h1>
           </div>
-          <nav className="compact-nav" aria-label={tx(locale, "Разделы Nova", "Nova sections")}>
+          <nav className="compact-nav" aria-label={tx(locale, "Разделы Rynne", "Rynne sections")}>
             {nav.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1415,7 +1415,7 @@ export function App() {
                 : tx(locale, "Включить наблюдение за активным окном", "Enable active-window observation")}
             >
               <Radio size={15} />
-              {tx(locale, "Nova рядом", "Nova Nearby")}
+              {tx(locale, "Rynne рядом", "Rynne Nearby")}
               <span>{proactiveBadge}</span>
             </button>
             <button className="icon-button" aria-label={tx(locale, "Команды", "Commands")} onClick={() => setView("guide")}><Command size={18} /></button>
@@ -1471,7 +1471,7 @@ export function App() {
                       </div>
                     )}
                     {item.kind === "suggestion" && confirmingSuggestionId === item.id && (
-                      <small className="voice-confirm-hint">{tx(locale, "Или скажите: «Нова, давай»", "Or say: “Nova, go ahead”")}</small>
+                      <small className="voice-confirm-hint">{tx(locale, "Или скажите: «Рин, давай»", "Or say: “Rynne, go ahead”")}</small>
                     )}
                   </div>
                 </article>
@@ -1481,7 +1481,7 @@ export function App() {
                   <div className="permission-icon"><ShieldCheck size={19} /></div>
                   <div className="permission-copy">
                     <span>{tx(locale, "НУЖНО ПОДТВЕРЖДЕНИЕ", "CONFIRMATION REQUIRED")}</span>
-                    <strong>{tx(locale, "Разрешить Nova выполнить действие?", "Allow Nova to run this action?")}</strong>
+                    <strong>{tx(locale, "Разрешить Rynne выполнить действие?", "Allow Rynne to run this action?")}</strong>
                     <p>{pendingPermission.message || pendingPermission.toolName}</p>
                     <code>{String(pendingPermission.arguments.command ?? pendingPermission.arguments.path ?? pendingPermission.toolName)}</code>
                     <div className="permission-actions">
@@ -1543,10 +1543,10 @@ export function App() {
                   }}
                   placeholder={
                     connection === "connected"
-                      ? tx(locale, "Попроси Nova или поставь задачу…", "Ask Nova or delegate a task…")
+                      ? tx(locale, "Попроси Rynne или поставь задачу…", "Ask Rynne or delegate a task…")
                       : connection === "connecting"
-                        ? tx(locale, "Nova Core запускается…", "Nova Core is starting…")
-                        : tx(locale, "Core не отвечает — Nova продолжает переподключение…", "Core is not responding — Nova keeps reconnecting…")
+                        ? tx(locale, "Rynne Core запускается…", "Rynne Core is starting…")
+                        : tx(locale, "Core не отвечает — Rynne продолжает переподключение…", "Core is not responding — Rynne keeps reconnecting…")
                   }
                   disabled={connection !== "connected"}
                   rows={1}
@@ -1558,7 +1558,7 @@ export function App() {
                     disabled={voicePending || connection !== "connected"}
                     aria-label={voiceActive ? tx(locale, "Остановить голосовой ввод", "Stop voice input") : tx(locale, "Включить голосовой ввод", "Start voice input")}
                     aria-pressed={voiceActive}
-                    title={voiceActive ? tx(locale, "Nova слушает · нажмите, чтобы остановить", "Nova is listening · click to stop") : tx(locale, "Включить микрофон", "Enable microphone")}
+                    title={voiceActive ? tx(locale, "Rynne слушает · нажмите, чтобы остановить", "Rynne is listening · click to stop") : tx(locale, "Включить микрофон", "Enable microphone")}
                   >
                     <Mic size={18} />
                   </button>
@@ -1622,7 +1622,7 @@ export function App() {
               <span className="settings-icon"><Languages size={22} /></span>
               <div>
                 <span className="eyebrow">{tx(locale, "ЯЗЫК", "LANGUAGE")}</span>
-                <h2>{tx(locale, "Язык Nova", "Nova language")}</h2>
+                <h2>{tx(locale, "Язык Rynne", "Rynne language")}</h2>
                 <p>{tx(
                   locale,
                   "Переключение применяется мгновенно к интерфейсу, ответам и итогам инструментов и сохраняется на этом компьютере.",
@@ -1668,7 +1668,7 @@ export function App() {
               <span className="settings-icon"><Cpu size={22} /></span>
               <div>
                 <span className="eyebrow">{tx(locale, "РЕСУРСЫ", "RESOURCES")}</span>
-                <h2>{tx(locale, "Что потребляет Nova", "What Nova consumes")}</h2>
+                <h2>{tx(locale, "Что потребляет Rynne", "What Rynne consumes")}</h2>
                 <p>{tx(
                   locale,
                   "Живые метрики процессов. Лёгкий режим опрашивает Core раз в 5 секунд, средний раз в 2 секунды, красивый каждые 0.5 секунды.",
@@ -1678,7 +1678,7 @@ export function App() {
               {resourceMetrics ? (
                 <div className="resource-metrics-grid">
                   <div className="resource-metric-summary">
-                    <span><strong>{resourceMetrics.total_memory_mb.toFixed(1)} MB</strong><small>{tx(locale, "всего по процессам Nova", "total Nova processes")}</small></span>
+                    <span><strong>{resourceMetrics.total_memory_mb.toFixed(1)} MB</strong><small>{tx(locale, "всего по процессам Rynne", "total Rynne processes")}</small></span>
                     <b>{resourceMetrics.snapshot_collection_ms.toFixed(1)} ms</b>
                     <em>{tx(locale, "опрос", "poll")}: {resourceMetrics.sample_interval_seconds}s</em>
                   </div>
@@ -1696,11 +1696,11 @@ export function App() {
               <span className="settings-icon"><ShieldCheck size={22} /></span>
               <div>
                 <span className="eyebrow">{tx(locale, "РАЗРЕШЕНИЯ", "PERMISSIONS")}</span>
-                <h2>{tx(locale, "Когда Nova должна спрашивать", "When Nova should ask")}</h2>
+                <h2>{tx(locale, "Когда Rynne должна спрашивать", "When Rynne should ask")}</h2>
                 <p>{tx(
                   locale,
-                  "Выберите, насколько автономно Nova выполняет инструменты. Жёсткие системные запреты и защита проактивного режима остаются во всех вариантах.",
-                  "Choose how autonomously Nova executes tools. Hard system blocks and proactive-mode safeguards remain active in every mode.",
+                  "Выберите, насколько автономно Rynne выполняет инструменты. Жёсткие системные запреты и защита проактивного режима остаются во всех вариантах.",
+                  "Choose how autonomously Rynne executes tools. Hard system blocks and proactive-mode safeguards remain active in every mode.",
                 )}</p>
               </div>
               <div className="permission-mode-options">
@@ -1741,7 +1741,7 @@ export function App() {
               <span className="settings-icon"><Volume2 size={22} /></span>
               <div>
                 <span className="eyebrow">TEXT TO SPEECH</span>
-                <h2>{tx(locale, "Выбери, как говорит Nova", "Choose how Nova speaks")}</h2>
+                <h2>{tx(locale, "Выбери, как говорит Rynne", "Choose how Rynne speaks")}</h2>
                 <p>{tx(
                   locale,
                   "Русские голоса работают локально через Silero. Английские голоса Orpheus работают через Groq API и не нагружают ноутбук моделью в памяти.",
@@ -1874,8 +1874,8 @@ export function App() {
               <span className="settings-icon"><Mic size={22} /></span>
               <div>
                 <span className="eyebrow">{tx(locale, "ГОЛОС И WAKE WORD", "VOICE AND WAKE WORD")}</span>
-                <h2>{tx(locale, "Позови Nova без кнопки", "Call Nova without pressing a button")}</h2>
-                <p>{tx(locale, `Vosk локально слушает только короткое слово «${wakeWord}». После него Nova записывает команду и передаёт её обычному STT.`, `Vosk listens locally only for the short word “${wakeWord}”. Nova then records the command and passes it to regular STT.`)}</p>
+                <h2>{tx(locale, "Позови Rynne без кнопки", "Call Rynne without pressing a button")}</h2>
+                <p>{tx(locale, `Vosk локально слушает только короткое слово «${wakeWord}». После него Rynne записывает команду и передаёт её обычному STT.`, `Vosk listens locally only for the short word “${wakeWord}”. Rynne then records the command and passes it to regular STT.`)}</p>
               </div>
               <div className="voice-mode-options">
                 <button
@@ -1943,7 +1943,7 @@ export function App() {
             <div className="settings-card proactive-card">
               <span className="settings-icon"><Radio size={22} /></span>
               <div>
-                <span className="eyebrow">{tx(locale, "NOVA РЯДОМ", "NOVA NEARBY")}</span>
+                <span className="eyebrow">{tx(locale, "RYNNE РЯДОМ", "RYNNE NEARBY")}</span>
                 <h2>{tx(locale, "Понятная проверка активного окна", "Transparent active-window checks")}</h2>
                 <p>{tx(locale, "Режим делает локальный снимок активного окна, ищет видимую проблему и предлагает действие. Ничего не нажимает и не отправляет без вашего подтверждения.", "The mode captures the active window locally, detects visible problems, and suggests an action. It never clicks or submits without your confirmation.")}</p>
               </div>
@@ -1992,7 +1992,7 @@ export function App() {
                           <div className="provider-key" key={`${key.provider}-${key.source}-${key.index}-${key.hint}`}>
                             <span>
                               <code>{key.hint}</code>
-                              <small>{key.source === "nova" ? tx(locale, "Добавлен в Nova", "Added in Nova") : tx(locale, "Системная переменная", "System environment variable")}</small>
+                              <small>{key.source === "nova" ? tx(locale, "Добавлен в Rynne", "Added in Rynne") : tx(locale, "Системная переменная", "System environment variable")}</small>
                               <input
                                 className="provider-model-input"
                                 defaultValue={key.model}
@@ -2086,22 +2086,22 @@ export function App() {
                   {
                     service: "telegram" as const,
                     title: "Telegram Business Bot",
-                    descriptionRu: "Создайте бота через @BotFather, включите Business Mode и подключите его в настройках Telegram. Nova увидит новые разрешённые диалоги после подключения.",
-                    descriptionEn: "Create a bot with @BotFather, enable Business Mode, then connect it in Telegram settings. Nova sees newly observed permitted chats after connection.",
+                    descriptionRu: "Создайте бота через @BotFather, включите Business Mode и подключите его в настройках Telegram. Rynne увидит новые разрешённые диалоги после подключения.",
+                    descriptionEn: "Create a bot with @BotFather, enable Business Mode, then connect it in Telegram settings. Rynne sees newly observed permitted chats after connection.",
                     placeholder: "123456789:AA…",
                   },
                   {
                     service: "telegram_remote" as const,
                     title: "Telegram Remote",
-                    descriptionRu: "ID аккаунтов, которым разрешено ставить задачи Nova через этого бота. Отправьте боту /start, скопируйте показанный ID и вставьте сюда. Несколько ID разделяются запятыми.",
-                    descriptionEn: "Telegram account IDs allowed to control Nova through this bot. Send /start to the bot, copy the displayed ID, and paste it here. Separate multiple IDs with commas.",
+                    descriptionRu: "ID аккаунтов, которым разрешено ставить задачи Rynne через этого бота. Отправьте боту /start, скопируйте показанный ID и вставьте сюда. Несколько ID разделяются запятыми.",
+                    descriptionEn: "Telegram account IDs allowed to control Rynne through this bot. Send /start to the bot, copy the displayed ID, and paste it here. Separate multiple IDs with commas.",
                     placeholder: "123456789,987654321",
                   },
                   {
                     service: "tavily" as const,
                     title: "Tavily Search",
-                    descriptionRu: "Ключ Tavily для качественного веб-поиска. Без него Nova продолжит использовать бесплатный резервный поиск.",
-                    descriptionEn: "Tavily key for higher-quality web search. Without it, Nova keeps using the free fallback search.",
+                    descriptionRu: "Ключ Tavily для качественного веб-поиска. Без него Rynne продолжит использовать бесплатный резервный поиск.",
+                    descriptionEn: "Tavily key for higher-quality web search. Without it, Rynne keeps using the free fallback search.",
                     placeholder: "tvly-…",
                   },
                 ]).map((option) => {
@@ -2119,7 +2119,7 @@ export function App() {
                         <div className="provider-key">
                           <span>
                             <code>{configured.hint}</code>
-                            <small>{configured.source === "nova" ? tx(locale, "Добавлен в Nova", "Added in Nova") : tx(locale, "Системная переменная", "System environment variable")}</small>
+                            <small>{configured.source === "nova" ? tx(locale, "Добавлен в Rynne", "Added in Rynne") : tx(locale, "Системная переменная", "System environment variable")}</small>
                           </span>
                           {configured.removable && (
                             <button onClick={() => void removeServiceSecret(option.service)} title={tx(locale, "Отключить", "Disconnect")}>
@@ -2156,7 +2156,7 @@ export function App() {
           <div className="view-placeholder">
             <span><History size={26} /></span>
             <h2>{nav.find((item) => item.key === view)?.label}</h2>
-            <p>{tx(locale, "Экран подключается к существующим событиям Nova Core следующим инкрементом.", "This screen will connect to existing Nova Core events in the next increment.")}</p>
+            <p>{tx(locale, "Экран подключается к существующим событиям Rynne Core следующим инкрементом.", "This screen will connect to existing Rynne Core events in the next increment.")}</p>
             <button onClick={() => setView("dialog")}>{tx(locale, "Вернуться в диалог", "Return to chat")}</button>
           </div>
         )}
@@ -2171,9 +2171,9 @@ export function App() {
         <section className="agent-state">
           <div className={busy || runtime.working ? "large-orb working" : "large-orb"}>
             <span />
-            <NovaMark size={96} />
+            <RynneMark size={96} />
           </div>
-          <strong>{busy ? tx(locale, "Nova работает", "Nova is working") : runtime.label}</strong>
+          <strong>{busy ? tx(locale, "Rynne работает", "Rynne is working") : runtime.label}</strong>
           <p>{activeTool}</p>
         </section>
 
@@ -2188,7 +2188,7 @@ export function App() {
         </section>
 
         <section className="context-card compact">
-          <header><span><Radio size={15} />{tx(locale, "Nova рядом", "Nova Nearby")}</span><small>{proactiveBadge}</small></header>
+          <header><span><Radio size={15} />{tx(locale, "Rynne рядом", "Rynne Nearby")}</span><small>{proactiveBadge}</small></header>
           <div className={`nearby-status ${proactivePhase}`}>
             <i />
             <span>{proactive ? proactiveStatus : tx(locale, "Наблюдение выключено", "Observation is off")}</span>

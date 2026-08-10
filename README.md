@@ -1,21 +1,21 @@
 <div align="center">
 
-# Nova
+# Rynne
 
-### Tell it what needs to be done. Nova figures out which windows, files, and tools it needs.
+### Tell it what needs to be done. Rynne figures out which windows, files, and tools it needs.
 
 **A local-first Windows OS agent that does more than answer — it acts on your computer.**
 
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](#quick-start)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB?style=for-the-badge&logo=python&logoColor=white)](#quick-start)
-[![Tests](https://img.shields.io/badge/tests-740%20passing-22C55E?style=for-the-badge)](#verification)
+[![Tests](https://img.shields.io/badge/tests-887%20passing-22C55E?style=for-the-badge)](#verification)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#control-and-safety)
 
 **English** · [Русский](README.ru.md)
 
 </div>
 
-![Nova orchestrates your Windows workspace](docs/assets/nova-hero.png)
+![Rynne orchestrates your Windows workspace](docs/assets/rynne-hero.png)
 
 <div align="center">
 
@@ -27,13 +27,13 @@
 
 ## Not another chat. An operator.
 
-With a regular assistant, you describe a task, get a set of instructions, and still do the work yourself. Nova takes a goal, selects the right tools, executes the steps, and shows you a verifiable result.
+With a regular assistant, you describe a task, get a set of instructions, and still do the work yourself. Rynne takes a goal, selects the right tools, executes the steps, and shows you a verifiable result.
 
 > **“Open the project, run its tests, show me the failures, and keep the process alive while I work on something else.”**
 
-Nova can open applications, work with files, run commands in the background, monitor processes, resume durable plans after a restart, and notify you when the result is ready.
+Rynne can open applications, work with files, run commands in the background, monitor processes, resume durable plans after a restart, and notify you when the result is ready.
 
-| Regular AI chat | Nova |
+| Regular AI chat | Rynne |
 |---|---|
 | Tells you where to click | Clicks through APIs or UI Automation |
 | Gives you a terminal command | Starts and monitors the process |
@@ -46,7 +46,7 @@ Nova can open applications, work with files, run commands in the background, mon
 ```text
 You:  “Start the project, run the tests, and tell me if the server goes down.”
 
-Nova: understands the goal
+Rynne: understands the goal
       → selects terminal and process tools
       → starts the work in the background
       → persists its state
@@ -56,7 +56,7 @@ Nova: understands the goal
 
 You do not need to remember tool names or manually assemble command chains. Describe the outcome in plain language.
 
-## What Nova can do today
+## What Rynne can do today
 
 ### Operate Windows
 
@@ -77,7 +77,7 @@ You do not need to remember tool names or manually assemble command chains. Desc
 - Infer the active Git workspace from your IDE, terminal, and files.
 - Run relative terminal, file, and Git operations in that workspace.
 - Read, create, and patch files with backups and diffs.
-- Undo Nova's last file change without overwriting newer manual edits.
+- Undo Rynne's last file change without overwriting newer manual edits.
 - Inspect Git status, diffs, logs, and branches, and create commits.
 - Start tests, commands, servers, and long-running processes.
 - Read stdout/stderr, run health checks, and stop complete process trees.
@@ -85,7 +85,7 @@ You do not need to remember tool names or manually assemble command chains. Desc
 
 ```text
 “Run the tests here.”
-“Undo Nova's last change.”
+“Undo Rynne's last change.”
 “Show me the project diff and suggest a commit title.”
 “Run python -m pytest in the background and report the result.”
 “Start an HTTP server on port 8000 and watch it.”
@@ -101,12 +101,12 @@ You do not need to remember tool names or manually assemble command chains. Desc
 
 ### Split complex work across a model team
 
-- Nova automatically recognizes multi-part engineering and research requests.
+- Rynne automatically recognizes multi-part engineering and research requests.
 - Independent intent, architecture, and verification workers run in parallel.
 - Concurrency follows healthy independent Groq, OpenRouter, and Gemini key quotas,
   up to the configurable `NOVA_MAX_SUBAGENTS` limit.
 - A reviewer merges the reports without changing the original request; the primary
-  Nova remains responsible for real tool calls, permissions, and verification.
+  Rynne remains responsible for real tool calls, permissions, and verification.
 
 ```text
 “Remember that my work repositories are in D:\Projects.”
@@ -116,13 +116,13 @@ You do not need to remember tool names or manually assemble command chains. Desc
 
 ### Be proactive without taking over
 
-The opt-in **Nova Nearby** mode occasionally inspects only the active window. When it notices a clear problem or useful opportunity, it can ask:
+The opt-in **Rynne Nearby** mode occasionally inspects only the active window. When it notices a clear problem or useful opportunity, it can ask:
 
 > “It looks like the build failed. Want me to investigate the error?”
 
 Accepting the suggestion turns it into a normal user request. Account creation, sending a message, publishing content, or any other external side effect still goes through the regular orchestrator, preview, and permission policy. The observer itself never receives action tools.
 
-Nova can also notify you when:
+Rynne can also notify you when:
 
 - a background plan or test run finishes;
 - a managed server stops;
@@ -144,7 +144,7 @@ Notifications have cooldowns, importance levels, quiet hours, and an explicit ex
 “Watch the requests package for updates.”
 ```
 
-## Why Nova says “I can't” less often
+## Why Rynne says “I can't” less often
 
 Every built-in and MCP tool is registered in a shared capability registry. The router selects capabilities from task intent instead of asking one model to guess every possible action at once.
 
@@ -152,7 +152,7 @@ Every built-in and MCP tool is registered in a shared capability registry. The r
 - Complex tasks enter a multi-step tool loop driven by actual tool results.
 - MCP tools join the same registry as native tools.
 - Tool errors return as structured results and can trigger another route.
-- Nova reports inability only after it has exhausted applicable tools or encountered a real permission/environment blocker.
+- Rynne reports inability only after it has exhausted applicable tools or encountered a real permission/environment blocker.
 - Risky actions always pass through the permission policy.
 
 ## Models, providers, and routing
@@ -164,21 +164,21 @@ For Groq, routing is intentionally limited to two models:
 | Text, reasoning, and tool calling | `openai/gpt-oss-120b` |
 | Requests with an image | `qwen/qwen3.6-27b` |
 
-Nova also supports OpenRouter and Google Gemini as independent provider routes. Settings can hold an unlimited pool of keys for each provider. Keys are masked in the UI, rotated on limits or transient failures, and stored only in the current user's application data.
+Rynne also supports OpenRouter and Google Gemini as independent provider routes. Settings can hold an unlimited pool of keys for each provider. Keys are masked in the UI, rotated on limits or transient failures, and stored only in the current user's application data.
 
-Groq is also used for cloud speech recognition when configured. Nova does not route text tool calls to an unsuitable small model merely to claim fallback coverage.
+Groq is also used for cloud speech recognition when configured. Rynne does not route text tool calls to an unsuitable small model merely to claim fallback coverage.
 
 ## Install on Windows
 
 For a normal installation you only need one file:
 
 ```text
-Nova_0.1.6_x64-setup.exe
+Rynne_0.1.6_x64-setup.exe
 ```
 
-Run it with a regular double click. Nova installs for the current Windows user, appears in the Start menu and Installed Apps, and does not require Python, Node.js, or Rust on the user's machine.
+Run it with a regular double click. Rynne installs for the current Windows user, appears in the Start menu and Installed Apps, and does not require Python, Node.js, or Rust on the user's machine.
 
-On first launch, open **Settings** and add one or more Groq, OpenRouter, or Gemini API keys. Nova stores them in its user data directory and reconnects Core automatically.
+On first launch, open **Settings** and add one or more Groq, OpenRouter, or Gemini API keys. Rynne stores them in its user data directory and reconnects Core automatically.
 
 The desktop app includes three presentation modes:
 
@@ -187,22 +187,22 @@ The desktop app includes three presentation modes:
 - **Console** — a clean, dense, CLI-inspired workspace.
 
 The whole desktop interface is available in **English and Russian**. Use the language
-switcher in the top bar or Settings; Nova remembers the choice and even localizes the
+switcher in the top bar or Settings; Rynne remembers the choice and even localizes the
 startup screen before React loads. Open **Guide** for an eight-part handbook with real
-commands, voice and Nova Nearby setup, skills, providers, MCP, safety, and troubleshooting.
+commands, voice and Rynne Nearby setup, skills, providers, MCP, safety, and troubleshooting.
 
 Voice output is configured independently from the interface language. Settings includes
 Auto/Russian/English routing, a 0.7–1.6× speed control, five offline Russian Silero voices,
 six English Groq Orpheus voices, expressive styles, and a preview button for every voice.
 Groq receives its native numeric speed parameter; local Silero uses native SSML prosody
-steps (`x-slow` through `x-fast`). Nova never speeds up an already rendered recording, so
+steps (`x-slow` through `x-fast`). Rynne never speeds up an already rendered recording, so
 changing the rate does not introduce the metallic post-processing effect. The lightweight
 split is deliberate: Russian speech stays local, while English synthesis uses the existing
 Groq key pool without loading a second neural model into laptop memory.
 
 ## Quick start from source
 
-### 1. Clone Nova
+### 1. Clone Rynne
 
 ```powershell
 git clone https://github.com/KremlevLev/nova.git
@@ -217,7 +217,7 @@ py -3.14 -m venv .venv
 python scripts/install_dependencies.py
 ```
 
-Nova's browser agent uses an installed Chrome or Edge browser with a dedicated persistent profile. A separately downloaded Playwright Chromium is not required for normal desktop use.
+Rynne's browser agent uses an installed Chrome or Edge browser with a dedicated persistent profile. A separately downloaded Playwright Chromium is not required for normal desktop use.
 
 ### 3. Add provider keys
 
@@ -241,7 +241,7 @@ GEMINI_API_KEYS=AIza_key_one,AIza_key_two
 
 Create a Groq key at [console.groq.com](https://console.groq.com/keys).
 
-### 4. Run Nova Core
+### 4. Run Rynne Core
 
 ```powershell
 python -m main
@@ -249,14 +249,14 @@ python -m main
 
 Press **`Ctrl+Shift+Space`** and say:
 
-> **“Open Notepad and write: Nova is working.”**
+> **“Open Notepad and write: Rynne is working.”**
 
 ## Hotkeys
 
 | Shortcut | Action |
 |---|---|
 | `Ctrl+Shift+Space` | Start or stop a manual voice session |
-| `Esc` | Interrupt Nova's speech |
+| `Esc` | Interrupt Rynne's speech |
 | `Ctrl+Shift+Q` | Emergency speech interruption |
 
 ## Desktop development
@@ -281,7 +281,7 @@ cd C:\Users\you\path\to\nova
 
 This command discovers the local Vosk model, enables the wake word when available, launches Vite, opens the native Tauri window, and starts Python Core. Install the small Russian Vosk model once with `python -m vosk_install`, or let the launcher do it with `.\scripts\dev-desktop.ps1 -InstallWakeWord`.
 
-Check the microphone, audio format, and Vosk runtime without launching Nova:
+Check the microphone, audio format, and Vosk runtime without launching Rynne:
 
 ```powershell
 python scripts\voice_diagnostics.py
@@ -310,7 +310,7 @@ npm run installer
 The build compiles React, packages headless Python Core with PyInstaller, compiles the Tauri release shell, and creates:
 
 ```text
-apps\desktop\src-tauri\target\release\bundle\nsis\Nova_0.1.6_x64-setup.exe
+apps\desktop\src-tauri\target\release\bundle\nsis\Rynne_0.1.6_x64-setup.exe
 ```
 
 Core uses a source fingerprint, so repeated builds skip PyInstaller when Python Core has not changed. Force a clean Core package with:
@@ -326,7 +326,7 @@ See [`docs/desktop_architecture.md`](docs/desktop_architecture.md) for the archi
 ### Telegram Business Bot (recommended)
 
 Create a bot with `@BotFather`, enable its Business Mode, connect it to your
-Telegram account, and paste the Bot Token in **Settings → Integrations**. Nova
+Telegram account, and paste the Bot Token in **Settings → Integrations**. Rynne
 then receives permitted new business messages, keeps a local searchable cache,
 and can reply on behalf of the connected account according to the selected permission mode. The Bot
 API does not expose arbitrary old history: a chat appears after a new message
@@ -335,7 +335,7 @@ API key for higher-quality web search.
 
 ### Personal Telegram through MCP (advanced)
 
-Nova ships an optional local Telegram MCP adapter for your real account. It can
+Rynne ships an optional local Telegram MCP adapter for your real account. It can
 list and search chats, read recent history and send a confirmed message without
 guessing screen coordinates. Authorize it once, then restart Core:
 
@@ -344,12 +344,12 @@ py -m pip install -r requirements.txt
 py scripts/setup_telegram_mcp.py
 ```
 
-The session stays on this PC. Reading is silent; sending always shows a Nova
+The session stays on this PC. Reading is silent; sending always shows a Rynne
 confirmation card before anything leaves your account. Opening a visible chat
 still uses the Chrome skill, so API access and on-screen navigation complement
 instead of confusing each other.
 
-Nova supports `stdio`, Streamable HTTP, and legacy SSE through the official MCP Python SDK. Save a standard `mcpServers` configuration:
+Rynne supports `stdio`, Streamable HTTP, and legacy SSE through the official MCP Python SDK. Save a standard `mcpServers` configuration:
 
 ```env
 NOVA_MCP_CONFIG=C:\Users\you\.config\nova\mcp.json
@@ -376,9 +376,9 @@ NOVA_MCP_AUTO_DISCOVERY=false
 
 After the handshake, tools receive risk/category metadata and join the shared capability router. `${ENV_NAME}` values are substituted locally and never added to the prompt.
 
-## Teach Nova a workflow without rebuilding it
+## Teach Rynne a workflow without rebuilding it
 
-Nova loads contextual Markdown skills on demand from `%USERPROFILE%\.nova\skills`,
+Rynne loads contextual Markdown skills on demand from `%USERPROFILE%\.nova\skills`,
 `<workspace>\.nova\skills`, and the compatible `<workspace>\.agents\skills` path.
 Create `SKILL.md` in a subdirectory:
 
@@ -395,7 +395,7 @@ create a commit. Never publish when tests fail.
 
 Only matching skills enter the model context. Project skills override global
 ones with the same name and update immediately after saving; declared tools are
-loaded from the capability registry. Skills cannot override Nova's policy,
+loaded from the capability registry. Skills cannot override Rynne's policy,
 permissions, confirmations, or the user's explicit goal.
 
 ## Control and safety
@@ -407,7 +407,7 @@ An OS agent should be capable, but it must remain predictable.
 - Writes to protected system locations are restricted.
 - A fallback route never repeats a side effect that already succeeded.
 - Background actions and proactive suggestions are journaled.
-- Nova Nearby is opt-in; screenshots remain in memory during observation.
+- Rynne Nearby is opt-in; screenshots remain in memory during observation.
 - When you accept visual help, context becomes a one-use attachment and is deleted immediately after the agent reads it.
 - Password managers, banking, payment, and private-browsing windows are skipped automatically.
 - On-screen content is treated as untrusted and checked for prompt injection.
@@ -493,16 +493,16 @@ The acceptance suite exercises the production selector, tool schemas, capability
 
 ## Project status
 
-Nova is under active development. The Windows tools, durable background plans, MCP layer, React/Tauri desktop app, memory, provider pools, browser profile, proactive safety model, and read-only parallel subagent teams are already implemented. The next major areas are isolated worktrees for parallel code-writing agents, broader proactive scenarios, richer task screens, signed releases, and automatic updates.
+Rynne is under active development. The Windows tools, durable background plans, MCP layer, React/Tauri desktop app, memory, provider pools, browser profile, proactive safety model, and read-only parallel subagent teams are already implemented. The next major areas are isolated worktrees for parallel code-writing agents, broader proactive scenarios, richer task screens, signed releases, and automatic updates.
 
 The detailed backlog and completed milestones live in [`roadmap.md`](roadmap.md).
 
 ## License
 
-Nova releases that include the current [`LICENSE`](LICENSE) are available under the **Functional Source License 1.1, Apache 2.0 Future License** (`FSL-1.1-ALv2`). Personal use, internal use, education, research, modification, and redistribution for permitted purposes are allowed. Offering Nova or substantially similar functionality as a competing commercial product or service is not allowed under the FSL grant.
+Rynne releases that include the current [`LICENSE`](LICENSE) are available under the **Functional Source License 1.1, Apache 2.0 Future License** (`FSL-1.1-ALv2`). Personal use, internal use, education, research, modification, and redistribution for permitted purposes are allowed. Offering Rynne or substantially similar functionality as a competing commercial product or service is not allowed under the FSL grant.
 
 This licensing model applies to covered versions first made available on or after **August 10, 2026**. Each covered version becomes available under the Apache License 2.0 on the second anniversary of the date that version was first made available. Earlier versions released under Apache 2.0 remain under their original license.
 
-See [commercial licensing](COMMERCIAL-LICENSE.md) to request competing-product, managed-service, OEM, or white-label rights. The proposed boundary between the useful public desktop agent and private Nova Cloud infrastructure is documented in [open-core and private-service boundaries](docs/open-core-boundaries.md).
+See [commercial licensing](COMMERCIAL-LICENSE.md) to request competing-product, managed-service, OEM, or white-label rights. The proposed boundary between the useful public desktop agent and private Rynne Cloud infrastructure is documented in [open-core and private-service boundaries](docs/open-core-boundaries.md).
 
-If you want a Windows agent that can do more than rephrase a task — try Nova on a real workflow and tell us where it saved you time and where it got in the way.
+If you want a Windows agent that can do more than rephrase a task — try Rynne on a real workflow and tell us where it saved you time and where it got in the way.

@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  isNovaEvent,
+  isRynneEvent,
   makeCommand,
-  NOVA_COMMAND_ACTIONS,
-  NOVA_EVENT_TYPES,
+  RYNNE_COMMAND_ACTIONS,
+  RYNNE_EVENT_TYPES,
 } from "./protocol";
 import { eventToItem, runtimePresentation } from "./App";
 
-describe("Nova desktop protocol", () => {
+describe("Rynne desktop protocol", () => {
   it("accepts the same JSON event envelope as Python", () => {
     expect(
-      isNovaEvent({
+      isRynneEvent({
         event_type: "assistant_message",
         payload: { text: "Готово" },
         created_at: 123.4,
@@ -19,8 +19,8 @@ describe("Nova desktop protocol", () => {
   });
 
   it("rejects unknown and malformed events", () => {
-    expect(isNovaEvent({ event_type: "unknown", payload: {}, created_at: 1 })).toBe(false);
-    expect(isNovaEvent({ event_type: "runtime", payload: [], created_at: 1 })).toBe(false);
+    expect(isRynneEvent({ event_type: "unknown", payload: {}, created_at: 1 })).toBe(false);
+    expect(isRynneEvent({ event_type: "runtime", payload: [], created_at: 1 })).toBe(false);
   });
 
   it("creates Python-compatible commands", () => {
@@ -36,24 +36,24 @@ describe("Nova desktop protocol", () => {
   });
 
   it("keeps the initial contract explicit", () => {
-    expect(NOVA_EVENT_TYPES).toContain("proactive_suggestion");
-    expect(NOVA_EVENT_TYPES).toContain("proactive_status");
-    expect(NOVA_EVENT_TYPES).toContain("proactive_confirmation_resolved");
-    expect(NOVA_EVENT_TYPES).toContain("agent_progress");
-    expect(NOVA_EVENT_TYPES).toContain("request_heartbeat");
-    expect(NOVA_COMMAND_ACTIONS).toContain("set_preference");
-    expect(NOVA_COMMAND_ACTIONS).toContain("set_tts_settings");
-    expect(NOVA_COMMAND_ACTIONS).toContain("preview_tts");
-    expect(NOVA_COMMAND_ACTIONS).toContain("proactive_feedback");
+    expect(RYNNE_EVENT_TYPES).toContain("proactive_suggestion");
+    expect(RYNNE_EVENT_TYPES).toContain("proactive_status");
+    expect(RYNNE_EVENT_TYPES).toContain("proactive_confirmation_resolved");
+    expect(RYNNE_EVENT_TYPES).toContain("agent_progress");
+    expect(RYNNE_EVENT_TYPES).toContain("request_heartbeat");
+    expect(RYNNE_COMMAND_ACTIONS).toContain("set_preference");
+    expect(RYNNE_COMMAND_ACTIONS).toContain("set_tts_settings");
+    expect(RYNNE_COMMAND_ACTIONS).toContain("preview_tts");
+    expect(RYNNE_COMMAND_ACTIONS).toContain("proactive_feedback");
   });
 
   it("maps Core runtime state into the integrated desktop indicator", () => {
     expect(runtimePresentation("ГОВОРИТ")).toEqual({
-      label: "Nova отвечает",
+      label: "Rynne отвечает",
       working: true,
     });
     expect(runtimePresentation("СПИТ")).toEqual({
-      label: "Nova готова",
+      label: "Rynne готова",
       working: false,
     });
   });

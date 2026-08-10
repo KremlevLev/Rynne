@@ -191,7 +191,7 @@ class InteractionModeManager:
         ):
             raise ValueError(
                 "Wake word недоступен: установите русскую Vosk-модель "
-                "командой `python -m vosk_install` и перезапустите Nova Core."
+                "командой `python -m vosk_install` и перезапустите Rynne Core."
             )
 
         async with self._lock:

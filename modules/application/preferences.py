@@ -170,7 +170,7 @@ class PreferencesManager:
                 )
 
             logger.info(
-                "Профиль Nova изменён: %s",
+                "Профиль Rynne изменён: %s",
                 profile.value,
             )
 
@@ -321,7 +321,7 @@ class PreferencesManager:
                 or not self._cloud_enabled
             ):
                 raise ValueError(
-                    "Режим «Nova рядом» требует разрешённых "
+                    "Режим «Rynne рядом» требует разрешённых "
                     "облачных vision-моделей."
                 )
             self._proactive_vision_enabled = requested

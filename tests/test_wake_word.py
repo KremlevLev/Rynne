@@ -19,74 +19,74 @@ from modules.input_hub.wake_word import (
 def test_normalize_wake_text() -> None:
     assert (
         normalize_wake_text(
-            "  НОВА,   Открой  "
+            "  РИН,   Открой  "
         )
-        == "нова, открой"
+        == "рин, открой"
     )
 
 
 def test_contains_wake_word() -> None:
     assert contains_wake_word(
-        "Нова открой блокнот"
+        "Рин открой блокнот"
     )
 
     assert contains_wake_word(
-        "Эй, Нова!"
+        "Эй, Рин!"
     )
 
 
 def test_repeated_and_latin_wake_words_are_not_commands() -> None:
-    assert strip_wake_prefix("Нова, Нова, Нова") == ""
-    assert strip_wake_prefix("Nova.") == ""
-    assert strip_wake_prefix("Наува, открой браузер") == "открой браузер"
-    assert strip_wake_prefix("Новчик, привет") == "привет"
+    assert strip_wake_prefix("Рин, Рин, Рин") == ""
+    assert strip_wake_prefix("Rynne.") == ""
+    assert strip_wake_prefix("Ринни, открой браузер") == "открой браузер"
+    assert strip_wake_prefix("Райне, привет") == "привет"
 
     assert contains_wake_word(
-        "ново"
+        "ринн"
     )
-    assert contains_wake_word("нава")
-    assert contains_wake_word("наува")
+    assert contains_wake_word("ринни")
+    assert contains_wake_word("райне")
 
 
 def test_does_not_match_part_of_word() -> None:
     assert not contains_wake_word(
-        "инновация"
+        "ринопластика"
     )
     assert not contains_wake_word("это новая база в майнкрафте")
-    assert not contains_wake_word("в ролике сказали Нова в середине фразы")
+    assert not contains_wake_word("в ролике сказали Рин в середине фразы")
 
 
-def test_ambiguous_nova_partial_waits_for_word_completion() -> None:
-    assert not should_trigger_wake("нова", is_final=False)
-    assert should_trigger_wake("нова", is_final=True)
-    assert not should_trigger_wake("нова открой", is_final=False)
-    assert should_trigger_wake("нова открой", is_final=True)
-    assert should_trigger_wake("эй нова", is_final=False)
+def test_plain_rynne_partial_waits_for_word_completion() -> None:
+    assert not should_trigger_wake("рин", is_final=False)
+    assert should_trigger_wake("рин", is_final=True)
+    assert not should_trigger_wake("рин открой", is_final=False)
+    assert should_trigger_wake("рин открой", is_final=True)
+    assert should_trigger_wake("эй рин", is_final=False)
     assert not should_trigger_wake("новая", is_final=True)
 
 
 def test_strip_simple_wake_prefix() -> None:
     assert (
         strip_wake_prefix(
-            "Нова, открой блокнот"
+            "Рин, открой блокнот"
         )
         == "открой блокнот"
     )
 
 
-def test_strip_hey_nova_prefix() -> None:
+def test_strip_hey_rynne_prefix() -> None:
     assert (
         strip_wake_prefix(
-            "Эй Нова, скажи время"
+            "Эй Рин, скажи время"
         )
         == "скажи время"
     )
 
 
-def test_strip_listen_nova_prefix() -> None:
+def test_strip_listen_rynne_prefix() -> None:
     assert (
         strip_wake_prefix(
-            "Слушай, Нова, открой браузер"
+            "Слушай, Рин, открой браузер"
         )
         == "открой браузер"
     )
@@ -94,7 +94,7 @@ def test_strip_listen_nova_prefix() -> None:
 
 def test_wake_only_returns_empty_command() -> None:
     assert strip_wake_prefix(
-        "Нова"
+        "Рин"
     ) == ""
 
 
@@ -110,7 +110,7 @@ def test_text_without_wake_prefix_is_unchanged() -> None:
 def test_detector_unavailable_without_model() -> None:
     config = WakeWordConfig(
         enabled=True,
-        wake_word="нова",
+        wake_word="рин",
         model_path=Path(
             "missing-vosk-model"
         ),
@@ -131,7 +131,7 @@ def test_detector_available_with_model_directory(
 
     config = WakeWordConfig(
         enabled=True,
-        wake_word="нова",
+        wake_word="рин",
         model_path=model_directory,
         model_configured=True,
     )
@@ -154,6 +154,20 @@ def test_environment_config_auto_enables_discovered_model(
 
     assert config.available
     assert config.model_path == model_directory.resolve()
+
+
+def test_environment_uses_rynne_wake_word_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("RYNNE_WAKE_WORD", raising=False)
+    monkeypatch.delenv("NOVA_WAKE_WORD", raising=False)
+
+    assert WakeWordConfig.from_environment().wake_word == "рин"
+
+
+def test_environment_migrates_legacy_nova_wake_word(monkeypatch) -> None:
+    monkeypatch.delenv("RYNNE_WAKE_WORD", raising=False)
+    monkeypatch.setenv("NOVA_WAKE_WORD", "Нова")
+
+    assert WakeWordConfig.from_environment().wake_word == "рин"
 
 
 def test_explicit_environment_switch_can_disable_wake_word(
@@ -184,7 +198,7 @@ def test_wake_stream_uses_abort_instead_of_waiting_for_buffer_drain() -> None:
 def test_wake_silence_threshold_stays_above_measured_noise() -> None:
     config = WakeWordConfig(
         enabled=True,
-        wake_word="нова",
+        wake_word="рин",
         model_path=Path("model"),
         minimum_rms_threshold=0.003,
     )
@@ -207,7 +221,7 @@ def test_detector_caches_fatal_vosk_initialization_error(
     detector = WakeWordDetector(
         WakeWordConfig(
             enabled=True,
-            wake_word="нова",
+            wake_word="рин",
             model_path=model_directory,
             model_configured=True,
         )

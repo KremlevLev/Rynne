@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nova",
+  "productName": "Rynne",
   "version": "0.1.6",
   "identifier": "ai.nova.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Nova",
+        "title": "Rynne",
         "width": 1360,
         "height": 820,
         "minWidth": 980,
@@ -29,11 +29,11 @@
     "active": true,
     "targets": ["nsis"],
     "category": "Productivity",
-    "publisher": "Nova",
+    "publisher": "Rynne",
     "shortDescription": "Персональный AI-агент для Windows",
-    "longDescription": "Nova выполняет задачи в Windows, работает с файлами, браузером, приложениями и подключёнными инструментами.",
+    "longDescription": "Rynne выполняет задачи в Windows, работает с файлами, браузером, приложениями и подключёнными инструментами.",
     "resources": {
-      "resources/nova-core/": "nova-core-0.1.6"
+      "resources/rynne-core/": "rynne-core-0.1.6"
     },
     "icon": [
       "icons/32x32.png",
@@ -47,7 +47,7 @@
         "compression": "zlib",
         "installMode": "currentUser",
         "languages": ["Russian", "English"],
-        "startMenuFolder": "Nova"
+        "startMenuFolder": "Rynne"
       }
     }
   }

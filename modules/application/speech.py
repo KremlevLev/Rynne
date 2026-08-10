@@ -361,7 +361,7 @@ class SpeechService:
 
     async def _warm_up(self) -> bool:
         started_at = time.monotonic()
-        self._publish_status("loading", "Загружаю локальный голос Nova…")
+        self._publish_status("loading", "Загружаю локальный голос Rynne…")
         try:
             ready = bool(await asyncio.to_thread(warm_up_tts))
         except Exception:
@@ -370,7 +370,7 @@ class SpeechService:
         elapsed = time.monotonic() - started_at
         if ready:
             logger.info("TTS подготовлен за %.1f сек.", elapsed)
-            self._publish_status("ready", f"Голос Nova готов · {elapsed:.1f} с")
+            self._publish_status("ready", f"Голос Rynne готов · {elapsed:.1f} с")
         else:
             self._publish_status("error", "Локальный голос не загрузился. Проверьте журнал TTS.")
         return ready
@@ -675,7 +675,7 @@ class SpeechService:
                     await self.runtime.set_state(
                         AssistantState.SPEAKING
                     )
-                    self._publish_status("speaking", "Nova отвечает голосом…")
+                    self._publish_status("speaking", "Rynne отвечает голосом…")
 
                     chunks = split_speech_chunks(text)
 

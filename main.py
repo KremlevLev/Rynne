@@ -233,7 +233,7 @@ logging.basicConfig(
         "%(name)s | %(message)s"
     ),
 )
-logger = logging.getLogger("Nova")
+logger = logging.getLogger("Rynne")
 
 
 def instance_lock_port(desktop_transport: str) -> int:
@@ -254,7 +254,7 @@ def acquire_instance_lock(port: int = 29485) -> socket.socket:
     except OSError as exc:
         instance_lock.close()
         raise RuntimeError(
-            "Nova уже запущена в другом процессе."
+            "Rynne уже запущена в другом процессе."
         ) from exc
 
     return instance_lock
@@ -945,8 +945,8 @@ async def async_main() -> None:
         voice_text = f"{suggestion.title}. {concise_message}"
         if pending is not None:
             voice_text += (
-                " Скажите «Нова, давай» для подтверждения "
-                "или «Нова, не сейчас» для отмены."
+                " Скажите «Рин, давай» для подтверждения "
+                "или «Рин, не сейчас» для отмены."
             )
         await speech.say(
             voice_text,
@@ -1509,7 +1509,7 @@ async def async_main() -> None:
                             if preferences.snapshot().tts_enabled:
                                 await speech.say(
                                     (
-                                        "Проверка Nova рядом завершена. "
+                                        "Проверка Rynne рядом завершена. "
                                         + status_message
                                     ),
                                     priority=4,
@@ -1519,7 +1519,7 @@ async def async_main() -> None:
                     raise
                 except Exception as exc:
                     logger.exception(
-                        "Сбой opt-in режима «Nova рядом»."
+                        "Сбой opt-in режима «Rynne рядом»."
                     )
                     if NOVA_DESKTOP_UI:
                         desktop_service.publish(
@@ -1616,7 +1616,7 @@ async def async_main() -> None:
         response: AssistantResponse,
     ) -> None:
         print(
-            f"\n[Nova]: "
+            f"\n[Rynne]: "
             f"{response.display_text}\n"
         )
 
@@ -1649,7 +1649,7 @@ async def async_main() -> None:
                     response.display_text,
                 )
             except Exception:
-                logger.exception("Could not return Nova response through Telegram Remote.")
+                logger.exception("Could not return Rynne response through Telegram Remote.")
 
         preferences_snapshot = (
             preferences.snapshot()
@@ -1830,7 +1830,7 @@ async def async_main() -> None:
                             status_text = (
                                 f"Выполняю: {current.text[:500]}"
                                 if current is not None
-                                else "Nova свободна."
+                                else "Rynne свободна."
                             )
                             status_text += f"\nВ очереди: {input_coordinator.queued_requests}."
                             await send_telegram_remote_reply(int(chat_id), status_text)
@@ -1865,7 +1865,7 @@ async def async_main() -> None:
                         if request is not None:
                             await send_telegram_remote_reply(
                                 int(chat_id),
-                                "Принято. Передаю задачу Nova Core.",
+                                "Принято. Передаю задачу Rynne Core.",
                             )
                 elif not result.success:
                     logger.warning("Telegram Remote polling failed: %s", result.message)
@@ -2087,7 +2087,7 @@ async def async_main() -> None:
         if NOVA_DESKTOP_TRANSPORT != "stdio":
             await speech.say(
                 (
-                    "Скажите Нова или нажмите "
+                    "Скажите Рин или нажмите "
                     "контрол шифт спейс."
                 ),
                 priority=0,
@@ -2202,7 +2202,7 @@ def run_reasoning_test() -> None:
     """Запускает тест Reasoning Loop из командной строки."""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Nova Reasoning Loop Test")
+    parser = argparse.ArgumentParser(description="Rynne Reasoning Loop Test")
     parser.add_argument(
         "request",
         nargs="*",
@@ -2227,7 +2227,7 @@ def run_reasoning_test() -> None:
             print(f"\n[Критическая ошибка]: {exc}")
             sys.exit(1)
         except KeyboardInterrupt:
-            print("\nNova остановлена пользователем.")
+            print("\nRynne остановлена пользователем.")
 
 
 if __name__ == "__main__":

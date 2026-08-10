@@ -102,7 +102,7 @@ search_memory_tool = {
     "type": "function",
     "function": {
         "name": "search_in_memory",
-        "description": "Ищет в долговременной памяти Nova информацию о пользователе по запросу.",
+        "description": "Ищет в долговременной памяти Rynne информацию о пользователе по запросу.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -333,7 +333,7 @@ run_terminal_tool = {
                 "command": {"type": "string", "description": "Полный текст консольной команды."},
                 "working_directory": {
                     "type": "string",
-                    "description": "Абсолютный путь проекта. Если не задан, Nova автоматически использует активный workspace."
+                    "description": "Абсолютный путь проекта. Если не задан, Rynne автоматически использует активный workspace."
                 }
             },
                         },
@@ -391,7 +391,7 @@ run_terminal_tool = {
                 "command": {"type": "string", "description": "Полный текст консольной команды."},
                 "working_directory": {
                     "type": "string",
-                    "description": "Абсолютный путь проекта. Если не задан, Nova автоматически использует активный workspace."
+                    "description": "Абсолютный путь проекта. Если не задан, Rynne автоматически использует активный workspace."
                 }
             },
             "required": ["command"]
@@ -781,7 +781,7 @@ filesystem_tools = [
             "name": "undo_last_file_change",
             "description": (
                 "Безопасно отменяет последнее изменение файла, "
-                "которое Nova выполнила через write_text_file или "
+                "которое Rynne выполнила через write_text_file или "
                 "apply_text_patch. Восстанавливает точный backup и "
                 "отказывается перезаписывать более свежие ручные правки."
             ),
@@ -1111,7 +1111,7 @@ browser_tools = [
         "function": {
             "name": "browser_start",
             "description": (
-                "Запускает изолированный браузер Nova."
+                "Запускает изолированный браузер Rynne."
             ),
             "parameters": {
                 "type": "object",
@@ -1276,7 +1276,7 @@ browser_tools = [
         "function": {
             "name": "browser_close",
             "description": (
-                "Закрывает изолированный браузер Nova."
+                "Закрывает изолированный браузер Rynne."
             ),
             "parameters": {
                 "type": "object",
@@ -1295,7 +1295,7 @@ subagent_tools = [
             "name": "delegate_subagents",
             "description": (
                 "Создаёт временную команду аналитических субагентов для сложной задачи. "
-                "Nova автоматически ограничивает параллелизм числом доступных API-ключей, "
+                "Rynne автоматически ограничивает параллелизм числом доступных API-ключей, "
                 "распределяет модели и возвращает reviewer-сводку. Используйте для независимых "
                 "исследований, аудита, архитектуры и проверки перед реальными действиями."
             ),

@@ -21,7 +21,7 @@ from modules.local.inference import (
 )
 
 
-logger = logging.getLogger("NovaLLM")
+logger = logging.getLogger("RynneLLM")
 
 
 class NovaLLM:
@@ -128,7 +128,7 @@ class NovaLLM:
 
     def reset_context(self) -> None:
         self.history.clear()
-        logger.info("Контекст Nova очищен.")
+        logger.info("Контекст Rynne очищен.")
 
     def provider_health(
         self,

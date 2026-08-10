@@ -233,9 +233,9 @@ fn provider_env_path(app: &AppHandle) -> Result<PathBuf, String> {
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("Cannot locate Nova data directory: {error}"))?;
+        .map_err(|error| format!("Cannot locate Rynne data directory: {error}"))?;
     create_dir_all(&data_dir)
-        .map_err(|error| format!("Cannot create Nova data directory: {error}"))?;
+        .map_err(|error| format!("Cannot create Rynne data directory: {error}"))?;
     Ok(data_dir.join(".env"))
 }
 
@@ -277,7 +277,7 @@ fn write_provider_configuration(
         format!("{}\n", lines.join("\n"))
     };
     std::fs::write(env_path, contents)
-        .map_err(|error| format!("Cannot save Nova provider settings: {error}"))
+        .map_err(|error| format!("Cannot save Rynne provider settings: {error}"))
 }
 
 fn validate_model(model: &str) -> Result<&str, String> {
@@ -353,7 +353,7 @@ fn write_service_secret(env_path: &Path, variable: &str, value: Option<&str>) ->
     }
     let contents = if lines.is_empty() { String::new() } else { format!("{}\n", lines.join("\n")) };
     std::fs::write(env_path, contents)
-        .map_err(|error| format!("Cannot save Nova integration settings: {error}"))
+        .map_err(|error| format!("Cannot save Rynne integration settings: {error}"))
 }
 
 const PERMISSION_MODE_VARIABLE: &str = "NOVA_PERMISSION_MODE";
@@ -376,7 +376,7 @@ fn write_plain_setting(env_path: &Path, variable: &str, value: &str) -> Result<(
         .collect();
     lines.push(format!("{variable}={value}"));
     std::fs::write(env_path, format!("{}\n", lines.join("\n")))
-        .map_err(|error| format!("Cannot save Nova settings: {error}"))
+        .map_err(|error| format!("Cannot save Rynne settings: {error}"))
 }
 
 #[tauri::command]
@@ -420,7 +420,7 @@ fn ensure_core_running(app: &AppHandle, core_state: &Arc<CoreState>) -> bool {
     drop(guard);
 
     if claim_restart(core_state) {
-        append_supervisor_log(app, "Restarting Nova Core.");
+        append_supervisor_log(app, "Restarting Rynne Core.");
         if let Err(error) = spawn_core(app.clone(), core_state.clone()) {
             append_supervisor_log(app, &format!("Core restart failed: {error}"));
         }
@@ -432,24 +432,24 @@ fn ensure_core_running(app: &AppHandle, core_state: &Arc<CoreState>) -> bool {
 #[tauri::command]
 fn nova_send_command(command: Value, state: State<'_, Arc<CoreState>>) -> Result<(), String> {
     if !state.connected.load(Ordering::Acquire) {
-        return Err("Nova Core is not connected.".to_owned());
+        return Err("Rynne Core is not connected.".to_owned());
     }
 
     let mut guard = state
         .process
         .lock()
-        .map_err(|_| "Nova Core process lock is poisoned.".to_owned())?;
+        .map_err(|_| "Rynne Core process lock is poisoned.".to_owned())?;
     let process = guard
         .as_mut()
-        .ok_or_else(|| "Nova Core process is unavailable.".to_owned())?;
+        .ok_or_else(|| "Rynne Core process is unavailable.".to_owned())?;
 
     serde_json::to_writer(&mut process.stdin, &command)
-        .map_err(|error| format!("Cannot encode Nova command: {error}"))?;
+        .map_err(|error| format!("Cannot encode Rynne command: {error}"))?;
     process
         .stdin
         .write_all(b"\n")
         .and_then(|_| process.stdin.flush())
-        .map_err(|error| format!("Cannot send command to Nova Core: {error}"))
+        .map_err(|error| format!("Cannot send command to Rynne Core: {error}"))
 }
 
 #[tauri::command]
@@ -683,7 +683,9 @@ fn nova_remove_provider_key(
 }
 
 fn build_core_command(app: &AppHandle) -> Result<Command, String> {
-    if let Some(executable) = std::env::var_os("NOVA_CORE_SIDECAR") {
+    if let Some(executable) = std::env::var_os("RYNNE_CORE_SIDECAR")
+        .or_else(|| std::env::var_os("NOVA_CORE_SIDECAR"))
+    {
         return Ok(Command::new(executable));
     }
 
@@ -691,7 +693,7 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
         let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
             .canonicalize()
-            .map_err(|error| format!("Cannot locate Nova repository: {error}"))?;
+            .map_err(|error| format!("Cannot locate Rynne repository: {error}"))?;
         let mut command = Command::new("python");
         command
             .arg(repository.join("nova_sidecar.py"))
@@ -702,23 +704,32 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
     let resource_dir = app
         .path()
         .resource_dir()
-        .map_err(|error| format!("Cannot locate Nova resources: {error}"))?;
+        .map_err(|error| format!("Cannot locate Rynne resources: {error}"))?;
     let binary_name = core_binary_name();
+    let legacy_binary_name = legacy_core_binary_name();
     let executable = [
         resource_dir
-            .join(format!("nova-core-{}", env!("CARGO_PKG_VERSION")))
+            .join(format!("rynne-core-{}", env!("CARGO_PKG_VERSION")))
             .join(&binary_name),
         resource_dir
             .join("resources")
-            .join("nova-core")
+            .join("rynne-core")
             .join(&binary_name),
-        resource_dir.join("nova-core").join(&binary_name),
+        resource_dir.join("rynne-core").join(&binary_name),
+        resource_dir
+            .join(format!("nova-core-{}", env!("CARGO_PKG_VERSION")))
+            .join(&legacy_binary_name),
+        resource_dir
+            .join("resources")
+            .join("nova-core")
+            .join(&legacy_binary_name),
+        resource_dir.join("nova-core").join(&legacy_binary_name),
     ]
     .into_iter()
     .find(|candidate| candidate.is_file())
     .ok_or_else(|| {
         format!(
-            "Packaged Nova Core is missing below {}",
+            "Packaged Rynne Core is missing below {}",
             resource_dir.display()
         )
     })?;
@@ -726,9 +737,9 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("Cannot locate Nova data directory: {error}"))?;
+        .map_err(|error| format!("Cannot locate Rynne data directory: {error}"))?;
     std::fs::create_dir_all(&data_dir)
-        .map_err(|error| format!("Cannot create Nova data directory: {error}"))?;
+        .map_err(|error| format!("Cannot create Rynne data directory: {error}"))?;
 
     let mut command = Command::new(executable);
     command.current_dir(data_dir);
@@ -736,6 +747,17 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
 }
 
 fn core_binary_name() -> PathBuf {
+    #[cfg(windows)]
+    {
+        PathBuf::from("rynne-core.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("rynne-core")
+    }
+}
+
+fn legacy_core_binary_name() -> PathBuf {
     #[cfg(windows)]
     {
         PathBuf::from("nova-core.exe")
@@ -801,22 +823,22 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
 
     let mut child = command
         .spawn()
-        .map_err(|error| format!("Cannot launch Nova Core: {error}"))?;
+        .map_err(|error| format!("Cannot launch Rynne Core: {error}"))?;
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| "Nova Core stdin is unavailable.".to_owned())?;
+        .ok_or_else(|| "Rynne Core stdin is unavailable.".to_owned())?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "Nova Core stdout is unavailable.".to_owned())?;
+        .ok_or_else(|| "Rynne Core stdout is unavailable.".to_owned())?;
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| "Nova Core stderr is unavailable.".to_owned())?;
+        .ok_or_else(|| "Rynne Core stderr is unavailable.".to_owned())?;
     let core_log = app.path().app_log_dir().ok().and_then(|directory| {
         create_dir_all(&directory).ok()?;
-        File::create(directory.join("nova-core.log")).ok()
+        File::create(directory.join("rynne-core.log")).ok()
     });
 
     let process_id = child.id();
@@ -825,7 +847,7 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
         let mut guard = state
             .process
             .lock()
-            .map_err(|_| "Nova Core process lock is poisoned.".to_owned())?;
+            .map_err(|_| "Rynne Core process lock is poisoned.".to_owned())?;
         *guard = Some(CoreProcess {
             child,
             stdin,
@@ -835,7 +857,7 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
     state.connected.store(false, Ordering::Release);
     append_supervisor_log(
         &app,
-        &format!("Spawned Nova Core pid={process_id}, generation={generation}."),
+        &format!("Spawned Rynne Core pid={process_id}, generation={generation}."),
     );
 
     let event_app = app.clone();
@@ -888,7 +910,7 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
             }
             let line = String::from_utf8_lossy(&bytes);
             let line = line.trim_end_matches(['\r', '\n']);
-            eprintln!("[Nova Core] {line}");
+            eprintln!("[Rynne Core] {line}");
             if let Some(log) = core_log.as_mut() {
                 let _ = writeln!(log, "{line}");
             }
@@ -975,7 +997,7 @@ pub fn run() {
             }
             let app_handle = app.handle().clone();
             if let Err(error) = spawn_core(app_handle.clone(), state_for_setup.clone()) {
-                eprintln!("[Nova Desktop] {error}");
+                eprintln!("[Rynne Desktop] {error}");
             }
             let watchdog_state = state_for_setup.clone();
             std::thread::spawn(move || {
@@ -987,7 +1009,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Nova desktop");
+        .expect("failed to build Rynne desktop");
 
     app.run(move |_app_handle, event| {
         if matches!(

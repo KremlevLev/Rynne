@@ -249,7 +249,7 @@ def test_start_text_explains_pairing_and_authorized_usage() -> None:
     assert "123456789" in pairing
     assert "Настройки" in pairing
     authorized = _control_start_text(123456789, authorized=True)
-    assert "Nova Remote подключена" in authorized
+    assert "Rynne Remote подключена" in authorized
     assert "обычными фразами" in authorized
     assert "/status" in authorized
     assert "/stop" in authorized

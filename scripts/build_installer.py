@@ -1,7 +1,7 @@
-"""Build the headless Nova Core consumed by the Tauri desktop installer.
+"""Build the headless Rynne Core consumed by the Tauri desktop installer.
 
 The Tauri CLI calls this script from ``beforeBuildCommand``.  It deliberately
-builds an ``onedir`` application: Nova imports large native packages such as
+builds an ``onedir`` application: Rynne imports large native packages such as
 Torch, and extracting a PyInstaller ``onefile`` archive on every launch makes
 desktop startup needlessly slow.
 """
@@ -19,11 +19,11 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TAURI_ROOT = PROJECT_ROOT / "apps" / "desktop" / "src-tauri"
-CORE_RESOURCE_DIR = TAURI_ROOT / "resources" / "nova-core"
-CORE_BUILD_MANIFEST = TAURI_ROOT / "resources" / "nova-core.build.json"
+CORE_RESOURCE_DIR = TAURI_ROOT / "resources" / "rynne-core"
+CORE_BUILD_MANIFEST = TAURI_ROOT / "resources" / "rynne-core.build.json"
 PYINSTALLER_ROOT = PROJECT_ROOT / "build" / "pyinstaller"
 CORE_ENTRY_POINT = PROJECT_ROOT / "nova_sidecar.py"
-BUILD_RECIPE_VERSION = 3
+BUILD_RECIPE_VERSION = 4
 
 
 def run(command: list[str], *, cwd: Path = PROJECT_ROOT) -> None:
@@ -89,7 +89,7 @@ def source_fingerprint() -> str:
 
 
 def core_is_current(fingerprint: str) -> bool:
-    executable = CORE_RESOURCE_DIR / "nova-core.exe"
+    executable = CORE_RESOURCE_DIR / "rynne-core.exe"
     if not executable.is_file() or not CORE_BUILD_MANIFEST.is_file():
         return False
     try:
@@ -100,8 +100,8 @@ def core_is_current(fingerprint: str) -> bool:
 
 
 def stamp_core(fingerprint: str) -> None:
-    if not (CORE_RESOURCE_DIR / "nova-core.exe").is_file():
-        raise RuntimeError("Cannot stamp a missing nova-core.exe")
+    if not (CORE_RESOURCE_DIR / "rynne-core.exe").is_file():
+        raise RuntimeError("Cannot stamp a missing rynne-core.exe")
     CORE_BUILD_MANIFEST.write_text(
         json.dumps(
             {
@@ -118,9 +118,9 @@ def stamp_core(fingerprint: str) -> None:
 
 def build_core(*, force: bool = False) -> Path:
     fingerprint = source_fingerprint()
-    executable = CORE_RESOURCE_DIR / "nova-core.exe"
+    executable = CORE_RESOURCE_DIR / "rynne-core.exe"
     if not force and core_is_current(fingerprint):
-        print(f"Nova Core не изменился, используется cache: {executable}")
+        print(f"Rynne Core не изменился, используется cache: {executable}")
         return executable
 
     ensure_pyinstaller()
@@ -135,7 +135,7 @@ def build_core(*, force: bool = False) -> Path:
         "--onedir",
         "--console",
         "--name",
-        "nova-core",
+        "rynne-core",
         "--distpath",
         str(CORE_RESOURCE_DIR.parent),
         "--workpath",
@@ -184,7 +184,7 @@ def build_core(*, force: bool = False) -> Path:
         if path.is_file()
     ) / (1024 * 1024)
     print(
-        f"\nNova Core готов: {executable} ({size_mb:.1f} MiB on disk)",
+        f"\nRynne Core готов: {executable} ({size_mb:.1f} MiB on disk)",
         flush=True,
     )
     return executable
@@ -192,7 +192,7 @@ def build_core(*, force: bool = False) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build the packaged Nova Python Core for Tauri.",
+        description="Build the packaged Rynne Python Core for Tauri.",
     )
     parser.add_argument(
         "--clean",

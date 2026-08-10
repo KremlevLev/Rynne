@@ -377,7 +377,7 @@ def speak(
     update_status("ГОВОРИТ")
 
     # Печатаем реплику только если она действительно будет озвучена
-    print(f"\n[🔊 Nova Говорит]: {cleaned_text}")
+    print(f"\n[🔊 Rynne говорит]: {cleaned_text}")
     settings = get_tts_settings()
     selected_language = language or settings.language
     if selected_language == "auto":
@@ -447,9 +447,9 @@ def preview_tts(
     style: str = "neutral",
 ) -> bool:
     sample = (
-        "Привет! Я Nova. Так будет звучать мой голос."
+        "Привет! Я Rynne. Так будет звучать мой голос."
         if language == "ru"
-        else "Hello! I'm Nova. This is how my voice will sound."
+        else "Hello! I'm Rynne. This is how my voice will sound."
     )
     return speak(
         sample,
@@ -541,7 +541,7 @@ def stop_speaking():
         sd.stop()  # Win32-метод sounddevice мгновенно обрывает поток в динамиках
     except Exception:
         pass
-    print("\n[🔇 Nova]: Воспроизведение прервано.")
+    print("\n[🔇 Rynne]: Воспроизведение прервано.")
     update_status("СЛУШАЕТ")
 
 def is_interrupted() -> bool:

@@ -1,12 +1,12 @@
 [package]
-name = "nova-desktop"
+name = "rynne-desktop"
 version = "0.1.6"
-description = "Nova desktop shell"
-authors = ["Nova contributors"]
+description = "Rynne desktop shell"
+authors = ["Rynne contributors"]
 edition = "2021"
 
 [lib]
-name = "nova_desktop_lib"
+name = "rynne_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

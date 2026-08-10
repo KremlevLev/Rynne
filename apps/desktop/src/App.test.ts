@@ -136,7 +136,7 @@ describe("eventToItem", () => {
       created_at: 9,
     });
 
-    expect(detected?.title).toBe("Услышала «Нова»");
+    expect(detected?.title).toBe("Услышала «Рин»");
     expect(captured?.body).toContain("2.1 сек");
     expect(captured?.status).toBe("working");
   });
@@ -261,7 +261,7 @@ describe("UI language", () => {
     }, "en")?.body).toBe("The request could not be completed.");
   });
 
-  it("persists locale without involving Nova Core", () => {
+  it("persists locale without involving Rynne Core", () => {
     const values = new Map<string, string>();
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,

@@ -957,7 +957,7 @@ class ProactiveSuggestionEngine:
                     ),
                     reason=(
                         "В `git status --short` обнаружен conflict "
-                        "status. Nova ничего не изменяла автоматически."
+                        "status. Rynne ничего не изменяла автоматически."
                     ),
                     source_key=(
                         f"repo:{repo_key}:conflict:{cycle}"
@@ -1128,7 +1128,7 @@ class ProactiveSuggestionEngine:
                 return []
 
             sequence = " → ".join(pattern)
-            workflow_name = "Nova workflow " + fingerprint[:6]
+            workflow_name = "Rynne workflow " + fingerprint[:6]
             suggestion = ProactiveSuggestion(
                 event_id=f"proactive_{uuid.uuid4().hex}",
                 kind=kind,
@@ -1277,7 +1277,7 @@ class ProactiveSuggestionEngine:
                 )
                 reason = (
                     "Путь исчез, пуст или не может быть проверен; "
-                    "содержимое файлов Nova не читала."
+                    "содержимое файлов Rynne не читала."
                 )
 
             suggestion = ProactiveSuggestion(
@@ -1346,7 +1346,7 @@ class ProactiveSuggestionEngine:
                 reason=(
                     "Установленная версия получена из локального "
                     "package metadata, последняя — из фиксированного "
-                    "PyPI JSON endpoint. Nova ничего не обновляла."
+                    "PyPI JSON endpoint. Rynne ничего не обновляла."
                 ),
                 source_key=source_key,
                 importance="normal",

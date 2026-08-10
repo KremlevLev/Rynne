@@ -22,7 +22,7 @@ from mcp.types import ToolAnnotations
 
 
 mcp = FastMCP(
-    "Nova Telegram Business",
+    "Rynne Telegram Business",
     instructions=(
         "Use these tools for Telegram chats delegated to the user's connected "
         "Business bot. Never claim that a message was sent unless send_message "
@@ -35,16 +35,22 @@ mcp = FastMCP(
 def _token() -> str:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token or ":" not in token:
-        raise RuntimeError("Telegram Bot token is not configured in Nova settings.")
+        raise RuntimeError("Telegram Bot token is not configured in Rynne settings.")
     return token
 
 
 def _db_path() -> Path:
     configured = os.getenv("TELEGRAM_BOT_STORE_PATH", "").strip()
-    path = Path(configured).expanduser() if configured else (
-        Path(os.getenv("LOCALAPPDATA", Path.home()))
-        / "Nova" / "telegram-business" / "messages.sqlite3"
-    )
+    if configured:
+        path = Path(configured).expanduser()
+    else:
+        app_data = Path(os.getenv("LOCALAPPDATA", Path.home()))
+        path = app_data / "Rynne" / "telegram-business" / "messages.sqlite3"
+        legacy_path = app_data / "Nova" / "telegram-business" / "messages.sqlite3"
+        if legacy_path.is_file() and not path.exists():
+            # Keep existing observed chats and Business connections after the
+            # brand migration. New installations use the Rynne directory.
+            path = legacy_path
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -157,13 +163,13 @@ def _control_user_ids() -> set[int]:
 def _control_start_text(user_id: int, *, authorized: bool) -> str:
     if not authorized:
         return (
-            "Привет. Я Nova Remote — безопасный пульт для Nova на вашем Windows-компьютере.\n\n"
+            "Привет. Я Rynne Remote — безопасный пульт для Rynne на вашем Windows-компьютере.\n\n"
             f"Ваш Telegram ID: {user_id}\n"
-            "Добавьте этот ID в Nova → Настройки → Telegram Remote и перезапустите Core. "
+            "Добавьте этот ID в Rynne → Настройки → Telegram Remote и перезапустите Core. "
             "До привязки команды с этого аккаунта выполняться не будут."
         )
     return (
-        "Nova Remote подключена. Это пульт управления Nova на вашем Windows-компьютере.\n\n"
+        "Rynne Remote подключена. Это пульт управления Rynne на вашем Windows-компьютере.\n\n"
         "Можно писать обычными фразами:\n"
         "• скачай репозиторий на Рабочий стол\n"
         "• открой Obsidian и создай заметку\n"
@@ -176,12 +182,12 @@ def _control_start_text(user_id: int, *, authorized: bool) -> str:
         "/id — показать ваш Telegram ID\n"
         "/help — эта памятка\n\n"
         "Если выбран безопасный режим, запрос разрешения придёт сюда кнопками. "
-        "В режиме «Полный доступ» Nova выполняет разрешённые политикой действия без вопросов."
+        "В режиме «Полный доступ» Rynne выполняет разрешённые политикой действия без вопросов."
     )
 
 
 def _ensure_control_commands(connection: sqlite3.Connection) -> None:
-    version = "2"
+    version = "3"
     row = connection.execute(
         "SELECT value FROM meta WHERE key='control_commands_version'"
     ).fetchone()
@@ -191,9 +197,9 @@ def _ensure_control_commands(connection: sqlite3.Connection) -> None:
         "commands": [
             {"command": "status", "description": "Текущая задача и очередь"},
             {"command": "stop", "description": "Остановить текущую задачу"},
-            {"command": "mode", "description": "Режим доступа Nova"},
+            {"command": "mode", "description": "Режим доступа Rynne"},
             {"command": "id", "description": "Показать Telegram ID"},
-            {"command": "help", "description": "Возможности Nova Remote"},
+            {"command": "help", "description": "Возможности Rynne Remote"},
         ]
     })
     connection.execute(
@@ -652,7 +658,7 @@ async def send_control_approval(
 ) -> dict[str, Any]:
     """Ask an authorized Telegram Remote owner to approve or deny one operation."""
     if int(chat_id) not in _control_user_ids():
-        raise PermissionError("This Telegram account is not an authorized Nova Remote owner.")
+        raise PermissionError("This Telegram account is not an authorized Rynne Remote owner.")
     clean_operation_id = str(operation_id).strip()
     if not clean_operation_id or len(clean_operation_id) > 48:
         raise ValueError("Invalid operation ID.")
@@ -662,7 +668,7 @@ async def send_control_approval(
         "sendMessage",
         {
             "chat_id": int(chat_id),
-            "text": "Nova запрашивает разрешение:\n\n" + clean_text,
+            "text": "Rynne запрашивает разрешение:\n\n" + clean_text,
             "reply_markup": {
                 "inline_keyboard": [[
                     {
@@ -691,12 +697,12 @@ async def send_control_approval(
     )
 )
 async def send_control_reply(chat_id: int, text: str) -> dict[str, Any]:
-    """Return Nova's result to an authorized Telegram Remote owner."""
+    """Return Rynne's result to an authorized Telegram Remote owner."""
     clean_text = str(text).strip()
     if not clean_text:
         raise ValueError("Reply text is empty.")
     if int(chat_id) not in _control_user_ids():
-        raise PermissionError("This Telegram account is not an authorized Nova Remote owner.")
+        raise PermissionError("This Telegram account is not an authorized Rynne Remote owner.")
     result = await asyncio.to_thread(
         _api,
         "sendMessage",

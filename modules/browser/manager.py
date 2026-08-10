@@ -31,15 +31,20 @@ SYSTEM_BROWSER_CHANNELS = ("chrome", "msedge")
 
 
 def default_browser_profile_directory() -> Path:
-    """Return a Nova-owned browser profile that survives Core restarts."""
-    configured = os.getenv("NOVA_BROWSER_PROFILE_DIR", "").strip()
+    """Return a Rynne-owned browser profile that survives Core restarts."""
+    configured = (
+        os.getenv("RYNNE_BROWSER_PROFILE_DIR")
+        or os.getenv("NOVA_BROWSER_PROFILE_DIR", "")
+    ).strip()
     if configured:
         return Path(configured).expanduser()
 
     if os.name == "nt":
         local_app_data = os.getenv("LOCALAPPDATA", "").strip()
         if local_app_data:
-            return Path(local_app_data) / "Nova" / "browser-profile"
+            rynne_profile = Path(local_app_data) / "Rynne" / "browser-profile"
+            legacy_profile = Path(local_app_data) / "Nova" / "browser-profile"
+            return legacy_profile if legacy_profile.is_dir() and not rynne_profile.exists() else rynne_profile
 
     cache_home = os.getenv("XDG_CACHE_HOME", "").strip()
     if cache_home:
@@ -302,11 +307,11 @@ def validate_selector(
 
 class BrowserManager:
     """
-    Browser Agent на Playwright с отдельным профилем Nova.
+    Browser Agent на Playwright с отдельным профилем Rynne.
 
     Браузер загружается лениво при первом использовании.
     Сначала используется системный Chrome или Edge, поэтому installer не обязан
-    поставлять тяжёлый Chromium. Cookies сохраняются только в профиле Nova, а не
+    поставлять тяжёлый Chromium. Cookies сохраняются только в профиле Rynne, а не
     читаются из личного профиля браузера пользователя.
     """
 
@@ -439,8 +444,8 @@ class BrowserManager:
                 )
 
                 return ToolResult.ok(
-                    "Браузер Nova запущен. Авторизация сайтов "
-                    "сохраняется в отдельном профиле Nova.",
+                    "Браузер Rynne запущен. Авторизация сайтов "
+                    "сохраняется в отдельном профиле Rynne.",
                     data={
                         "headless": self.headless,
                         "runtime": self._runtime,
@@ -468,7 +473,7 @@ class BrowserManager:
                 return ToolResult.failure(
                     "BROWSER_START_FAILED",
                     (
-                        "Не удалось запустить браузер Nova. "
+                        "Не удалось запустить браузер Rynne. "
                         "Установите Google Chrome или Microsoft Edge "
                         "и повторите команду."
                     ),

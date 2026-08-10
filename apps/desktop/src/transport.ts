@@ -1,15 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
-  isNovaEvent,
+  isRynneEvent,
   makeCommand,
   type JsonObject,
-  type NovaCommandAction,
-  type NovaEvent,
+  type RynneCommandAction,
+  type RynneEvent,
 } from "./protocol";
 
 export type ConnectionState = "connecting" | "connected" | "disconnected";
-export type EventListener = (event: NovaEvent) => void;
+export type EventListener = (event: RynneEvent) => void;
 export type ConnectionListener = (state: ConnectionState) => void;
 export type ProviderName = "groq" | "openrouter" | "gemini";
 export type ServiceName = "telegram" | "telegram_remote" | "tavily";
@@ -29,9 +29,9 @@ export interface ServiceSecretSummary {
   removable: boolean;
 }
 
-export interface NovaTransport {
+export interface RynneTransport {
   connect(onEvent: EventListener, onConnection: ConnectionListener): Promise<() => void>;
-  send(action: NovaCommandAction, payload?: JsonObject): Promise<void>;
+  send(action: RynneCommandAction, payload?: JsonObject): Promise<void>;
   listProviderKeys(): Promise<ProviderKeySummary[]>;
   addProviderKey(provider: ProviderName, apiKey: string, model?: string): Promise<void>;
   updateProviderKeyModel(provider: ProviderName, index: number, model: string): Promise<void>;
@@ -43,7 +43,7 @@ export interface NovaTransport {
   setPermissionMode(mode: PermissionMode): Promise<void>;
 }
 
-export class TauriNovaTransport implements NovaTransport {
+export class TauriRynneTransport implements RynneTransport {
   async connect(
     onEvent: EventListener,
     onConnection: ConnectionListener,
@@ -87,7 +87,7 @@ export class TauriNovaTransport implements NovaTransport {
 
     try {
       unlisten = await listen<unknown>("nova:event", ({ payload }) => {
-        if (isNovaEvent(payload)) onEvent(payload);
+        if (isRynneEvent(payload)) onEvent(payload);
       });
       unlistenConnection = await listen<boolean>("nova:connection", ({ payload }) => {
         if (payload) {
@@ -110,7 +110,7 @@ export class TauriNovaTransport implements NovaTransport {
     };
   }
 
-  async send(action: NovaCommandAction, payload: JsonObject = {}): Promise<void> {
+  async send(action: RynneCommandAction, payload: JsonObject = {}): Promise<void> {
     await invoke("nova_send_command", {
       command: makeCommand(action, payload),
     });
@@ -164,7 +164,7 @@ export class TauriNovaTransport implements NovaTransport {
   }
 }
 
-class DemoNovaTransport implements NovaTransport {
+class DemoRynneTransport implements RynneTransport {
   private listener: EventListener | null = null;
   private timers = new Set<number>();
   private seeded = false;
@@ -186,7 +186,7 @@ class DemoNovaTransport implements NovaTransport {
         proactive_vision_enabled: true,
         input_mode: this.inputMode,
         wake_word_available: true,
-        wake_word: "Нова",
+        wake_word: "Рин",
         wake_word_sensitivity: 0.78,
         tts_settings: {
           language: "auto",
@@ -216,7 +216,7 @@ class DemoNovaTransport implements NovaTransport {
         processes: [
           {
             process_id: "demo_1",
-            name: "Анализ проекта Nova",
+            name: "Анализ проекта Rynne",
             status: "running",
             progress: 68,
           },
@@ -238,7 +238,7 @@ class DemoNovaTransport implements NovaTransport {
     };
   }
 
-  async send(action: NovaCommandAction, payload: JsonObject = {}): Promise<void> {
+  async send(action: RynneCommandAction, payload: JsonObject = {}): Promise<void> {
     if (action === "submit_user_request") {
       const text = String(payload.text ?? "");
       this.push("user_message", { text });
@@ -271,7 +271,7 @@ class DemoNovaTransport implements NovaTransport {
         proactive_vision_enabled: true,
         input_mode: this.inputMode,
         wake_word_available: true,
-        wake_word: "Нова",
+        wake_word: "Рин",
         wake_word_sensitivity: 0.78,
       });
       this.push("voice_status", {
@@ -286,12 +286,12 @@ class DemoNovaTransport implements NovaTransport {
         proactive_vision_enabled: true,
         input_mode: this.inputMode,
         wake_word_available: true,
-        wake_word: "Нова",
+        wake_word: "Рин",
         wake_word_sensitivity: 0.78,
       });
       this.push("voice_status", {
         status: this.inputMode === "wake_word" ? "waiting_wake_word" : this.inputMode,
-        message: this.inputMode === "wake_word" ? "Жду «Нова»…" : "Режим микрофона изменён.",
+        message: this.inputMode === "wake_word" ? "Жду «Рин»…" : "Режим микрофона изменён.",
       });
     }
     if (action === "set_wake_word_sensitivity") {
@@ -299,7 +299,7 @@ class DemoNovaTransport implements NovaTransport {
         proactive_vision_enabled: true,
         input_mode: this.inputMode,
         wake_word_available: true,
-        wake_word: "Нова",
+        wake_word: "Рин",
         wake_word_sensitivity: Number(payload.value ?? 0.78),
       });
     }
@@ -349,7 +349,7 @@ class DemoNovaTransport implements NovaTransport {
     this.permissionMode = mode;
   }
 
-  private push(event_type: NovaEvent["event_type"], payload: JsonObject): void {
+  private push(event_type: RynneEvent["event_type"], payload: JsonObject): void {
     this.listener?.({
       event_type,
       payload,
@@ -366,9 +366,9 @@ class DemoNovaTransport implements NovaTransport {
   }
 }
 
-export function createNovaTransport(): NovaTransport {
+export function createRynneTransport(): RynneTransport {
   const demoRequested =
     import.meta.env.DEV &&
     new URLSearchParams(window.location.search).get("demo") === "1";
-  return demoRequested ? new DemoNovaTransport() : new TauriNovaTransport();
+  return demoRequested ? new DemoRynneTransport() : new TauriRynneTransport();
 }

@@ -1,5 +1,5 @@
 """
-Entry point for Nova Core when launched by the Tauri desktop shell.
+Entry point for Rynne Core when launched by the Tauri desktop shell.
 
 Human-readable output is redirected to stderr before importing the app. The
 original stdout remains reserved for JSON Lines protocol events.

@@ -1,8 +1,8 @@
-# Nova Desktop: языковые границы
+# Rynne Desktop: языковые границы
 
 ## Решение
 
-Nova развивается как модульный desktop-продукт, но не как набор микросервисов
+Rynne развивается как модульный desktop-продукт, но не как набор микросервисов
 на одном компьютере.
 
 | Слой | Язык | Ответственность |
@@ -14,7 +14,7 @@ Nova развивается как модульный desktop-продукт, н
 
 ## Почему Python остаётся ядром
 
-Почти вся ценность Nova находится в orchestration, tool calling, MCP и
+Почти вся ценность Rynne находится в orchestration, tool calling, MCP и
 интеграции с AI-библиотеками. Перенос этого слоя не даст пользователю новой
 возможности, но создаст две реализации политик, ошибок и состояния задач.
 
@@ -62,7 +62,7 @@ Tauri запускает упакованный Python Core как sidecar. Ме
   команды и shutdown.
 - [ ] Version handshake и проверка совместимости Core/shell.
 - [ ] Перенос реальных chat/task/process/settings экранов.
-- [x] PyInstaller onedir bundle для `nova-core.exe`; Tauri включает Core как
+- [x] PyInstaller onedir bundle для `rynne-core.exe`; Tauri включает Core как
   resource и запускает его из writable app data working directory.
 - [x] NSIS current-user installer проверен установкой: release shell находит
   packaged Core в Windows resource layout и завершает его вместе с окном.

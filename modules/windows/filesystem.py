@@ -680,7 +680,7 @@ def undo_last_file_change() -> ToolResult:
                 "ROLLBACK_CONFLICT",
                 (
                     "Откат остановлен: файл менялся после действия "
-                    "Nova. Более свежие правки не будут перезаписаны."
+                    "Rynne. Более свежие правки не будут перезаписаны."
                 ),
                 data={
                     "path": str(path),
@@ -712,7 +712,7 @@ def undo_last_file_change() -> ToolResult:
         rollback["undone"] = True
         rollback["undone_at"] = time.time()
         return ToolResult.ok(
-            f"Последнее изменение Nova отменено: {path.name}.",
+            f"Последнее изменение Rynne отменено: {path.name}.",
             data={
                 "path": str(path),
                 "restored_hash": restored_hash,
@@ -732,5 +732,5 @@ def undo_last_file_change() -> ToolResult:
 
     return ToolResult.failure(
         "NO_REVERSIBLE_FILE_CHANGE",
-        "Нет изменений файлов Nova, которые можно безопасно отменить.",
+        "Нет изменений файлов Rynne, которые можно безопасно отменить.",
     )

@@ -5,7 +5,7 @@ export type JsonValue =
   | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
-export const NOVA_EVENT_TYPES = [
+export const RYNNE_EVENT_TYPES = [
   "runtime",
   "request_started",
   "request_heartbeat",
@@ -45,9 +45,9 @@ export const NOVA_EVENT_TYPES = [
   "shutdown",
 ] as const;
 
-export type NovaEventType = (typeof NOVA_EVENT_TYPES)[number];
+export type RynneEventType = (typeof RYNNE_EVENT_TYPES)[number];
 
-export const NOVA_COMMAND_ACTIONS = [
+export const RYNNE_COMMAND_ACTIONS = [
   "retry_last",
   "set_input_mode",
   "set_preference",
@@ -72,24 +72,24 @@ export const NOVA_COMMAND_ACTIONS = [
   "open_artifact",
 ] as const;
 
-export type NovaCommandAction = (typeof NOVA_COMMAND_ACTIONS)[number];
+export type RynneCommandAction = (typeof RYNNE_COMMAND_ACTIONS)[number];
 
-export interface NovaEvent<TPayload extends JsonObject = JsonObject> {
-  event_type: NovaEventType;
+export interface RynneEvent<TPayload extends JsonObject = JsonObject> {
+  event_type: RynneEventType;
   payload: TPayload;
   created_at: number;
 }
 
-export interface NovaCommand<TPayload extends JsonObject = JsonObject> {
+export interface RynneCommand<TPayload extends JsonObject = JsonObject> {
   command_id: string;
-  action: NovaCommandAction;
+  action: RynneCommandAction;
   payload: TPayload;
   created_at: number;
 }
 
-const eventTypes = new Set<string>(NOVA_EVENT_TYPES);
+const eventTypes = new Set<string>(RYNNE_EVENT_TYPES);
 
-export function isNovaEvent(value: unknown): value is NovaEvent {
+export function isRynneEvent(value: unknown): value is RynneEvent {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   return (
@@ -103,9 +103,9 @@ export function isNovaEvent(value: unknown): value is NovaEvent {
 }
 
 export function makeCommand<TPayload extends JsonObject>(
-  action: NovaCommandAction,
+  action: RynneCommandAction,
   payload: TPayload,
-): NovaCommand<TPayload> {
+): RynneCommand<TPayload> {
   return {
     command_id: `ui_command_${crypto.randomUUID().replaceAll("-", "")}`,
     action,

@@ -1,8 +1,8 @@
-# UI Architecture & Orchestrator Documentation for Nova
+# UI Architecture & Orchestrator Documentation for Rynne
 
 ## Overview
 
-Nova — a local Windows AI agent with a PySide6 desktop UI. The UI runs in a **separate process** spawned by `multiprocessing` (spawn context) and communicates with the backend via **two multiprocessing queues** (`event_queue` for backend→UI, `command_queue` for UI→backend).
+Rynne — a local Windows AI agent with a PySide6 desktop UI. The UI runs in a **separate process** spawned by `multiprocessing` (spawn context) and communicates with the backend via **two multiprocessing queues** (`event_queue` for backend→UI, `command_queue` for UI→backend).
 
 ## Architecture: Process Model & Data Flow
 
@@ -37,7 +37,7 @@ Nova — a local Windows AI agent with a PySide6 desktop UI. The UI runs in a **
 | `modules/ui/desktop.py` | **OLD UI** (fallback). Simple tabbed interface. |
 | `modules/ui/shell.py` | `AppShell` (QMainWindow), `Sidebar`, `SidebarItem`, `ContextPanel`. |
 | `modules/ui/chat.py` | `ChatMessage`, `ChatView`, `Composer`, `ToolActivityCard`, `ErrorCard`, `ArtifactCard`. |
-| `modules/ui/orb.py` | `NovaOrb` (animated orb), `VoiceOverlay`. |
+| `modules/ui/orb.py` | `RynneOrb` (animated orb), `VoiceOverlay`. |
 | `modules/ui/task_view.py` | `TaskView`, `PlanView`, `PlanStep`, `TimelineView`, `TimelineEvent`. |
 | `modules/ui/command_palette.py` | `CommandPalette`, `Command`. |
 | `modules/ui/primitives.py` | `Button`, `IconButton`, `Input`, `Card`, `Badge`, `StatusIndicator`, `AnimationLayer`, etc. |
@@ -51,10 +51,10 @@ Nova — a local Windows AI agent with a PySide6 desktop UI. The UI runs in a **
    - `processes` — list of background processes
    - `memories` — list of memory entries
    - `permissions` — pending permission requests
-   - `models` — provider health data (from `NovaLLM.provider_health()`)
+   - `models` — provider health data (from `RynneLLM.provider_health()`)
    - `preferences` — user preferences
    - `user_message` — user's message text
-   - `assistant_message` — Nova's response (display_text, success, etc.)
+   - `assistant_message` — Rynne's response (display_text, success, etc.)
    - `tool_started` — tool name, description
    - `tool_completed` — tool result, duration
    - `task_started` — task title, task_id, plan steps
@@ -100,8 +100,8 @@ Nova — a local Windows AI agent with a PySide6 desktop UI. The UI runs in a **
 **Problem**: `processes`, `memories`, `permissions`, `command_result` events were not handled. The UI never received process lists, memory data, or permission requests.
 **Fix**: Added handlers for all missing event types. `permissions` now shows an approval card via `task_view.show_approval()`.
 
-### 6. NovaOrb animation property (BUG)
-**File**: `modules/ui/orb.py`, `NovaOrb`
+### 6. RynneOrb animation property (BUG)
+**File**: `modules/ui/orb.py`, `RynneOrb`
 **Problem**: `QPropertyAnimation(self, b"_pulse_phase")` tried to animate a non-existent Qt property. PySide6 requires `@Property` decorator for animatable properties.
 **Fix**: Added `@Property(float)` decorator for `pulse_phase` getter/setter, changed animation target to `b"pulse_phase"`, and called `self._state_anim.start()`.
 
@@ -127,7 +127,7 @@ Nova — a local Windows AI agent with a PySide6 desktop UI. The UI runs in a **
 
 ### 11. Models event handling (BUG)
 **File**: `modules/ui/premium_desktop.py`, `_handle_event()`
-**Problem**: Expected `active_provider` and `active_model` keys, but `NovaLLM.provider_health()` returns a different structure.
+**Problem**: Expected `active_provider` and `active_model` keys, but `RynneLLM.provider_health()` returns a different structure.
 **Fix**: Added fallback logic to extract provider/model from nested `providers` dict.
 
 ## Design Tokens (theme.py)

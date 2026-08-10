@@ -14,7 +14,7 @@
   --accent: #68c997;
   --accent-soft: rgba(139, 105, 239, 0.12);
   --cyan: #79d9a8;
-  --nova-silver: #d8d3dc;
+  --rynne-silver: #d8d3dc;
   --blade-border: rgba(218, 211, 225, .12);
   --blade-panel: linear-gradient(145deg, rgba(25, 25, 32, .9), rgba(11, 12, 17, .94));
   --success: #52d98c;
@@ -64,10 +64,10 @@ body::after {
 .brand { display: flex; align-items: center; gap: 11px; padding: 2px 7px 24px; }
 .brand-orb {
   display: grid; place-items: center; width: 35px; height: 35px; border-radius: 12px;
-  color: var(--nova-silver); background: linear-gradient(145deg, #181820, #090a0e);
+  color: var(--rynne-silver); background: linear-gradient(145deg, #181820, #090a0e);
   border: 1px solid rgba(202, 194, 224, .2); box-shadow: 0 9px 24px rgba(0, 0, 0, .3), 0 0 20px rgba(119, 94, 220, .1);
 }
-.brand-orb .nova-mark { display: block; }
+.brand-orb .rynne-mark { display: block; }
 .brand strong { display: block; font-size: 15px; letter-spacing: -.01em; }
 .brand span { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; color: var(--muted); }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #6a7280; }
@@ -239,7 +239,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .large-orb::before { content: ""; position: absolute; inset: -9px; border: 1px solid rgba(133,108,226,.16); border-top-color: rgba(225,216,255,.7); border-radius: 31px; transform: rotate(-28deg); }
 .large-orb.working::before { animation: spin 3s linear infinite; }.large-orb.working { animation: breathe 2.2s ease-in-out infinite; }
 .large-orb span { position: absolute; inset: 9px; border-radius: 19px; border: 1px solid rgba(255,255,255,.035); }
-.large-orb .nova-mark { position: relative; z-index: 1; display: block; }
+.large-orb .rynne-mark { position: relative; z-index: 1; display: block; }
 .agent-state strong { font-size: 12px; }.agent-state p { max-width: 210px; margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .context-card { margin-bottom: 11px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: rgba(20,24,33,.58); }
 .context-card header { display: flex; justify-content: space-between; color: #a3adbd; font-size: 10px; }.context-card header span { display: flex; align-items: center; gap: 7px; }.context-card header small { color: #718277; font-size: 9px; }
@@ -286,7 +286,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .guide-view { flex: 1; overflow-y: auto; padding: 34px max(30px, 6vw) 54px; scrollbar-width: thin; scrollbar-color: #242937 transparent; }
 .guide-hero { display: flex; align-items: center; gap: 20px; max-width: 980px; margin: 0 auto 24px; padding: 26px 28px; border: 1px solid rgba(91,201,145,.22); border-radius: 20px; background: radial-gradient(circle at 8% 20%, rgba(91,201,145,.13), transparent 35%), rgba(18,22,31,.8); }
 .guide-orb { display: grid; flex: 0 0 auto; place-items: center; width: 58px; height: 58px; border: 1px solid rgba(207,199,225,.18); border-radius: 19px; color: #d8d3dc; background: linear-gradient(145deg, #181820, #0a0b10); box-shadow: 0 14px 34px rgba(0,0,0,.28), 0 0 26px rgba(62,148,101,.08); }
-.guide-orb .nova-mark { display: block; }
+.guide-orb .rynne-mark { display: block; }
 .guide-hero h2 { margin: 5px 0 8px; font-size: clamp(20px, 2.2vw, 30px); letter-spacing: -.035em; }
 .guide-hero p { max-width: 760px; margin: 0; color: #919bad; font-size: 12px; line-height: 1.65; }
 .guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; max-width: 980px; margin: 0 auto; }
@@ -418,7 +418,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .mode-preview.console { display: block; padding: 8px; }
 .mode-preview.console i:nth-child(2) { display: block; width: 78%; height: 4px; box-shadow: 0 9px 0 #1d2430, 0 18px 0 rgba(91,201,145,.22); }
 
-/* Nova blade identity: graphite, satin metal and restrained emerald motion. */
+/* Rynne blade identity: graphite, satin metal and restrained emerald motion. */
 .brand { gap: 13px; padding-top: 0; }
 .brand-orb {
   width: 44px;
@@ -429,7 +429,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   background: transparent;
   box-shadow: none;
 }
-.brand-orb .nova-mark { width: 42px; height: auto; filter: drop-shadow(0 8px 16px rgba(0,0,0,.34)); }
+.brand-orb .rynne-mark { width: 42px; height: auto; filter: drop-shadow(0 8px 16px rgba(0,0,0,.34)); }
 .brand strong { color: #f0edf2; font-size: 16px; letter-spacing: -.025em; }
 .brand span { color: #777482; }
 
@@ -567,7 +567,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   transform: rotate(-49deg);
 }
 .large-orb span { display: none; }
-.large-orb .nova-mark { width: 96px; height: auto; filter: drop-shadow(0 18px 28px rgba(0,0,0,.4)); }
+.large-orb .rynne-mark { width: 96px; height: auto; filter: drop-shadow(0 18px 28px rgba(0,0,0,.4)); }
 .large-orb.working { animation: blade-breathe 1.9s ease-in-out infinite; }
 .large-orb.working::before { animation: blade-scan 1.8s ease-in-out infinite; }
 .context-card {
@@ -617,7 +617,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   background: transparent;
   box-shadow: none;
 }
-.guide-orb .nova-mark { width: 70px; height: auto; filter: drop-shadow(0 15px 24px rgba(0,0,0,.34)); }
+.guide-orb .rynne-mark { width: 70px; height: auto; filter: drop-shadow(0 15px 24px rgba(0,0,0,.34)); }
 .provider-group, .appearance-option, .tts-voice, .voice-mode-options button, .wake-sensitivity, .tts-controls label {
   border-radius: 3px 11px 3px 11px;
 }
@@ -630,7 +630,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
   50% { opacity: .9; transform: translateX(8px) skewX(-38deg); }
 }
 
-/* Aura is the cinematic Nova layout: textured graphite and blade light. */
+/* Aura is the cinematic Rynne layout: textured graphite and blade light. */
 .app-shell.ui-aura {
   background:
     linear-gradient(123deg, transparent 0 48%, rgba(100,73,169,.025) 48.1% 54%, transparent 54.1%),
@@ -675,7 +675,7 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .ui-console .topbar { height: 55px; padding: 0 max(22px, 5vw); border-bottom-color: rgba(255,255,255,.055); }
 .ui-console .topbar .eyebrow { display: none; }
 .ui-console .topbar h1 { font: 12px "Cascadia Mono", "Consolas", monospace; color: #aab4c4; }
-.ui-console .topbar h1::before { content: "nova / "; color: #5fc58e; }
+.ui-console .topbar h1::before { content: "rynne / "; color: #5fc58e; }
 .ui-console .compact-nav { display: flex; }
 .ui-console .compact-nav button span { display: none; }
 .ui-console .compact-nav button { width: 31px; padding: 0; justify-content: center; border-radius: 6px; }

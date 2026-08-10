@@ -27,13 +27,24 @@ VOSK_MODEL_DIRECTORY_NAME = "vosk-model-small-ru-0.22"
 
 def discover_vosk_model_path() -> Path | None:
     """Find a configured or locally installed Russian Vosk model."""
-    configured = os.getenv("NOVA_VOSK_MODEL", "").strip()
+    configured = (
+        os.getenv("RYNNE_VOSK_MODEL")
+        or os.getenv("NOVA_VOSK_MODEL", "")
+    ).strip()
     project_root = Path(__file__).resolve().parents[2]
     local_app_data = os.getenv("LOCALAPPDATA", "").strip()
     candidates = [
         Path(configured) if configured else None,
         project_root / "data" / "vosk" / VOSK_MODEL_DIRECTORY_NAME,
         Path.cwd() / "data" / "vosk" / VOSK_MODEL_DIRECTORY_NAME,
+        (
+            Path(local_app_data)
+            / "Rynne"
+            / "models"
+            / VOSK_MODEL_DIRECTORY_NAME
+            if local_app_data
+            else None
+        ),
         (
             Path(local_app_data)
             / "Nova"
@@ -73,16 +84,19 @@ class WakeWordConfig:
         cls,
     ) -> "WakeWordConfig":
         model_path = discover_vosk_model_path()
-        enabled_raw = os.getenv("NOVA_WAKE_WORD_ENABLED", "").strip()
+        enabled_raw = (
+            os.getenv("RYNNE_WAKE_WORD_ENABLED")
+            or os.getenv("NOVA_WAKE_WORD_ENABLED", "")
+        ).strip()
         enabled = (
             model_path is not None
             if not enabled_raw
             else enabled_raw.lower() in {"1", "true", "yes", "on"}
         )
 
-        input_device_raw = os.getenv(
-            "NOVA_INPUT_DEVICE",
-            "",
+        input_device_raw = (
+            os.getenv("RYNNE_INPUT_DEVICE")
+            or os.getenv("NOVA_INPUT_DEVICE", "")
         ).strip()
 
         input_device: int | str | None
@@ -95,33 +109,33 @@ class WakeWordConfig:
             )
         else:
             input_device = input_device_raw
+        wake_word = (
+            os.getenv("RYNNE_WAKE_WORD")
+            or os.getenv("NOVA_WAKE_WORD")
+            or "рин"
+        ).strip().lower()
+        if wake_word in {"нова", "ново", "нава", "наува", "nova"}:
+            # Transparently migrate the previous brand's default without
+            # requiring users to edit an existing desktop .env file.
+            wake_word = "рин"
         return cls(
             enabled=enabled,
-            wake_word=os.getenv(
-                "NOVA_WAKE_WORD",
-                "нова",
-            ).strip().lower(),
+            wake_word=wake_word,
             model_path=model_path or Path(
                 "__nova_vosk_model_not_configured__"
             ),
             model_configured=model_path is not None,
             maximum_command_duration=float(
-                os.getenv(
-                    "NOVA_WAKE_COMMAND_TIMEOUT",
-                    "15",
-                )
+                os.getenv("RYNNE_WAKE_COMMAND_TIMEOUT")
+                or os.getenv("NOVA_WAKE_COMMAND_TIMEOUT", "15")
             ),
             silence_duration=float(
-                os.getenv(
-                    "NOVA_WAKE_SILENCE_SECONDS",
-                    "0.9",
-                )
+                os.getenv("RYNNE_WAKE_SILENCE_SECONDS")
+                or os.getenv("NOVA_WAKE_SILENCE_SECONDS", "0.9")
             ),
             sensitivity=float(
-                os.getenv(
-                    "NOVA_WAKE_WORD_SENSITIVITY",
-                    "0.72",
-                )
+                os.getenv("RYNNE_WAKE_WORD_SENSITIVITY")
+                or os.getenv("NOVA_WAKE_WORD_SENSITIVITY", "0.72")
             ),
             input_device=input_device,
         )
@@ -155,9 +169,9 @@ class WakeCapture:
 
 
 WAKE_PREFIX_PATTERNS = (
-    r"^\s*эй[\s,;:!?.-]+нов[ао][\s,;:!?.-]*",
-    r"^\s*слушай[\s,;:!?.-]+нов[ао][\s,;:!?.-]*",
-    r"^\s*(?:нов[ао]|наува|новчик|nova)[\s,;:!?.-]*",
+    r"^\s*эй[\s,;:!?.-]+(?:ринн?и?|райне|rynne)[\s,;:!?.-]*",
+    r"^\s*слушай[\s,;:!?.-]+(?:ринн?и?|райне|rynne)[\s,;:!?.-]*",
+    r"^\s*(?:ринн?и?|райне|rynne)[\s,;:!?.-]*",
 )
 
 
@@ -180,7 +194,7 @@ def normalize_wake_text(
 
 def contains_wake_word(
     text: str,
-    wake_word: str = "нова",
+    wake_word: str = "рин",
 ) -> bool:
     normalized = normalize_wake_text(text)
     normalized_wake = normalize_wake_text(
@@ -191,9 +205,9 @@ def contains_wake_word(
         return False
 
     aliases = {normalized_wake}
-    if normalized_wake == "нова":
-        # Small Russian Vosk models sometimes finalize «Нова» as «ново».
-        aliases.update({"ново", "нава", "наува"})
+    if normalized_wake == "рин":
+        # Russian Vosk may stretch or transliterate the short brand name.
+        aliases.update({"ринн", "ринни", "райне", "rynne"})
     # A wake word is an invocation, not an arbitrary mention halfway through
     # speech from a video. Keeping it at the beginning also avoids matching a
     # Vosk partial for the Russian adjective «новая».
@@ -208,11 +222,11 @@ def contains_wake_word(
 
 def should_trigger_wake(
     text: str,
-    wake_word: str = "нова",
+    wake_word: str = "рин",
     *,
     is_final: bool,
 ) -> bool:
-    """Reject an ambiguous single-word partial such as the start of «новая»."""
+    """Accept partial recognition only for an explicit «Эй, Рин» invocation."""
     if not contains_wake_word(text, wake_word):
         return False
     if is_final:
@@ -225,8 +239,8 @@ def should_trigger_wake(
     )
     if strong_invocation:
         return True
-    # Plain «Нова, ...» waits for Vosk's final result. Otherwise the partial
-    # «нова база» can still be the unfinished adjective «новая база».
+    # A plain name waits for Vosk's final result, preventing partial phrases
+    # from interrupting video or conversation audio.
     return False
 
 
@@ -237,13 +251,13 @@ def strip_wake_prefix(
     Удаляет wake prefix из окончательной транскрипции.
 
     Примеры:
-        «Нова, открой блокнот» -> «открой блокнот»
-        «Эй Нова, скажи время» -> «скажи время»
-        «Нова» -> ""
+        «Рин, открой блокнот» -> «открой блокнот»
+        «Эй Рин, скажи время» -> «скажи время»
+        «Рин» -> ""
     """
     clean = str(text).strip()
 
-    # STT may repeat the invocation ("Нова, Нова") or return Latin "Nova".
+    # STT may repeat the invocation ("Рин, Рин") or return Latin "Rynne".
     # Remove every leading invocation so a wake-only utterance never becomes
     # an accidental LLM request.
     changed = True
@@ -325,7 +339,7 @@ class WakeWordDetector:
     Алгоритм:
     1. Постоянно читает небольшие PCM-блоки.
     2. Vosk проверяет partial/final transcription.
-    3. После обнаружения слова «Нова» продолжает записывать.
+    3. После обнаружения обращения «Рин» продолжает записывать.
     4. После тишины сохраняет всю фразу в WAV.
     5. Основной STT повторно распознаёт WAV с высоким качеством.
     """
@@ -507,12 +521,13 @@ class WakeWordDetector:
             f"эй {self.config.wake_word}",
             f"слушай {self.config.wake_word}",
             (
-                "ново"
-                if self.config.wake_word == "нова"
+                "ринн"
+                if self.config.wake_word == "рин"
                 else self.config.wake_word
             ),
-            "нава" if self.config.wake_word == "нова" else self.config.wake_word,
-            "наува" if self.config.wake_word == "нова" else self.config.wake_word,
+            "ринни" if self.config.wake_word == "рин" else self.config.wake_word,
+            "райне" if self.config.wake_word == "рин" else self.config.wake_word,
+            "rynne" if self.config.wake_word == "рин" else self.config.wake_word,
             "[unk]",
         ]
         recognizer = KaldiRecognizer(

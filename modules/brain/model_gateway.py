@@ -986,7 +986,7 @@ class ModelGateway:
                 "HTTP-Referer": (
                     "https://localhost/nova"
                 ),
-                "X-Title": "Nova Windows Assistant",
+                "X-Title": "Rynne Windows Assistant",
             }
 
             request_arguments["extra_body"] = {
