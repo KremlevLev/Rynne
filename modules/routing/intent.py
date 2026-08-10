@@ -219,7 +219,7 @@ GENERAL_ACTION_MARKERS = (
 
 TELEGRAM_MESSAGE_ACTIONS = (
     "напиши", "написать", "ответь", "ответить", "отправь", "отправить",
-    "сообщение", "send", "reply", "respond",
+    "сообщение", "перешли", "переслать", "send", "reply", "respond", "forward",
 )
 
 TELEGRAM_MARKERS = (
@@ -592,6 +592,7 @@ class DeterministicIntentRouter:
                     "mcp_telegram_resolve_chat",
                     "mcp_telegram_list_chats",
                     "mcp_telegram_send_message",
+                    "mcp_telegram_forward_message",
                 },
                 needs_model=True,
                 needs_tools=True,

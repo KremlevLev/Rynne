@@ -6,7 +6,13 @@ from types import SimpleNamespace
 import asyncio
 import sys
 
-from integrations.telegram_mcp.server import _bounded_limit, _message_payload, mcp
+import integrations.telegram_mcp.server as telegram_server
+from integrations.telegram_mcp.server import (
+    _bounded_limit,
+    _message_payload,
+    forward_message,
+    mcp,
+)
 from modules.agent.mcp_integration import create_bundled_telegram_server_config
 from modules.agent.mcp_gateway import MCPGateway, MCPServerConfig
 from modules.agent.mcp_security import infer_mcp_tool_category, infer_mcp_tool_risk
@@ -79,12 +85,20 @@ def test_telegram_send_is_confirmed_network_write() -> None:
     )
     assert decision == PolicyDecision.REQUIRE_CONFIRMATION
 
+    assert infer_mcp_tool_risk(
+        "mcp_telegram_forward_message", "Forward a Telegram message"
+    ) == RiskLevel.EXECUTE
+    assert infer_mcp_tool_category(
+        "mcp_telegram_forward_message", "Forward a Telegram message"
+    ) == ToolCategory.NETWORK_WRITE
+
 
 def test_telegram_tools_are_selected_for_message_request() -> None:
     available = {
         "mcp_telegram_list_chats",
         "mcp_telegram_read_messages",
         "mcp_telegram_send_message",
+        "mcp_telegram_forward_message",
         "browser_open_url",
     }
     selected = select_tools_for_request(
@@ -119,6 +133,7 @@ def test_telegram_mcp_exposes_small_auditable_tool_surface() -> None:
         "read_messages",
         "search_messages",
         "send_message",
+        "forward_message",
     }
     assert tools["read_messages"].annotations.readOnlyHint is True
     assert tools["send_message"].annotations.readOnlyHint is False
@@ -151,8 +166,42 @@ def test_telegram_mcp_stdio_discovery_works_without_logging_in() -> None:
                 "mcp_telegram_read_messages",
                 "mcp_telegram_search_messages",
                 "mcp_telegram_send_message",
+                "mcp_telegram_forward_message",
             }
         finally:
             await gateway.close()
 
     asyncio.run(scenario())
+
+
+def test_personal_telegram_forward_resolves_both_chats_and_exact_text(monkeypatch) -> None:
+    source = SimpleNamespace(name="son", entity=SimpleNamespace(username="Vladosik585"))
+    target = SimpleNamespace(name="XIII", entity=SimpleNamespace(username="s3kvoiyas"))
+    original = SimpleNamespace(id=41, message="привет влад")
+    forwarded = SimpleNamespace(id=99)
+
+    class FakeClient:
+        async def get_dialogs(self, limit=250):
+            return [source, target]
+
+        async def get_messages(self, entity, **kwargs):
+            return [original]
+
+        async def forward_messages(self, entity, message, from_peer=None):
+            assert entity is target.entity
+            assert message is original
+            assert from_peer is source.entity
+            return forwarded
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr(telegram_server, "_get_client", fake_client)
+    result = asyncio.run(forward_message("son", "XIII", "привет влад"))
+    assert result == {
+        "forwarded": True,
+        "source_chat": "son",
+        "target_chat": "XIII",
+        "source_message_id": 41,
+        "message_id": 99,
+    }

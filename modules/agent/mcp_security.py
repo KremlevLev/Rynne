@@ -280,7 +280,7 @@ def infer_mcp_tool_risk(tool_name: str, description: str = "") -> RiskLevel:
     # as execute so Nova's selected permission mode can make the final decision.
     if any(word in lowered for word in [
         "execute", "run", "command", "shell", "bash",
-        "send", "reply", "publish", "post_message",
+        "send", "reply", "forward", "publish", "post_message",
     ]):
         return RiskLevel.EXECUTE
     
@@ -295,7 +295,7 @@ def infer_mcp_tool_category(tool_name: str, description: str = "") -> ToolCatego
     lowered = f"{tool_name} {description}".lower()
 
     if any(word in lowered for word in [
-        "send", "reply", "publish", "post_message",
+        "send", "reply", "forward", "publish", "post_message",
     ]):
         return ToolCategory.NETWORK_WRITE
 

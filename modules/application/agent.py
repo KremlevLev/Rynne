@@ -66,6 +66,35 @@ TELEGRAM_QUOTED_MESSAGE_RE = re.compile(
     re.DOTALL,
 )
 
+TELEGRAM_FORWARD_RE = re.compile(
+    r"(?:перешли|перешл[иь]|forward)\s+(?:сообщение\s+)?"
+    r"[«\"](?P<message>.+?)[»\"]\s+"
+    r"(?:из|from)\s+(?:чата?\s+(?:с\s+)?)?(?P<source>.+?)\s+"
+    r"(?:в|to)\s+(?:чат\s+)?(?P<target>[^.]+)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def parse_telegram_forward_request(text: str) -> tuple[str, str, str] | None:
+    """Parse an explicit source, target and message for a real forward."""
+    match = TELEGRAM_FORWARD_RE.search(str(text).strip())
+    if match is None:
+        return None
+    source = " ".join(match.group("source").split()).strip(" ,:-")
+    target = " ".join(match.group("target").split()).strip(" ,:-")
+    message = " ".join(match.group("message").split()).strip()
+    if not source or not target or not message:
+        return None
+    return source, target, message
+
+
+def is_telegram_capability_question(text: str) -> bool:
+    normalized = str(text).casefold()
+    return bool(
+        re.search(r"\b(?:telegram|телеграм|телегу|тг)\b", normalized)
+        and re.search(r"(?:что.+мож|что.+уме|какие.+возмож|только.+сообщ)", normalized)
+    )
+
 
 def parse_telegram_message_request(text: str) -> tuple[str, str] | None:
     """Parse explicit recipient + quoted text without spending an LLM call."""
@@ -74,6 +103,14 @@ def parse_telegram_message_request(text: str) -> tuple[str, str] | None:
         return None
     message = " ".join(match.group("message").split()).strip()
     prefix = str(text)[:match.start()].strip()
+    normalized_prefix = prefix.casefold()
+    if not re.search(r"\b(?:напиши|отправь|send|message)\b", normalized_prefix):
+        return None
+    if not re.search(
+        r"\b(?:telegram|телеграм(?:е|м)?|телегу|тг)\b",
+        normalized_prefix,
+    ):
+        return None
     prefix = re.sub(
         r"^\s*(?:напиши|отправь|send|message)\s+",
         "",
@@ -192,6 +229,9 @@ permission mode: do not ask for confirmation in model text and do not wait for
 a separate «да». If runtime approval is required, ToolRunner will display the
 approval card itself. When the user already supplied an exact @username, call
 send_message directly unless the tool explicitly requires prior resolution.
+Never claim that Telegram Business can natively forward a message: the Bot API
+does not support forwardMessage on behalf of a business connection. A true
+forward requires an actually registered personal Telegram forward_message tool.
 """.strip()
 
 TOOL_CONTINUATION_PROMPT = """
@@ -928,6 +968,151 @@ class AgentService:
             language=response_language,
         )
 
+    async def _try_fast_telegram_forward(
+        self,
+        *,
+        user_text: str,
+        turn_id: str,
+        response_language: str,
+        workspace_path: str | None,
+    ) -> AssistantResponse | None:
+        parsed = parse_telegram_forward_request(user_text)
+        if parsed is None:
+            return None
+        # A new forward request supersedes any recipient clarification left
+        # behind by an older direct-send attempt.
+        self._pending_telegram_message = None
+        source, target, message = parsed
+        candidates = sorted(
+            name for name in self.registry.names
+            if "telegram" in name.casefold()
+            and name.casefold().endswith("_forward_message")
+            and "business" not in name.casefold()
+        )
+        if not candidates:
+            resolve_candidates = sorted(
+                name for name in self.registry.names
+                if "telegram" in name.casefold()
+                and name.casefold().endswith("_resolve_chat")
+            )
+            resolved_note = ""
+            if resolve_candidates:
+                resolver = next(
+                    (name for name in resolve_candidates if "business" in name.casefold()),
+                    resolve_candidates[0],
+                )
+                self._emit_progress(
+                    "telegram_resolving",
+                    turn_id=turn_id,
+                    progress=35,
+                    message="Resolving both Telegram chat aliases before reporting the forward limitation.",
+                    tool_names=[resolver],
+                )
+                resolved_labels: list[str] = []
+                for label, query in (("source", source), ("target", target)):
+                    call = {
+                        "id": f"call_{uuid.uuid4().hex}",
+                        "type": "function",
+                        "function": {
+                            "name": resolver,
+                            "arguments": json.dumps({"query": query}, ensure_ascii=False),
+                        },
+                    }
+                    result = await self.runner.execute(call, context=ToolContext.create(
+                        session_id=self.session_id,
+                        turn_id=turn_id,
+                        working_directory=workspace_path,
+                        metadata={"user_request": user_text, "fast_path": "telegram_forward_resolve"},
+                    ))
+                    payload = _mcp_payload(result)
+                    recipient = payload.get("recipient")
+                    if result.success and isinstance(recipient, dict):
+                        title = str(recipient.get("title") or recipient.get("username") or query)
+                        resolved_labels.append(f"{label}: {query} → {title}")
+                    else:
+                        resolved_labels.append(f"{label}: {query} → not found")
+                if resolved_labels:
+                    resolved_note = " ".join(resolved_labels) + ". "
+            text = (
+                resolved_note.replace("source", "источник").replace("target", "получатель").replace("not found", "не найден")
+                + "Telegram Business Bot не поддерживает настоящую пересылку от имени аккаунта. "
+                "Могу повторно отправить текст либо переслать после подключения личного Telegram MCP."
+                if response_language == "ru"
+                else resolved_note + "Telegram Business Bot cannot truly forward on behalf of the account. "
+                "I can resend the text or forward it after personal Telegram MCP is connected."
+            )
+            return AssistantResponse(
+                display_text=text,
+                speech_text=text,
+                success=False,
+                error_code="TELEGRAM_NATIVE_FORWARD_UNAVAILABLE",
+            )
+        tool_name = candidates[0]
+        self._emit_progress(
+            "telegram_forwarding",
+            turn_id=turn_id,
+            progress=45,
+            message="Resolving both Telegram chats and locating the original message.",
+            tool_names=[tool_name],
+        )
+        call = {
+            "id": f"call_{uuid.uuid4().hex}",
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "arguments": json.dumps(
+                    {
+                        "source_chat": source,
+                        "target_chat": target,
+                        "text": message,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        }
+        result = await self.runner.execute(call, context=ToolContext.create(
+            session_id=self.session_id,
+            turn_id=turn_id,
+            working_directory=workspace_path,
+            metadata={"user_request": user_text, "fast_path": "telegram_forward"},
+        ))
+        return build_assistant_response_from_tools(
+            [self._tool_result_record(call, result)],
+            language=response_language,
+        )
+
+    def _telegram_capability_response(
+        self,
+        *,
+        user_text: str,
+        response_language: str,
+    ) -> AssistantResponse | None:
+        if not is_telegram_capability_question(user_text):
+            return None
+        names = {name.casefold() for name in self.registry.names if "telegram" in name.casefold()}
+        can_forward = any(name.endswith("_forward_message") for name in names)
+        if response_language == "ru":
+            text = (
+                "Могу находить чаты по имени или username, показывать доступные чаты, "
+                "читать и искать наблюдаемые сообщения, а также отправлять ответы. "
+                + (
+                    "Личный Telegram MCP подключён — настоящая пересылка тоже доступна."
+                    if can_forward
+                    else "Настоящая пересылка недоступна через Business Bot; для неё нужен личный Telegram MCP."
+                )
+            )
+        else:
+            text = (
+                "I can resolve chats by name or username, list available chats, read and search "
+                "observed messages, and send replies. "
+                + (
+                    "Personal Telegram MCP is connected, so native forwarding is available."
+                    if can_forward
+                    else "Native forwarding is unavailable through Business Bot; it requires personal Telegram MCP."
+                )
+            )
+        return AssistantResponse(display_text=text, speech_text=text, success=True)
+
     @staticmethod
     def _parse_tool_arguments(
         tool_call: dict[str, Any],
@@ -1410,6 +1595,28 @@ class AgentService:
             if request_object is not None
             else ""
         )
+        fast_forward_response = await self._try_fast_telegram_forward(
+            user_text=user_text,
+            turn_id=turn_id,
+            response_language=response_language,
+            workspace_path=workspace_path or None,
+        )
+        if fast_forward_response is not None:
+            self.history.append({
+                "role": "assistant",
+                "content": fast_forward_response.display_text,
+            })
+            return fast_forward_response
+        telegram_capabilities = self._telegram_capability_response(
+            user_text=user_text,
+            response_language=response_language,
+        )
+        if telegram_capabilities is not None:
+            self.history.append({
+                "role": "assistant",
+                "content": telegram_capabilities.display_text,
+            })
+            return telegram_capabilities
         # Explicit Telegram syntax is more reliable than the generic intent
         # classifier (especially for short Russian aliases such as "тг").
         if (

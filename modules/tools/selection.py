@@ -34,6 +34,9 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "telegram", "телеграм", "напиши", "ответь", "отправь",
         "сообщение", "send", "reply",
     },
+    "mcp_telegram_forward_message": {
+        "telegram", "телеграм", "перешли", "переслать", "forward",
+    },
     "open_application_batch": {
         "несколько приложений", "несколько программ",
         "приложений", "программ",

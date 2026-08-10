@@ -6,6 +6,8 @@ from modules.application.agent import (
     AgentService,
     DYNAMIC_TOOL_DISCOVERY_NAME,
     is_contextual_follow_up,
+    is_telegram_capability_question,
+    parse_telegram_forward_request,
     parse_telegram_message_request,
 )
 from modules.agent.execution_memory import ExecutionMemory
@@ -29,6 +31,18 @@ def test_parses_short_telegram_alias_without_model() -> None:
     assert parse_telegram_message_request(
         'напиши son в тг "привет влад"'
     ) == ("son", "привет влад")
+    assert parse_telegram_message_request(
+        'чат vladosik585 в @s3kvoiyas от 13:54, сообщение "привет влад"'
+    ) is None
+
+
+def test_parses_real_telegram_forward_without_confusing_chat_names() -> None:
+    assert parse_telegram_forward_request(
+        'перешли сообщение "привет влад" из чата с son в чат XIII. именно переслать'
+    ) == ("son", "XIII", "привет влад")
+    assert is_telegram_capability_question(
+        "что ты еще можешь через скилл MCP Telegram?"
+    )
 
 
 def test_explicit_telegram_message_uses_fast_path() -> None:

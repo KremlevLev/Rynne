@@ -204,5 +204,65 @@ async def send_message(chat: str, text: str) -> dict[str, Any]:
     }
 
 
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+        openWorldHint=True,
+    )
+)
+async def forward_message(
+    source_chat: str,
+    target_chat: str,
+    text: str = "",
+    message_id: int = 0,
+) -> dict[str, Any]:
+    """Forward one real Telegram message between two resolved personal chats."""
+    client = await _get_client()
+    source = await _resolve_dialog(client, source_chat)
+    target = await _resolve_dialog(client, target_chat)
+
+    selected = None
+    if int(message_id or 0) > 0:
+        selected = await client.get_messages(source.entity, ids=int(message_id))
+    else:
+        clean_text = " ".join(str(text).split()).casefold()
+        if not clean_text:
+            raise ValueError("Provide message_id or the message text to forward.")
+        messages = await client.get_messages(
+            source.entity,
+            limit=50,
+            search=str(text).strip(),
+        )
+        exact = [
+            message for message in messages
+            if " ".join(str(getattr(message, "message", "") or "").split()).casefold()
+            == clean_text
+        ]
+        if not exact:
+            raise LookupError(
+                f"Message '{text}' was not found in Telegram chat '{source_chat}'."
+            )
+        selected = exact[0]
+
+    if selected is None:
+        raise LookupError(
+            f"Telegram message {message_id} was not found in chat '{source_chat}'."
+        )
+    forwarded = await client.forward_messages(
+        target.entity,
+        selected,
+        from_peer=source.entity,
+    )
+    return {
+        "forwarded": True,
+        "source_chat": _dialog_title(source),
+        "target_chat": _dialog_title(target),
+        "source_message_id": getattr(selected, "id", None),
+        "message_id": getattr(forwarded, "id", None),
+    }
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
