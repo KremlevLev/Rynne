@@ -27,7 +27,7 @@ from modules.agent.mcp_security import (
     infer_mcp_tool_risk,
     infer_mcp_tool_category,
 )
-from modules.tools.base import RiskLevel
+from modules.tools.base import RiskLevel, ToolCategory
 
 logger = logging.getLogger("MCPGateway")
 
@@ -721,8 +721,18 @@ class MCPGateway:
             },
         }
         
-        # Apply error middleware with retry logic
-        for attempt in range(self._middleware._max_retries):
+        # Retrying an outgoing write can duplicate a message, payment, post,
+        # or other side effect when the remote service succeeded but the
+        # response was lost. Reads may be retried; writes get one attempt.
+        category = infer_mcp_tool_category(tool_name)
+        max_attempts = (
+            1
+            if category == ToolCategory.NETWORK_WRITE
+            else self._middleware._max_retries
+        )
+        last_result: ToolResult | None = None
+        last_error: Exception | None = None
+        for attempt in range(max_attempts):
             try:
                 if config.transport in {
                     "sse",
@@ -735,6 +745,8 @@ class MCPGateway:
                 if result.success:
                     self._middleware.reset_error_count(tool_name)
                     return result
+
+                last_result = result
                 
                 # Check if retryable
                 if not self._middleware.should_retry(result.code):
@@ -742,33 +754,49 @@ class MCPGateway:
                 
                 self._middleware.increment_error(tool_name)
                 
-                if attempt < self._middleware._max_retries - 1:
+                if attempt < max_attempts - 1:
                     delay = self._middleware.calculate_delay(attempt + 1)
                     logger.warning(
                         "Retrying MCP tool %s (attempt %d/%d) after %s seconds",
                         tool_name,
                         attempt + 1,
-                        self._middleware._max_retries,
+                        max_attempts,
                         delay,
                     )
                     await asyncio.sleep(delay)
                     
-            except asyncio.TimeoutError:
+            except asyncio.TimeoutError as exc:
+                last_error = exc
                 self._middleware.increment_error(tool_name)
-                if attempt < self._middleware._max_retries - 1:
+                if attempt < max_attempts - 1:
                     delay = self._middleware.calculate_delay(attempt + 1)
                     await asyncio.sleep(delay)
                 continue
-            except Exception:
+            except Exception as exc:
+                last_error = exc
                 self._middleware.increment_error(tool_name)
-                if attempt < self._middleware._max_retries - 1:
+                if attempt < max_attempts - 1:
                     delay = self._middleware.calculate_delay(attempt + 1)
                     await asyncio.sleep(delay)
                 continue
         
+        if last_result is not None:
+            return last_result
+        if isinstance(last_error, asyncio.TimeoutError):
+            return ToolResult.failure(
+                "MCP_TIMEOUT",
+                f"MCP tool '{actual_tool_name}' timed out after {config.timeout:g} seconds.",
+                retryable=True,
+            )
+        if last_error is not None:
+            return ToolResult.failure(
+                "MCP_TOOL_ERROR",
+                f"MCP tool '{actual_tool_name}' failed: {last_error}",
+                retryable=True,
+            )
         return ToolResult.failure(
-            "MCP_MAX_RETRIES_EXCEEDED",
-            f"Tool {actual_tool_name} failed after {self._middleware._max_retries} retries",
+            "MCP_TOOL_ERROR",
+            f"MCP tool '{actual_tool_name}' failed without an error response.",
         )
 
     async def _call_tool_stdio(

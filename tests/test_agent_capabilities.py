@@ -9,6 +9,7 @@ from modules.application.agent import (
     is_telegram_capability_question,
     parse_telegram_forward_request,
     parse_telegram_message_request,
+    parse_telegram_resend_request,
 )
 from modules.agent.execution_memory import ExecutionMemory
 from modules.agent.skill_library import SkillLibrary
@@ -43,6 +44,13 @@ def test_parses_real_telegram_forward_without_confusing_chat_names() -> None:
     assert is_telegram_capability_question(
         "что ты еще можешь через скилл MCP Telegram?"
     )
+
+
+def test_parses_explicit_telegram_resend_without_model() -> None:
+    assert parse_telegram_resend_request(
+        '\u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u044c \u0442\u0435\u043a\u0441\u0442 "\u043f\u0440\u0438\u0432\u0435\u0442 \u0432\u043b\u0430\u0434" \u0438\u0437 son '
+        '\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044e XIII \u0432 \u0442\u0435\u043b\u0435\u0433\u0435'
+    ) == ("XIII", "\u043f\u0440\u0438\u0432\u0435\u0442 \u0432\u043b\u0430\u0434")
 
 
 def test_explicit_telegram_message_uses_fast_path() -> None:
@@ -131,6 +139,18 @@ def test_explicit_telegram_message_uses_fast_path() -> None:
         ("Vladosik585", "здарова заебал"),
     ]
     assert response.display_text == "Готово. Сообщение отправлено пользователю son."
+
+    resend_response = asyncio.run(
+        agent.run(
+            'повторно отправь текст "привет влад" из son '
+            'пользователю XIII в телеге'
+        )
+    )
+    assert resend_response.success
+    assert calls[-2:] == [
+        ("resolve", "XIII"),
+        ("Vladosik585", "привет влад"),
+    ]
 
 
 class RefusalThenToolLLM:

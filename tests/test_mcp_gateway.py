@@ -763,6 +763,38 @@ def test_mcp_gateway_uses_sdk_session_for_discovery_and_calls() -> None:
     asyncio.run(run_test())
 
 
+def test_mcp_gateway_does_not_retry_network_writes_and_keeps_error() -> None:
+    async def run_test() -> None:
+        gateway = MCPGateway()
+        config = MCPServerConfig(
+            name="telegram_business",
+            command="python",
+        )
+        gateway.register_server(config)
+        calls = 0
+
+        async def fail_once(config, request, tool_name) -> ToolResult:
+            nonlocal calls
+            calls += 1
+            return ToolResult.failure(
+                "MCP_TOOL_ERROR",
+                "Telegram says: CHAT_WRITE_FORBIDDEN",
+            )
+
+        gateway._call_tool_stdio = fail_once
+        result = await gateway.call_tool(
+            "mcp_telegram_business_send_message",
+            {"chat": "XIII", "text": "hello"},
+        )
+
+        assert calls == 1
+        assert not result.success
+        assert result.code == "MCP_TOOL_ERROR"
+        assert result.message == "Telegram says: CHAT_WRITE_FORBIDDEN"
+
+    asyncio.run(run_test())
+
+
 def test_explicit_mcp_config_resolves_env(
     tmp_path,
     monkeypatch,

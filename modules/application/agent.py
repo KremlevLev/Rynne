@@ -135,6 +135,48 @@ def parse_telegram_message_request(text: str) -> tuple[str, str] | None:
     return recipient, message
 
 
+def parse_telegram_resend_request(text: str) -> tuple[str, str] | None:
+    """Parse an explicit resend with quoted text and ignore source context."""
+    raw = str(text).strip()
+    normalized = raw.casefold()
+    resend_markers = (
+        "\u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u044c",
+        "\u043e\u0442\u043f\u0440\u0430\u0432\u044c \u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e",
+        "\u043f\u043e\u0432\u0442\u043e\u0440\u0438 \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0443",
+        "resend",
+    )
+    if not any(marker in normalized for marker in resend_markers):
+        return None
+    if not re.search(
+        r"\b(?:telegram|\u0442\u0435\u043b\u0435\u0433\u0440\u0430\u043c(?:\u0435|\u043c)?|\u0442\u0435\u043b\u0435\u0433(?:\u0443|\u0435)|\u0442\u0433)\b",
+        normalized,
+    ):
+        return None
+
+    quoted = re.search(r"[\u00ab\"](?P<message>.+?)[\u00bb\"]", raw, re.DOTALL)
+    if quoted is None:
+        return None
+    message = " ".join(quoted.group("message").split()).strip()
+    suffix = raw[quoted.end():]
+    target_match = re.search(
+        r"(?:\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044e|\u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044e|\u0432\s+\u0447\u0430\u0442|to)\s+(?P<target>.+)",
+        suffix,
+        re.IGNORECASE,
+    )
+    if target_match is None:
+        return None
+    target = " ".join(target_match.group("target").split()).strip(" ,:-")
+    target = re.sub(
+        r"\s+(?:\u0432\s+)?(?:telegram|\u0442\u0435\u043b\u0435\u0433\u0440\u0430\u043c(?:\u0435|\u043c)?|\u0442\u0435\u043b\u0435\u0433(?:\u0443|\u0435)|\u0442\u0433)\s*[.!?]*$",
+        "",
+        target,
+        flags=re.IGNORECASE,
+    ).strip(" ,:-")
+    if not target or not message:
+        return None
+    return target, message
+
+
 def _mcp_payload(result: ToolResult) -> dict[str, Any]:
     structured = result.data.get("structured_content")
     if isinstance(structured, dict):
@@ -853,7 +895,10 @@ class AgentService:
         response_language: str,
         workspace_path: str | None,
     ) -> AssistantResponse | None:
-        parsed = parse_telegram_message_request(user_text)
+        parsed = (
+            parse_telegram_resend_request(user_text)
+            or parse_telegram_message_request(user_text)
+        )
         if parsed is None:
             exact_username = re.fullmatch(
                 r"\s*@?[A-Za-z0-9_]{5,}\s*",
@@ -1620,7 +1665,8 @@ class AgentService:
         # Explicit Telegram syntax is more reliable than the generic intent
         # classifier (especially for short Russian aliases such as "тг").
         if (
-            parse_telegram_message_request(user_text) is not None
+            parse_telegram_resend_request(user_text) is not None
+            or parse_telegram_message_request(user_text) is not None
             or execution_decision.intent == IntentKind.MESSAGING
             or self._pending_telegram_message is not None
         ):
