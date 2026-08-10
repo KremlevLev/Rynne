@@ -7,12 +7,14 @@ import tempfile
 from pathlib import Path
 
 from modules.windows.git_tools import (
+    git_clone_repository,
     git_status,
     git_diff,
     git_log,
     git_commit,
     git_branch,
 )
+import modules.windows.git_tools as git_tools_module
 
 
 def _init_git_repo(
@@ -114,3 +116,33 @@ def test_git_branch() -> None:
 
         assert result.success
         assert result.data["branches"]
+
+
+def test_git_clone_repository_uses_direct_git_and_verifies(monkeypatch, tmp_path: Path) -> None:
+    destination = tmp_path / "nanoGPT"
+    captured: dict[str, object] = {}
+
+    def fake_run(command, cwd=None, *, timeout_seconds=30.0):
+        captured.update(command=command, cwd=cwd, timeout=timeout_seconds)
+        (destination / ".git").mkdir(parents=True)
+        return "cloned", "", 0
+
+    monkeypatch.setattr(git_tools_module, "_run_git_command", fake_run)
+    result = git_clone_repository(
+        "https://github.com/karpathy/nanoGPT.git",
+        str(destination),
+    )
+
+    assert result.success
+    assert result.verification.verified
+    assert captured["command"] == [
+        "clone", "--depth", "1",
+        "https://github.com/karpathy/nanoGPT.git", str(destination),
+    ]
+    assert captured["timeout"] == 150.0
+
+
+def test_git_clone_repository_rejects_non_repository_url(tmp_path: Path) -> None:
+    result = git_clone_repository("https://example.com/file.zip", str(tmp_path / "repo"))
+    assert not result.success
+    assert result.code == "INVALID_REPOSITORY_URL"

@@ -194,10 +194,40 @@ def contains_wake_word(
     if normalized_wake == "нова":
         # Small Russian Vosk models sometimes finalize «Нова» as «ново».
         aliases.update({"ново", "нава", "наува"})
+    # A wake word is an invocation, not an arbitrary mention halfway through
+    # speech from a video. Keeping it at the beginning also avoids matching a
+    # Vosk partial for the Russian adjective «новая».
     return any(
-        re.search(rf"\b{re.escape(alias)}\b", normalized)
+        re.search(
+            rf"^(?:(?:эй|слушай)[\s,;:!?.-]+)?{re.escape(alias)}(?:$|[\s,;:!?.-])",
+            normalized,
+        )
         for alias in aliases
     )
+
+
+def should_trigger_wake(
+    text: str,
+    wake_word: str = "нова",
+    *,
+    is_final: bool,
+) -> bool:
+    """Reject an ambiguous single-word partial such as the start of «новая»."""
+    if not contains_wake_word(text, wake_word):
+        return False
+    if is_final:
+        return True
+    normalized = normalize_wake_text(text)
+    normalized_wake = normalize_wake_text(wake_word)
+    strong_invocation = re.match(
+        rf"^(?:эй|слушай)[\s,;:!?.-]+{re.escape(normalized_wake)}(?:$|[\s,;:!?.-])",
+        normalized,
+    )
+    if strong_invocation:
+        return True
+    # Plain «Нова, ...» waits for Vosk's final result. Otherwise the partial
+    # «нова база» can still be the unfinished adjective «новая база».
+    return False
 
 
 def strip_wake_prefix(
@@ -678,9 +708,10 @@ class WakeWordDetector:
 
                     just_detected = (
                         not wake_detected
-                        and contains_wake_word(
+                        and should_trigger_wake(
                             recognized_text,
                             self.config.wake_word,
+                            is_final=accepted,
                         )
                     )
                     if just_detected:

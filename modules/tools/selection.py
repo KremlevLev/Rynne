@@ -85,6 +85,10 @@ KEYWORDS_BY_TOOL: dict[str, set[str]] = {
         "скрин",
     },
     "git_status": {"git", "статус репозитория", "git status"},
+    "git_clone_repository": {
+        "git clone", "клонируй репозиторий", "клонировать репозиторий",
+        "скачай репозиторий", "скачать репозиторий",
+    },
     "git_log": {"git log", "коммиты", "commits"},
     "git_branch": {"ветка", "branch"},
     "git_diff": {"изменения в коде", "diff"},

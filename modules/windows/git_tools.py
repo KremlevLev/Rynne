@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,82 @@ from modules.domain.results import (
 
 
 logger = logging.getLogger("GitTools")
+
+
+def git_clone_repository(
+    url: str,
+    destination: str,
+    *,
+    shallow: bool = True,
+) -> ToolResult:
+    """Clone a repository without shell parsing and verify the resulting Git metadata."""
+    clean_url = str(url).strip()
+    if not re.fullmatch(
+        r"https://(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org)/[^\s/]+/[^\s/]+(?:\.git)?/?",
+        clean_url,
+        flags=re.IGNORECASE,
+    ):
+        return ToolResult.failure(
+            "INVALID_REPOSITORY_URL",
+            "Поддерживается полный HTTPS URL репозитория GitHub, GitLab или Bitbucket.",
+        )
+    target = Path(destination).expanduser().resolve()
+    if target.exists():
+        if (target / ".git").is_dir():
+            return ToolResult.ok(
+                f"Репозиторий уже находится в '{target}'.",
+                data={"repository": clean_url, "destination": str(target), "already_exists": True},
+                verification=VerificationResult(
+                    verified=True,
+                    method="git_directory_exists",
+                    confidence=1.0,
+                ),
+            )
+        return ToolResult.failure(
+            "DESTINATION_EXISTS",
+            f"Путь уже существует и не является Git-репозиторием: {target}",
+        )
+    if not target.parent.is_dir():
+        return ToolResult.failure(
+            "PARENT_DIRECTORY_NOT_FOUND",
+            f"Родительский каталог не найден: {target.parent}",
+        )
+    command = ["clone"]
+    if shallow:
+        command.extend(["--depth", "1"])
+    command.extend([clean_url, str(target)])
+    try:
+        stdout, stderr, returncode = _run_git_command(
+            command,
+            cwd=target.parent,
+            timeout_seconds=150.0,
+        )
+    except RuntimeError as exc:
+        return ToolResult.failure("GIT_CLONE_ERROR", str(exc))
+    if returncode != 0:
+        return ToolResult.failure(
+            "GIT_CLONE_ERROR",
+            "Не удалось клонировать репозиторий: " + (stderr or stdout or "неизвестная ошибка Git"),
+        )
+    if not (target / ".git").is_dir():
+        return ToolResult.failure(
+            "GIT_CLONE_NOT_VERIFIED",
+            f"Git завершился без ошибки, но каталог '{target}' не содержит .git.",
+        )
+    return ToolResult.ok(
+        f"Репозиторий клонирован в '{target}'.",
+        data={
+            "repository": clean_url,
+            "destination": str(target),
+            "shallow": bool(shallow),
+            "output": stdout or stderr,
+        },
+        verification=VerificationResult(
+            verified=True,
+            method="git_directory_created",
+            confidence=1.0,
+        ),
+    )
 
 
 def _run_git_command(

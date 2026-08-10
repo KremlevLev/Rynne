@@ -9,6 +9,7 @@ from modules.input_hub.wake_word import (
     WakeWordDetector,
     contains_wake_word,
     normalize_wake_text,
+    should_trigger_wake,
     strip_wake_prefix,
     _abort_input_stream,
     _continuation_rms_threshold,
@@ -51,6 +52,17 @@ def test_does_not_match_part_of_word() -> None:
     assert not contains_wake_word(
         "инновация"
     )
+    assert not contains_wake_word("это новая база в майнкрафте")
+    assert not contains_wake_word("в ролике сказали Нова в середине фразы")
+
+
+def test_ambiguous_nova_partial_waits_for_word_completion() -> None:
+    assert not should_trigger_wake("нова", is_final=False)
+    assert should_trigger_wake("нова", is_final=True)
+    assert not should_trigger_wake("нова открой", is_final=False)
+    assert should_trigger_wake("нова открой", is_final=True)
+    assert should_trigger_wake("эй нова", is_final=False)
+    assert not should_trigger_wake("новая", is_final=True)
 
 
 def test_strip_simple_wake_prefix() -> None:

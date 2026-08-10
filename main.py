@@ -126,6 +126,7 @@ from modules.storage.conversations import (
 )
 from modules.storage.memories import MemoryStore
 from modules.windows.git_tools import (
+    git_clone_repository,
     git_status,
     git_diff,
     git_log,
@@ -479,6 +480,7 @@ def build_handlers(
         "undo_last_file_change": (
             undo_last_file_change
         ),
+        "git_clone_repository": git_clone_repository,
         "git_status": git_status,
         "git_diff": git_diff,
         "git_log": git_log,

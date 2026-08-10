@@ -800,6 +800,27 @@ git_tools = [
     {
         "type": "function",
         "function": {
+            "name": "git_clone_repository",
+            "description": (
+                "Клонирует Git-репозиторий напрямую в указанный каталог и "
+                "проверяет наличие .git. Используйте вместо браузера, ZIP и "
+                "сырой команды git clone."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "destination": {"type": "string"},
+                    "shallow": {"type": "boolean"},
+                },
+                "required": ["url", "destination"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "git_status",
             "description": (
                 "Проверяет статус Git-репозитория."

@@ -63,6 +63,7 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
     "get_file_diff": RiskLevel.READ_ONLY,
     "search_files": RiskLevel.READ_ONLY,
     "git_status": RiskLevel.READ_ONLY,
+    "git_clone_repository": RiskLevel.EXECUTE,
     "git_diff": RiskLevel.READ_ONLY,
     "git_log": RiskLevel.READ_ONLY,
     "git_branch": RiskLevel.READ_ONLY,
@@ -165,6 +166,7 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
     "set_timer": ToolCategory.REMINDER,
 
     "run_terminal_command": ToolCategory.TERMINAL,
+    "git_clone_repository": ToolCategory.DEVELOPMENT,
     "execute_cmd_command": ToolCategory.TERMINAL,
     "execute_python_code": ToolCategory.DEVELOPMENT,
     "create_workspace_project": (
@@ -580,6 +582,12 @@ class ToolRegistry:
             TOOL_TIMEOUT_SECONDS
         ),
     ) -> None:
+        tool_name = schema.get("function", {}).get("name", "")
+        effective_timeout = (
+            180.0
+            if tool_name == "git_clone_repository"
+            else timeout_seconds
+        )
         definition = ToolDefinition.from_legacy(
             schema=schema,
             handler=handler,
@@ -603,7 +611,7 @@ class ToolRegistry:
                     ToolCategory.UNKNOWN,
                 )
             ),
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=effective_timeout,
             idempotent=(
                 schema.get(
                     "function",

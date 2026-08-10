@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from modules.application.agent import (
     AgentService,
@@ -10,13 +11,16 @@ from modules.application.agent import (
     parse_telegram_forward_request,
     parse_telegram_message_request,
     parse_telegram_resend_request,
+    resolve_git_clone_target,
 )
 from modules.agent.execution_memory import ExecutionMemory
 from modules.agent.skill_library import SkillLibrary
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult
+from modules.input_hub.models import UserRequest
 from modules.tools.runtime import ToolRegistry, ToolRunner
 from modules.tools.base import RiskLevel
+from modules.tools.permissions import PermissionManager, PermissionMode
 
 
 def test_parses_explicit_telegram_message_without_model() -> None:
@@ -51,6 +55,68 @@ def test_parses_explicit_telegram_resend_without_model() -> None:
         '\u043f\u043e\u0432\u0442\u043e\u0440\u043d\u043e \u043e\u0442\u043f\u0440\u0430\u0432\u044c \u0442\u0435\u043a\u0441\u0442 "\u043f\u0440\u0438\u0432\u0435\u0442 \u0432\u043b\u0430\u0434" \u0438\u0437 son '
         '\u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044e XIII \u0432 \u0442\u0435\u043b\u0435\u0433\u0435'
     ) == ("XIII", "\u043f\u0440\u0438\u0432\u0435\u0442 \u0432\u043b\u0430\u0434")
+
+
+def test_resolves_known_git_repository_without_model() -> None:
+    assert resolve_git_clone_target("скачай nano gpt") == (
+        "https://github.com/karpathy/nanoGPT.git",
+        "nanoGPT",
+    )
+    assert resolve_git_clone_target(
+        "скачай любой репозиторий Андрея Карпатого"
+    ) == (
+        "https://github.com/karpathy/nanoGPT.git",
+        "nanoGPT",
+    )
+
+
+def test_git_clone_request_uses_direct_fast_path(tmp_path) -> None:
+    class LLMThatMustNotRun:
+        history: list[dict] = []
+
+        async def complete(self, **kwargs):
+            raise AssertionError("Git clone fast path must not call the LLM")
+
+    calls: list[tuple[str, str, bool]] = []
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "git_clone_repository",
+            "description": "Clone repository.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "destination": {"type": "string"},
+                    "shallow": {"type": "boolean"},
+                },
+                "required": ["url", "destination"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+    def clone(url: str, destination: str, shallow: bool = True) -> ToolResult:
+        calls.append((url, destination, shallow))
+        return ToolResult.ok("cloned")
+
+    registry = ToolRegistry.from_legacy([schema], {"git_clone_repository": clone})
+    runner = ToolRunner(
+        registry,
+        permission_manager=PermissionManager(mode=PermissionMode.FULL_ACCESS),
+    )
+    agent = AgentService(LLMThatMustNotRun(), registry, runner)
+    response = asyncio.run(agent.run(UserRequest.from_text(
+        "скачай какой-нибудь репозиторий Андрея Карпатого на рабочий стол",
+        metadata={"workspace_path": str(tmp_path)},
+    )))
+
+    assert response.success
+    assert calls == [(
+        "https://github.com/karpathy/nanoGPT.git",
+        str((Path.home() / "Desktop" / "nanoGPT").resolve()),
+        True,
+    )]
 
 
 def test_explicit_telegram_message_uses_fast_path() -> None:

@@ -61,6 +61,38 @@ from modules.agent.skill_library import SkillBundle, SkillLibrary
 logger = logging.getLogger("AgentService")
 
 
+GIT_CLONE_ACTION_RE = re.compile(
+    r"\b(?:git\s+clone|клонир(?:уй|овать|овать бы)|скачай|скачать)\b.*\b(?:репозитор(?:ий|ия)|repo)\b",
+    re.IGNORECASE,
+)
+KNOWN_GITHUB_REPOSITORIES = {
+    "nanogpt": ("https://github.com/karpathy/nanoGPT.git", "nanoGPT"),
+    "nano gpt": ("https://github.com/karpathy/nanoGPT.git", "nanoGPT"),
+    "minigpt": ("https://github.com/karpathy/minGPT.git", "minGPT"),
+    "min gpt": ("https://github.com/karpathy/minGPT.git", "minGPT"),
+}
+
+
+def resolve_git_clone_target(text: str) -> tuple[str, str] | None:
+    raw = str(text).strip()
+    url_match = re.search(
+        r"https://(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org)/[^\s/]+/([^\s/#?]+)",
+        raw,
+        re.IGNORECASE,
+    )
+    if url_match is not None:
+        url = url_match.group(0).rstrip(".,;:!?)\"]}")
+        name = url_match.group(1).removesuffix(".git")
+        return (url if url.endswith(".git") else url + ".git", name)
+    normalized = " ".join(raw.casefold().replace("-", " ").split())
+    for alias, target in KNOWN_GITHUB_REPOSITORIES.items():
+        if alias in normalized:
+            return target
+    if "карпат" in normalized and re.search(r"\b(?:какой\s*нибудь|любой)\b", normalized):
+        return KNOWN_GITHUB_REPOSITORIES["nanogpt"]
+    return None
+
+
 TELEGRAM_QUOTED_MESSAGE_RE = re.compile(
     r"[«\"](?P<message>.+?)[»\"]\s*$",
     re.DOTALL,
@@ -705,6 +737,96 @@ class AgentService:
         self._sticky_tool_names: list[str] = []
         self._pending_telegram_message: str | None = None
         self._last_telegram_failure: dict[str, str] | None = None
+        self._pending_git_clone_root: str | None = None
+
+    async def _try_fast_git_clone(
+        self,
+        *,
+        user_text: str,
+        turn_id: str,
+        response_language: str,
+        workspace_path: str | None,
+        request_metadata: dict[str, Any],
+    ) -> AssistantResponse | None:
+        explicit_intent = GIT_CLONE_ACTION_RE.search(user_text) is not None
+        target = resolve_git_clone_target(user_text)
+        if not explicit_intent and self._pending_git_clone_root is None:
+            return None
+        if target is None:
+            if not explicit_intent:
+                return None
+            root = Path(workspace_path or (Path.home() / "Desktop")).expanduser().resolve()
+            self._pending_git_clone_root = str(root)
+            message = (
+                "Какой репозиторий клонировать? Пришли название или ссылку."
+                if response_language == "ru"
+                else "Which repository should I clone? Send its name or URL."
+            )
+            return AssistantResponse(display_text=message, speech_text=message, success=False)
+        tool_name = "git_clone_repository"
+        if tool_name not in self.registry.names:
+            return None
+        url, repository_name = target
+        if self._pending_git_clone_root is not None:
+            root = Path(self._pending_git_clone_root)
+        elif re.search(r"\b(?:рабоч(?:ий|его)\s+стол|desktop)\b", user_text, re.IGNORECASE):
+            root = Path.home() / "Desktop"
+        else:
+            root = Path(workspace_path or (Path.home() / "Desktop"))
+        root = root.expanduser().resolve()
+        destination = root / repository_name
+        self._emit_progress(
+            "git_cloning",
+            turn_id=turn_id,
+            progress=35,
+            message=f"Cloning {url} directly with Git into {destination}.",
+            tool_names=[tool_name],
+        )
+        tool_call = {
+            "id": f"call_{uuid.uuid4().hex}",
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "arguments": json.dumps(
+                    {"url": url, "destination": str(destination), "shallow": True},
+                    ensure_ascii=False,
+                ),
+            },
+        }
+        context = ToolContext.create(
+            session_id=self.session_id,
+            turn_id=turn_id,
+            working_directory=root,
+            source="telegram_remote" if request_metadata.get("telegram_remote") else "assistant",
+            metadata={
+                "user_request": user_text,
+                "fast_path": "git_clone_repository",
+                **{
+                    key: request_metadata[key]
+                    for key in (
+                        "telegram_remote",
+                        "telegram_remote_chat_id",
+                        "telegram_remote_user_id",
+                    )
+                    if key in request_metadata
+                },
+            },
+        )
+        result = await self.runner.execute(tool_call, context=context)
+        self._pending_git_clone_root = None
+        response = build_assistant_response_from_tools(
+            [self._tool_result_record(tool_call, result)],
+            language=response_language,
+        )
+        self._emit_progress(
+            "finalizing",
+            turn_id=turn_id,
+            progress=100,
+            message="Git clone finished and the .git directory was verified.",
+            success=result.success,
+            fast_path="git_clone_repository",
+        )
+        return response
 
     def _budget_for_available_capacity(self) -> AgentBudget:
         """Scale useful work with independent model lanes, while keeping hard caps."""
@@ -1697,6 +1819,19 @@ class AgentService:
             if request_object is not None
             else ""
         )
+        fast_clone_response = await self._try_fast_git_clone(
+            user_text=user_text,
+            turn_id=turn_id,
+            response_language=response_language,
+            workspace_path=workspace_path or None,
+            request_metadata=(request_object.metadata if request_object is not None else {}),
+        )
+        if fast_clone_response is not None:
+            self.history.append({
+                "role": "assistant",
+                "content": fast_clone_response.display_text,
+            })
+            return fast_clone_response
         fast_forward_response = await self._try_fast_telegram_forward(
             user_text=user_text,
             turn_id=turn_id,
