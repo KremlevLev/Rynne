@@ -2428,5 +2428,6 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Кнопки установки ведут на `KremlevLev/rynne/releases/latest`, поэтому новый installer автоматически становится доступен без пересборки сайта.
 - [x] Добавлены mobile layout, `prefers-reduced-motion`, SEO metadata, sitemap, robots и отдельная Open Graph обложка.
 - [x] Фоновый canvas ограничен примерно 30 FPS и полностью засыпает вне viewport, чтобы сложная графика не превращалась в постоянную нагрузку.
-- [ ] Создать public GitHub repository `KremlevLev/rynne-web`, запушить сайт и импортировать его в Vercel.
+- [x] Создан public GitHub repository `KremlevLev/rynne-web`, сайт опубликован в ветке `main`.
+- [ ] Импортировать `rynne-web` в Vercel и проверить production deployment.
 - [ ] После первого деплоя установить фактический `NEXT_PUBLIC_SITE_URL` и подключить собственный домен.
