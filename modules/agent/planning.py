@@ -387,6 +387,7 @@ class PlanExecutor:
             Awaitable[None] | None,
         ]
         | None = None,
+        parent_context: ToolContext | None = None,
     ) -> PlanExecutionResult:
         validation = PlanValidator.validate(
             plan,
@@ -515,10 +516,20 @@ class PlanExecutor:
                     session_id=session_id,
                     turn_id=turn_id,
                     source="plan_executor",
+                    working_directory=(
+                        parent_context.working_directory
+                        if parent_context is not None
+                        else None
+                    ),
                     metadata={
                         "plan_id": plan.plan_id,
                         "step_id": step.step_id,
                         "goal": plan.goal,
+                        **(
+                            parent_context.metadata
+                            if parent_context is not None
+                            else {}
+                        ),
                     },
                 )
 

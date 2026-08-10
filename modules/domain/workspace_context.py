@@ -246,7 +246,8 @@ class WorkspaceContextResolver:
         request: UserRequest,
     ) -> WorkspaceSnapshot | None:
         explicit = request.metadata.get("workspace_path")
-        if explicit:
+        workspace_is_default = bool(request.metadata.get("workspace_is_default"))
+        if explicit and not workspace_is_default:
             root = self.find_project_root(
                 str(explicit),
                 require_marker=False,
@@ -281,6 +282,18 @@ class WorkspaceContextResolver:
                     path=root,
                     project_name=root.name,
                     source="request_path",
+                    active_window_title=request.active_window_title,
+                )
+        if explicit:
+            root = self.find_project_root(
+                str(explicit),
+                require_marker=False,
+            )
+            if root is not None:
+                return WorkspaceSnapshot(
+                    path=root,
+                    project_name=root.name,
+                    source="request_default",
                     active_window_title=request.active_window_title,
                 )
         return None

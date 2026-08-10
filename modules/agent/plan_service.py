@@ -15,6 +15,7 @@ from modules.agent.planning import (
     PlanStepStatus,
 )
 from modules.domain.results import ToolResult
+from modules.tools.base import ToolContext
 from modules.tools.runtime import (
     ToolRegistry,
     ToolRunner,
@@ -159,6 +160,7 @@ class PlanService:
             Awaitable[None] | None,
         ]
         | None = None,
+        context: ToolContext | None = None,
     ) -> ToolResult:
         if not goal.strip():
             return ToolResult.failure(
@@ -209,6 +211,7 @@ class PlanService:
                 checkpoint_callback=(
                     checkpoint_callback
                 ),
+                parent_context=context,
             )
 
             self._completed_plan_ids.add(plan.plan_id)

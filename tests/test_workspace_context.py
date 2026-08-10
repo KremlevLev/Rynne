@@ -142,6 +142,29 @@ def test_workspace_is_added_to_model_content(
     assert str(tmp_path) in context
 
 
+def test_remote_default_workspace_yields_to_explicit_path(tmp_path: Path) -> None:
+    desktop = tmp_path / "Desktop"
+    downloads = tmp_path / "Downloads"
+    desktop.mkdir()
+    downloads.mkdir()
+    resolver = WorkspaceContextResolver(
+        foreground_provider=lambda: None,
+    )
+    request = UserRequest.from_text(
+        f"Сохрани в {downloads}",
+        metadata={
+            "workspace_path": str(desktop),
+            "workspace_is_default": True,
+        },
+    )
+
+    snapshot = resolver.enrich(request)
+
+    assert snapshot is not None
+    assert snapshot.path == downloads.resolve()
+    assert snapshot.source == "request_path"
+
+
 def test_runner_injects_workspace_into_supported_tool(
     tmp_path: Path,
 ) -> None:
@@ -212,8 +235,6 @@ def test_terminal_process_runs_inside_workspace(
     monkeypatch,
 ) -> None:
     import subprocess
-    from modules.tools import executor
-
     captured: dict[str, object] = {}
 
     def fake_run(command, **kwargs):
@@ -226,11 +247,6 @@ def test_terminal_process_runs_inside_workspace(
             stderr=b"",
         )
 
-    monkeypatch.setattr(
-        executor,
-        "prompt_hitl_permission",
-        lambda title, details: True,
-    )
     monkeypatch.setattr(
         subprocess,
         "run",

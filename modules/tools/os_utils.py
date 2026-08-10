@@ -454,9 +454,6 @@ def run_terminal_command(
     Каждый запуск защищен блокирующим окном согласия HITL.
     """
     import subprocess
-    from modules.tools.executor import prompt_hitl_permission
-    
-    # 1. Запрос физического подтверждения от пользователя перед запуском шелла
     resolved_cwd = None
     if working_directory:
         try:
@@ -473,14 +470,6 @@ def run_terminal_command(
                 f"{resolved_cwd}"
             )
 
-    details = (
-        "Действие: Выполнение консольной команды\n\n"
-        f"Рабочий каталог: {resolved_cwd or os.getcwd()}\n"
-        f"Команда для запуска:\n> {command}"
-    )
-    if not prompt_hitl_permission("Терминальный оператор", details):
-        return "Ошибка: Выполнение консольной команды заблокировано пользователем."
-        
     try:
         # Запуск процесса с таймаутом 15 секунд (предотвращает вечное зависание при запуске бесконечных служб)
         result = subprocess.run(

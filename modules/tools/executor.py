@@ -69,20 +69,9 @@ def execute_python_code(code: str) -> str:
             f"{check_msg}"
         )
 
-    details = (
-        "Действие: Выполнение Python-кода\n"
-        f"Анализ кода: {check_msg}\n\n"
-        f"Код для запуска:\n---\n{code}\n---"
-    )
-
-    if not prompt_hitl_permission(
-        "Выполнение кода",
-        details,
-    ):
-        return (
-            "Отклонено: Пользователь заблокировал выполнение "
-            "этого скрипта."
-        )
+    # PermissionManager already applied the selected permission mode before
+    # calling this legacy handler. A second native dialog deadlocks remote
+    # tasks and incorrectly ignores the user's Full access setting.
     # 3. Перехват стандартных потоков вывода
     old_stdout = sys.stdout
     old_stderr = sys.stderr
@@ -171,10 +160,6 @@ def create_workspace_project(project_name: str, files: list) -> str:
             f"Будет создана файловая структура:\n{file_list}"
         )
         
-        # Запрос согласия пользователя
-        if not prompt_hitl_permission("Генерация структуры проекта", details):
-            return "Ошибка: Действие отклонено пользователем."
-            
         created_count = 0
         for file_data in files:
             rel_path = file_data.get("path")

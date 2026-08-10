@@ -2502,6 +2502,21 @@ class AgentService:
                             if request_object is not None
                             else None
                         ),
+                        "telegram_remote": (
+                            bool(request_object.metadata.get("telegram_remote"))
+                            if request_object is not None
+                            else False
+                        ),
+                        "telegram_remote_chat_id": (
+                            request_object.metadata.get("telegram_remote_chat_id")
+                            if request_object is not None
+                            else None
+                        ),
+                        "telegram_remote_user_id": (
+                            request_object.metadata.get("telegram_remote_user_id")
+                            if request_object is not None
+                            else None
+                        ),
                         "proactive_suggestion_accepted": (
                             bool(
                                 request_object.metadata.get(

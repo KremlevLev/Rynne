@@ -150,6 +150,7 @@ class DirectRequestExecutor:
             expected_window=(
                 request.active_window_title
             ),
+            working_directory=request.metadata.get("workspace_path"),
             metadata={
                 "strategy": (
                     decision.strategy.value
@@ -161,6 +162,9 @@ class DirectRequestExecutor:
                     request.request_id
                 ),
                 "direct_execution": True,
+                "telegram_remote": bool(request.metadata.get("telegram_remote")),
+                "telegram_remote_chat_id": request.metadata.get("telegram_remote_chat_id"),
+                "telegram_remote_user_id": request.metadata.get("telegram_remote_user_id"),
                 "proactive_suggestion_accepted": (
                     bool(
                         request.metadata.get(

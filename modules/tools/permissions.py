@@ -70,7 +70,7 @@ class PermissionRequest:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "operation_id": self.operation_id,
             "tool_name": (
                 self.policy_context.tool_name
@@ -106,6 +106,14 @@ class PermissionRequest:
             "granted": self.granted,
             "resolution": self.resolution,
         }
+        for key in (
+            "telegram_remote",
+            "telegram_remote_chat_id",
+            "telegram_remote_user_id",
+        ):
+            if key in self.policy_context.metadata:
+                payload[key] = self.policy_context.metadata[key]
+        return payload
 
 
 class PermissionManager:

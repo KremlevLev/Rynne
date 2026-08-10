@@ -227,13 +227,16 @@ def test_read_messages_without_chat_returns_global_recent_messages(monkeypatch, 
 def test_business_mcp_surface_and_send_security() -> None:
     tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
     assert set(tools) == {
-        "get_status", "list_chats", "poll_control_commands", "read_messages",
-        "resolve_chat", "send_control_reply", "send_message",
+        "get_status", "list_chats", "poll_control_approvals",
+        "poll_control_commands", "read_messages", "resolve_chat",
+        "send_control_approval", "send_control_reply", "send_message",
     }
     assert tools["read_messages"].annotations.readOnlyHint is True
     assert tools["resolve_chat"].annotations.readOnlyHint is True
     assert tools["send_message"].annotations.readOnlyHint is False
     assert tools["poll_control_commands"].annotations.readOnlyHint is True
+    assert tools["poll_control_approvals"].annotations.readOnlyHint is True
+    assert tools["send_control_approval"].annotations.readOnlyHint is False
     assert tools["send_control_reply"].annotations.readOnlyHint is False
 
     name = "mcp_telegram_business_send_message"
@@ -247,7 +250,41 @@ def test_start_text_explains_pairing_and_authorized_usage() -> None:
     assert "Настройки" in pairing
     authorized = _control_start_text(123456789, authorized=True)
     assert "Nova Remote подключена" in authorized
-    assert "обычным сообщением" in authorized
+    assert "обычными фразами" in authorized
+    assert "/status" in authorized
+    assert "/stop" in authorized
+
+
+def test_authorized_callback_becomes_remote_approval(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(tmp_path / "approvals.sqlite3"))
+    monkeypatch.setenv("TELEGRAM_CONTROL_USER_IDS", "42")
+    calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        business_server,
+        "_api",
+        lambda method, payload=None: calls.append((method, payload or {})) or True,
+    )
+    connection = _connect()
+    try:
+        _store_update(connection, {
+            "update_id": 501,
+            "callback_query": {
+                "id": "callback-1",
+                "from": {"id": 42},
+                "data": "nova:approve:operation_abc",
+                "message": {
+                    "message_id": 11,
+                    "chat": {"id": 42, "type": "private"},
+                },
+            },
+        })
+        connection.commit()
+        row = connection.execute("SELECT * FROM control_approvals").fetchone()
+        assert row["operation_id"] == "operation_abc"
+        assert row["decision"] == "approve"
+        assert [call[0] for call in calls] == ["answerCallbackQuery", "editMessageReplyMarkup"]
+    finally:
+        connection.close()
 
 
 def test_authorized_bot_message_becomes_remote_command(monkeypatch, tmp_path: Path) -> None:
@@ -327,9 +364,11 @@ def test_business_mcp_stdio_discovery_does_not_contact_telegram() -> None:
             assert gateway.get_available_tools() == {
                 "mcp_telegram_business_get_status",
                 "mcp_telegram_business_list_chats",
+                "mcp_telegram_business_poll_control_approvals",
                 "mcp_telegram_business_poll_control_commands",
                 "mcp_telegram_business_read_messages",
                 "mcp_telegram_business_resolve_chat",
+                "mcp_telegram_business_send_control_approval",
                 "mcp_telegram_business_send_control_reply",
                 "mcp_telegram_business_send_message",
             }

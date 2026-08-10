@@ -905,6 +905,21 @@ async def async_main() -> None:
     ) -> None:
         if NOVA_DESKTOP_UI:
             desktop_service.publish(event_type, payload)
+        remote_chat_id = payload.get("telegram_remote_chat_id")
+        if event_type == "approval_requested" and remote_chat_id is None:
+            current_request = request_service.current_request
+            if current_request is not None:
+                remote_chat_id = current_request.metadata.get("telegram_remote_chat_id")
+        if event_type == "approval_requested" and remote_chat_id is not None:
+            try:
+                approval_payload = dict(payload)
+                approval_payload["telegram_remote_chat_id"] = int(remote_chat_id)
+                asyncio.get_running_loop().create_task(
+                    send_telegram_remote_approval(approval_payload),
+                    name="nova-telegram-approval-request",
+                )
+            except RuntimeError:
+                logger.warning("Could not schedule Telegram approval outside the event loop.")
         if (
             NOVA_PROACTIVE_ENABLED
             and "workflow_suggested"
@@ -1231,6 +1246,11 @@ async def async_main() -> None:
                 tool_name
             ],
         )
+
+    execute_plan_definition = registry.get("execute_plan")
+    if execute_plan_definition is not None:
+        # Nested steps inherit the remote workspace and approval destination.
+        execute_plan_definition.inject_context = True
 
     for tool_schema in background_plan_tools:
         tool_name = (
@@ -1571,6 +1591,24 @@ async def async_main() -> None:
             logger.warning("Telegram Remote reply failed: %s", result.message)
         return result.success
 
+    async def send_telegram_remote_approval(payload: dict) -> bool:
+        if mcp_gateway is None:
+            return False
+        tool_name = "mcp_telegram_business_send_control_approval"
+        if tool_name not in mcp_gateway.get_available_tools():
+            return False
+        result = await mcp_gateway.call_tool(
+            tool_name,
+            {
+                "chat_id": int(payload["telegram_remote_chat_id"]),
+                "operation_id": str(payload["operation_id"]),
+                "text": str(payload.get("message") or "Подтвердите действие."),
+            },
+        )
+        if not result.success:
+            logger.warning("Telegram Remote approval request failed: %s", result.message)
+        return result.success
+
     async def handle_request_response(
         request: UserRequest,
         response: AssistantResponse,
@@ -1739,8 +1777,32 @@ async def async_main() -> None:
         poll_tool = "mcp_telegram_business_poll_control_commands"
         if poll_tool not in mcp_gateway.get_available_tools():
             return
+        approval_poll_tool = "mcp_telegram_business_poll_control_approvals"
+        remote_desktop = Path.home() / "Desktop"
+        if not remote_desktop.is_dir():
+            remote_desktop = Path.home()
         while not runtime.shutdown_event.is_set():
             try:
+                if approval_poll_tool in mcp_gateway.get_available_tools():
+                    approval_result = await mcp_gateway.call_tool(
+                        approval_poll_tool,
+                        {"limit": 10},
+                    )
+                    approval_payload = approval_result.data.get("structured_content")
+                    approvals = (
+                        approval_payload.get("approvals")
+                        if isinstance(approval_payload, dict)
+                        else None
+                    )
+                    if approval_result.success and isinstance(approvals, list):
+                        for approval in approvals:
+                            if not isinstance(approval, dict):
+                                continue
+                            operation_id = str(approval.get("operation_id") or "")
+                            if approval.get("decision") == "approve":
+                                runner.permission_manager.confirm(operation_id)
+                            else:
+                                runner.permission_manager.deny(operation_id)
                 result = await mcp_gateway.call_tool(poll_tool, {"limit": 10})
                 payload = result.data.get("structured_content")
                 commands = payload.get("commands") if isinstance(payload, dict) else None
@@ -1753,6 +1815,36 @@ async def async_main() -> None:
                         user_id = command.get("user_id")
                         if not text or chat_id is None or user_id is None:
                             continue
+                        command_name = text.casefold().split(maxsplit=1)[0]
+                        if command_name == "/stop":
+                            cancelled = await request_service.cancel_current()
+                            await send_telegram_remote_reply(
+                                int(chat_id),
+                                "Текущая задача остановлена." if cancelled else "Сейчас нет активной задачи.",
+                            )
+                            continue
+                        if command_name == "/status":
+                            current = request_service.current_request
+                            status_text = (
+                                f"Выполняю: {current.text[:500]}"
+                                if current is not None
+                                else "Nova свободна."
+                            )
+                            status_text += f"\nВ очереди: {input_coordinator.queued_requests}."
+                            await send_telegram_remote_reply(int(chat_id), status_text)
+                            continue
+                        if command_name == "/mode":
+                            labels = {
+                                "full_access": "Полный доступ",
+                                "risky_only": "Спрашивать только для рискованных действий",
+                                "always_ask": "Спрашивать всегда",
+                            }
+                            mode = runner.permission_manager.mode.value
+                            await send_telegram_remote_reply(
+                                int(chat_id),
+                                "Режим доступа: " + labels.get(mode, mode) + ".",
+                            )
+                            continue
                         request = await input_coordinator.submit_text(
                             text,
                             source=RequestSource.API,
@@ -1762,6 +1854,10 @@ async def async_main() -> None:
                                 "telegram_remote_chat_id": int(chat_id),
                                 "telegram_remote_user_id": int(user_id),
                                 "telegram_remote_username": str(command.get("username") or ""),
+                                "workspace_path": str(remote_desktop),
+                                "workspace_name": "Desktop",
+                                "workspace_locked": True,
+                                "workspace_is_default": True,
                             },
                         )
                         if request is not None:
