@@ -25,6 +25,9 @@ def test_core_config_imports() -> None:
     assert hasattr(core.config, "SYSTEM_PROMPT")
     assert "one to three short sentences" in core.config.SYSTEM_PROMPT
     assert "never dump a capability catalogue" in core.config.SYSTEM_PROMPT
+    assert "strict Jarvis-style response contract" in core.config.SYSTEM_PROMPT
+    assert "Exhaust distinct safe execution paths" in core.config.SYSTEM_PROMPT
+    assert "Never expose raw tool JSON" in core.config.SYSTEM_PROMPT
 
 
 def test_domain_modules_import() -> None:

@@ -1,10 +1,94 @@
 # modules/application/reporting.py
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
 from modules.domain.results import AssistantResponse
+
+
+def _structured_payload(result: dict[str, Any]) -> dict[str, Any]:
+    data = result.get("data")
+    if isinstance(data, dict):
+        structured = data.get("structured_content")
+        if isinstance(structured, dict):
+            return structured
+
+    message = str(result.get("message") or "").strip()
+    if message.startswith("{") and message.endswith("}"):
+        try:
+            parsed = json.loads(message)
+        except (ValueError, TypeError):
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _compact_message(message: str, *, fallback: str) -> str:
+    cleaned = " ".join(str(message).split()).strip()
+    if not cleaned or (cleaned.startswith("{") and cleaned.endswith("}")):
+        return fallback
+    if len(cleaned) > 240:
+        return cleaned[:237].rstrip() + "..."
+    return cleaned
+
+
+def _telegram_summary(
+    records: list[dict[str, Any]],
+    *,
+    language: str,
+) -> tuple[str, bool] | None:
+    telegram_records = [
+        record
+        for record in records
+        if "telegram" in str(record.get("name") or "").casefold()
+    ]
+    if not telegram_records:
+        return None
+
+    for record in reversed(telegram_records):
+        name = str(record.get("name") or "").casefold()
+        result = _result_from_record(record)
+        payload = _structured_payload(result)
+        if name.endswith("send_message") and result.get("success"):
+            arguments = record.get("arguments")
+            if not isinstance(arguments, dict):
+                arguments = {}
+            recipient = str(
+                payload.get("chat")
+                or payload.get("username")
+                or arguments.get("chat_identifier")
+                or ""
+            ).strip()
+            if language == "en":
+                return (
+                    f"Done. Message sent{f' to {recipient}' if recipient else ''}.",
+                    True,
+                )
+            return (
+                "Готово. Сообщение отправлено"
+                + (f" пользователю {recipient}" if recipient else "")
+                + ".",
+                True,
+            )
+
+    last_result = _result_from_record(telegram_records[-1])
+    payload = _structured_payload(last_result)
+    if payload.get("status") == "not_found":
+        query = str(payload.get("query") or "").strip()
+        if language == "en":
+            return (
+                f"I couldn't find {query or 'that chat'}. Send the exact @username.",
+                False,
+            )
+        return (
+            f"Не нашла {f'«{query}»' if query else 'этот чат'}. "
+            "Назови точный @username.",
+            False,
+        )
+    return None
 
 
 @dataclass(slots=True)
@@ -103,9 +187,9 @@ def _specialized_speech_summary(
             or "Причина ошибки не указана."
         )
 
-        return (
-            "Сэр, операция завершилась с ошибкой. "
-            + message
+        return "Не получилось. " + _compact_message(
+            message,
+            fallback="Инструмент завершился с ошибкой.",
         )
 
     tool_names = {
@@ -114,38 +198,28 @@ def _specialized_speech_summary(
     }
 
     if "write_in_application" in tool_names:
-        return (
-            "Сэр, приложение открыто, и текст введён."
-        )
+        return "Готово. Текст введён и проверен."
 
     if "type_text" in tool_names:
-        return (
-            "Сэр, текст введён в активное окно."
-        )
+        return "Готово. Текст введён в активное окно."
 
     if "create_workspace_project" in tool_names:
-        return (
-            "Сэр, проект успешно создан. "
-            "Подробности показаны на экране."
-        )
+        return "Готово. Проект создан."
 
     if "run_terminal_command" in tool_names:
-        return (
-            "Сэр, терминальная команда выполнена. "
-            "Результат показан на экране."
-        )
+        return "Готово. Команда выполнена."
 
     if "set_reminder" in tool_names:
-        return "Сэр, напоминание установлено."
+        return "Готово. Напоминание установлено."
 
     if "open_application" in tool_names:
-        return "Сэр, приложение запущено."
+        return "Готово. Приложение запущено."
 
     if "open_application_batch" in tool_names:
         return "Несколько приложений запущены."
 
     if "close_application" in tool_names:
-        return "Сэр, приложение закрыто."
+        return "Готово. Приложение закрыто."
 
     return None
 
@@ -157,7 +231,11 @@ def _english_result_message(
 ) -> str:
     """Keep deterministic English reports English, even for localized tools."""
     message = str(result.get("message") or "").strip()
-    if message and not any("А" <= char <= "я" or char in "Ёё" for char in message):
+    if (
+        message
+        and not (message.startswith("{") and message.endswith("}"))
+        and not any("А" <= char <= "я" or char in "Ёё" for char in message)
+    ):
         return message
 
     data = result.get("data")
@@ -237,18 +315,23 @@ def _build_english_tool_execution_summary(
             verification_suffix = ""
 
         lines.append(
-            f"{status} — {english_names.get(tool_name, tool_name)}: "
-            f"{_english_result_message(result, success=success)}"
+            f"{status}: {_english_result_message(result, success=success)}"
             f"{verification_suffix}"
         )
 
     if budget_exhausted:
         lines.append("The agent step limit was reached.")
-    lines.append(
-        "Total: "
-        f"successful — {successful_count}, failed — {failed_count}, "
-        f"not independently verified — {unverified_count}."
-    )
+    if budget_exhausted:
+        lines = ["The agent step limit was reached."]
+    elif failed_count:
+        lines = [
+            next(
+                line for line in reversed(lines)
+                if line.startswith("Failed:")
+            )
+        ]
+    elif len(lines) > 1:
+        lines = [lines[-1]]
 
     if failed_count:
         speech_text = f"The action finished with {failed_count} error(s)."
@@ -293,6 +376,32 @@ def build_tool_execution_summary(
     budget_exhausted: bool = False,
     language: str = "ru",
 ) -> ToolExecutionSummary:
+    telegram_summary = _telegram_summary(records, language=language)
+    if telegram_summary is not None:
+        text, completed = telegram_summary
+        failed_count = sum(
+            not bool(_result_from_record(record).get("success"))
+            for record in records
+        )
+        successful_count = len(records) - failed_count
+        return ToolExecutionSummary(
+            display_text=text,
+            speech_text=text,
+            success=completed and failed_count == 0 and not budget_exhausted,
+            error_code=(
+                "AGENT_BUDGET_EXHAUSTED"
+                if budget_exhausted
+                else "GOAL_INCOMPLETE"
+                if not completed
+                else "ONE_OR_MORE_TOOLS_FAILED"
+                if failed_count
+                else None
+            ),
+            successful_count=successful_count,
+            failed_count=failed_count,
+            unverified_count=0,
+        )
+
     if language == "en":
         return _build_english_tool_execution_summary(
             records,
@@ -306,7 +415,7 @@ def build_tool_execution_summary(
                 "инструментов нет."
             ),
             speech_text=(
-                "Сэр, подтверждённых результатов нет."
+                "Подтверждённых результатов пока нет."
             ),
             success=False,
             error_code="NO_CONFIRMED_TOOL_RESULTS",
@@ -362,12 +471,12 @@ def build_tool_execution_summary(
             verification_suffix = ""
 
         lines.append(
-            (
-                f"{status} — "
-                f"{_human_tool_name(tool_name)}: "
-                f"{message}"
-                f"{verification_suffix}"
+            f"{status}: "
+            + _compact_message(
+                message,
+                fallback=("Готово." if success else "Действие не выполнено."),
             )
+            + verification_suffix
         )
 
     if budget_exhausted:
@@ -375,14 +484,19 @@ def build_tool_execution_summary(
             "Лимит агентных шагов был достигнут."
         )
 
-    lines.append(
-        (
-            f"Итого: успешно — {successful_count}, "
-            f"с ошибкой — {failed_count}, "
-            f"без дополнительной проверки — "
-            f"{unverified_count}."
-        )
-    )
+    # Подробные инструменты, счётчики и timings уже видны в execution timeline.
+    # Финальная реплика Nova должна оставаться короткой и человеческой.
+    if budget_exhausted:
+        lines = ["Лимит агентных шагов был достигнут."]
+    elif failed_count:
+        lines = [
+            next(
+                line for line in reversed(lines)
+                if line.startswith("Ошибка:")
+            )
+        ]
+    elif len(lines) > 1:
+        lines = [lines[-1]]
 
     speech_text = _specialized_speech_summary(
         records,
@@ -392,14 +506,11 @@ def build_tool_execution_summary(
     if speech_text is None:
         if failed_count > 0:
             speech_text = (
-                f"Сэр, операция завершена. "
-                f"Ошибок: {failed_count}."
+                f"Не получилось. Ошибок: {failed_count}."
             )
         else:
             speech_text = (
-                f"Сэр, операция выполнена. "
-                f"Успешных действий: "
-                f"{successful_count}."
+                "Готово."
             )
 
     if budget_exhausted:

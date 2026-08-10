@@ -158,6 +158,50 @@ def test_unverified_result_is_counted() -> None:
     )
 
 
+def test_telegram_send_has_short_human_summary() -> None:
+    result = ToolResult.ok(
+        '{"sent": true, "chat": "@vladosik585", "message_id": 42}',
+        data={
+            "structured_content": {
+                "sent": True,
+                "chat": "@vladosik585",
+                "message_id": 42,
+            }
+        },
+    )
+    response = build_assistant_response_from_tools([
+        create_record("mcp_telegram_business_send_message", result)
+    ])
+
+    assert response.display_text == (
+        "Готово. Сообщение отправлено пользователю @vladosik585."
+    )
+    assert "message_id" not in response.display_text
+    assert "{" not in response.display_text
+
+
+def test_telegram_not_found_asks_for_exact_username() -> None:
+    result = ToolResult.ok(
+        '{"status": "not_found", "query": "Влад"}',
+        data={
+            "structured_content": {
+                "status": "not_found",
+                "query": "Влад",
+                "candidates": [],
+            }
+        },
+    )
+    response = build_assistant_response_from_tools([
+        create_record("mcp_telegram_business_resolve_chat", result)
+    ])
+
+    assert response.display_text == (
+        "Не нашла «Влад». Назови точный @username."
+    )
+    assert not response.success
+    assert "instruction" not in response.display_text
+
+
 def test_reporting_does_not_need_llm() -> None:
     """
     Сам факт синхронного вызова подтверждает, что reporting не
@@ -179,7 +223,7 @@ def test_reporting_does_not_need_llm() -> None:
     assert response.success
     assert (
         response.speech_text
-        == "Сэр, напоминание установлено."
+        == "Готово. Напоминание установлено."
     )
 
 
@@ -204,6 +248,6 @@ def test_english_reporting_does_not_leak_russian_wrapper_text() -> None:
     )
 
     assert response.success
-    assert "Completed — Write in application" in response.display_text
+    assert "Completed: The action completed successfully." in response.display_text
     assert "[verified]" in response.display_text
     assert "The application is open" in response.speech_text
