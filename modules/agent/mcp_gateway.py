@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import socket
 import time
 from contextlib import AsyncExitStack
@@ -30,6 +31,30 @@ from modules.agent.mcp_security import (
 from modules.tools.base import RiskLevel, ToolCategory
 
 logger = logging.getLogger("MCPGateway")
+
+
+def _redact_mcp_error(message: object, config: "MCPServerConfig") -> str:
+    """Remove credentials from MCP failures before logs or UI see them."""
+    clean = str(message)
+    clean = re.sub(
+        r"https://api\.telegram\.org/bot[^/\s]+/",
+        "https://api.telegram.org/bot[REDACTED]/",
+        clean,
+        flags=re.IGNORECASE,
+    )
+    clean = re.sub(
+        r"\b\d{5,}:[A-Za-z0-9_-]{20,}\b",
+        "[REDACTED_TELEGRAM_TOKEN]",
+        clean,
+    )
+    for key, value in config.env.items():
+        if (
+            value
+            and len(value) >= 8
+            and any(marker in key.casefold() for marker in ("token", "secret", "api_key"))
+        ):
+            clean = clean.replace(value, "[REDACTED]")
+    return clean
 
 
 @dataclass(slots=True)
@@ -791,7 +816,7 @@ class MCPGateway:
         if last_error is not None:
             return ToolResult.failure(
                 "MCP_TOOL_ERROR",
-                f"MCP tool '{actual_tool_name}' failed: {last_error}",
+                f"MCP tool '{actual_tool_name}' failed: {_redact_mcp_error(last_error, config)}",
                 retryable=True,
             )
         return ToolResult.failure(
@@ -894,6 +919,7 @@ class MCPGateway:
             message = (
                 f"MCP tool '{tool_name}' returned no text."
             )
+        message = _redact_mcp_error(message, config)
 
         data = {
             "structured_content": structured_content,

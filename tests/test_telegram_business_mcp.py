@@ -237,6 +237,30 @@ def test_business_mcp_surface_and_send_security() -> None:
     assert infer_mcp_tool_category(name, "Send a Telegram message") == ToolCategory.NETWORK_WRITE
 
 
+def test_telegram_api_error_keeps_description_without_leaking_token(monkeypatch) -> None:
+    class FakeResponse:
+        ok = False
+        status_code = 400
+        url = "https://api.telegram.org/bot123456:super-secret-token/sendMessage"
+
+        @staticmethod
+        def json() -> dict:
+            return {
+                "ok": False,
+                "description": "Bad Request: chat not found",
+            }
+
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:super-secret-token")
+    monkeypatch.setattr(business_server.requests, "post", lambda *args, **kwargs: FakeResponse())
+
+    with pytest.raises(RuntimeError) as exc_info:
+        business_server._api("sendMessage", {"chat_id": 1, "text": "hello"})
+
+    message = str(exc_info.value)
+    assert message == "Telegram API sendMessage failed (400): Bad Request: chat not found"
+    assert "super-secret-token" not in message
+
+
 def test_business_mcp_stdio_discovery_does_not_contact_telegram() -> None:
     async def scenario() -> None:
         gateway = MCPGateway(max_retries=1)

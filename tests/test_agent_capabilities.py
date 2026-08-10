@@ -153,6 +153,34 @@ def test_explicit_telegram_message_uses_fast_path() -> None:
     ]
 
 
+def test_telegram_failure_explanation_uses_real_previous_error() -> None:
+    registry = ToolRegistry()
+    agent = AgentService(
+        None,
+        registry,
+        ToolRunner(registry),
+        isolated_history=True,
+    )
+    agent._last_telegram_failure = {
+        "recipient": "s3kvoiyyas",
+        "message": "IDI NAHUI",
+        "error": (
+            "Telegram Business chat '7262783154' has not been observed yet. "
+            "Ask that person to send a message after the bot is connected."
+        ),
+    }
+
+    response = agent._telegram_failure_explanation(
+        "почему не дало",
+        response_language="ru",
+    )
+
+    assert response is not None
+    assert not response.success
+    assert "Получатель найден" in response.display_text
+    assert "неправиль" not in response.display_text
+
+
 class RefusalThenToolLLM:
     def __init__(self) -> None:
         self.history: list[dict] = []

@@ -103,10 +103,20 @@ def _api(method: str, payload: dict[str, Any] | None = None) -> Any:
         json=payload or {},
         timeout=20,
     )
-    response.raise_for_status()
-    body = response.json()
-    if not body.get("ok"):
-        raise RuntimeError(str(body.get("description") or "Telegram API error"))
+    try:
+        body = response.json()
+    except (TypeError, ValueError):
+        body = {}
+    if not response.ok or not body.get("ok"):
+        description = str(
+            body.get("description")
+            or f"HTTP {response.status_code} without a Telegram error description"
+        )
+        # requests.HTTPError includes response.url, which contains the bot
+        # token. Never let that URL cross the MCP boundary.
+        raise RuntimeError(
+            f"Telegram API {method} failed ({response.status_code}): {description}"
+        )
     return body.get("result")
 
 

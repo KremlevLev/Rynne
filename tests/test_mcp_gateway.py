@@ -795,6 +795,34 @@ def test_mcp_gateway_does_not_retry_network_writes_and_keeps_error() -> None:
     asyncio.run(run_test())
 
 
+def test_mcp_gateway_redacts_telegram_token_from_exception() -> None:
+    async def run_test() -> None:
+        gateway = MCPGateway()
+        gateway.register_server(MCPServerConfig(
+            name="telegram_business",
+            command="python",
+            env={"TELEGRAM_BOT_TOKEN": "123456:abcdefghijklmnopqrstuvwxyz"},
+        ))
+
+        async def leak_token(config, request, tool_name) -> ToolResult:
+            raise RuntimeError(
+                "400 for https://api.telegram.org/"
+                "bot123456:abcdefghijklmnopqrstuvwxyz/sendMessage"
+            )
+
+        gateway._call_tool_stdio = leak_token
+        result = await gateway.call_tool(
+            "mcp_telegram_business_send_message",
+            {"chat": "XIII", "text": "hello"},
+        )
+
+        assert not result.success
+        assert "abcdefghijklmnopqrstuvwxyz" not in result.message
+        assert "bot[REDACTED]" in result.message
+
+    asyncio.run(run_test())
+
+
 def test_explicit_mcp_config_resolves_env(
     tmp_path,
     monkeypatch,

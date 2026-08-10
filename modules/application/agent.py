@@ -704,6 +704,7 @@ class AgentService:
         # into every model context.
         self._sticky_tool_names: list[str] = []
         self._pending_telegram_message: str | None = None
+        self._last_telegram_failure: dict[str, str] | None = None
 
     def _budget_for_available_capacity(self) -> AgentBudget:
         """Scale useful work with independent model lanes, while keeping hard caps."""
@@ -1008,9 +1009,54 @@ class AgentService:
         records.append(self._tool_result_record(send_call, sent))
         if sent.success:
             self._pending_telegram_message = None
+            self._last_telegram_failure = None
+        else:
+            self._last_telegram_failure = {
+                "recipient": exact_target,
+                "message": message,
+                "error": sent.message,
+            }
         return build_assistant_response_from_tools(
             records,
             language=response_language,
+        )
+
+    def _telegram_failure_explanation(
+        self,
+        user_text: str,
+        *,
+        response_language: str,
+    ) -> AssistantResponse | None:
+        failure = self._last_telegram_failure
+        if failure is None:
+            return None
+        normalized = str(user_text).casefold()
+        asks_why = bool(re.search(
+            r"(?:\u043f\u043e\u0447\u0435\u043c\u0443|\u0438\u0437[- ]?\u0437\u0430 \u0447\u0435\u0433\u043e|\u0447\u0442\u043e \u0441\u043b\u0443\u0447\u0438\u043b\u043e\u0441\u044c|why|what happened)",
+            normalized,
+        ))
+        if not asks_why:
+            return None
+        error = failure["error"]
+        if "has not been observed" in error:
+            text = (
+                "Получатель найден, но Telegram Business не разрешил боту писать в этот чат. "
+                "Пользователь должен отправить новое сообщение после подключения бота, а чат должен быть включён в список разрешённых."
+                if response_language == "ru"
+                else "The recipient was found, but Telegram Business has not allowed the bot to write to this chat. "
+                "The person must send a new message after the bot is connected, and the chat must be included in its allowed recipients."
+            )
+        else:
+            text = (
+                f"Telegram отклонил отправку: {error}"
+                if response_language == "ru"
+                else f"Telegram rejected the send: {error}"
+            )
+        return AssistantResponse(
+            display_text=text,
+            speech_text=text,
+            success=False,
+            error_code="TELEGRAM_LAST_SEND_FAILED",
         )
 
     async def _try_fast_telegram_forward(
@@ -1526,6 +1572,17 @@ class AgentService:
                 "content": history_user_content,
             }
         )
+
+        telegram_failure = self._telegram_failure_explanation(
+            user_text,
+            response_language=response_language,
+        )
+        if telegram_failure is not None:
+            self.history.append({
+                "role": "assistant",
+                "content": telegram_failure.display_text,
+            })
+            return telegram_failure
 
         complexity = classify_complexity(
             user_text,
