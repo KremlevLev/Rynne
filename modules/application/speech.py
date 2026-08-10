@@ -111,6 +111,24 @@ def prepare_text_for_speech(
         line = line.replace("__", "")
         line = line.replace("`", "")
 
+        # В голосовой канал не должны попадать внутренние имена tools/MCP,
+        # snake_case поля и служебные идентификаторы. Экранный текст остаётся
+        # неизменным и по-прежнему содержит всю диагностику.
+        line = re.sub(
+            r"\b(?:mcp|browser|workflow|tool|telegram_business|open_application)"
+            r"(?:_[a-z0-9]+)+\b",
+            "инструмент",
+            line,
+            flags=re.IGNORECASE,
+        )
+        line = re.sub(
+            r"\b(?:chat_id|message_id|tool_call_id|operation_id)\b\s*[:=]?\s*\d*",
+            " ",
+            line,
+            flags=re.IGNORECASE,
+        )
+        line = re.sub(r"@[A-Za-z0-9_]{3,}", "имя пользователя", line)
+
         # Не читаем URL целиком.
         line = re.sub(
             r"https?://\S+",

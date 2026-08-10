@@ -641,6 +641,7 @@ export function App() {
   const [ttsSpeedDraft, setTtsSpeedDraft] = useState(1);
   const [ttsVoices, setTtsVoices] = useState<TtsVoice[]>([]);
   const [ttsPending, setTtsPending] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>(() => (
     readUiMode(typeof window === "undefined" ? null : window.localStorage)
@@ -741,6 +742,7 @@ export function App() {
           }
           if (event.event_type === "preferences") {
             setProactive(event.payload.proactive_vision_enabled === true);
+            setTtsEnabled(event.payload.tts_enabled !== false);
             const mode = event.payload.input_mode;
             if (typeof mode === "string") setInputMode(mode);
             setWakeWordAvailable(event.payload.wake_word_available === true);
@@ -1235,6 +1237,25 @@ export function App() {
     }
   }
 
+  async function setSpeechEnabled(enabled: boolean) {
+    setTtsPending(true);
+    try {
+      await transport.send("set_preference", {
+        key: "tts_enabled",
+        value: enabled,
+      });
+      setTtsEnabled(enabled);
+      setSettingsStatus(enabled
+        ? tx(locale, "Озвучка включена.", "Speech enabled.")
+        : tx(locale, "Озвучка выключена. Ответы останутся в чате.", "Speech disabled. Replies remain in chat."));
+    } catch (error) {
+      setTtsPending(false);
+      setSettingsStatus(
+        error instanceof Error ? error.message : tx(locale, "Не удалось переключить озвучку.", "Could not toggle speech."),
+      );
+    }
+  }
+
   const voiceActive = inputMode === "continuous";
   const wakeWordActive = inputMode === "wake_word";
   const voiceCaptureVisible = voiceActive || [
@@ -1672,11 +1693,22 @@ export function App() {
                 )}</p>
               </div>
               <div className="tts-language-options" aria-label={tx(locale, "Язык озвучки", "Speech language")}>
+                <button
+                  className={!ttsEnabled ? "active" : ""}
+                  onClick={() => void setSpeechEnabled(false)}
+                  disabled={ttsPending}
+                >
+                  <strong>{tx(locale, "Выкл.", "Off")}</strong>
+                  <small>{tx(locale, "Только текст", "Text only")}</small>
+                </button>
                 {(["auto", "ru", "en"] as const).map((language) => (
                   <button
                     key={language}
-                    className={ttsSettings.language === language ? "active" : ""}
-                    onClick={() => void saveTtsSettings({ language })}
+                    className={ttsEnabled && ttsSettings.language === language ? "active" : ""}
+                    onClick={() => {
+                      if (!ttsEnabled) void setSpeechEnabled(true);
+                      void saveTtsSettings({ language });
+                    }}
                     disabled={ttsPending}
                   >
                     <strong>{language === "auto" ? "Auto" : language.toUpperCase()}</strong>

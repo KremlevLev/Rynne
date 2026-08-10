@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 import logging
 import threading
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from modules.input_hub.models import (
@@ -15,6 +17,9 @@ from modules.input_hub.wake_word import WakeWordConfig
 
 
 logger = logging.getLogger("Preferences")
+PREFERENCES_PATH = Path(
+    os.getenv("NOVA_PREFERENCES_PATH", "data/preferences.json")
+)
 
 
 @dataclass(slots=True)
@@ -89,7 +94,7 @@ class PreferencesManager:
 
         self._selected_model: str | None = None
 
-        self._tts_enabled = True
+        self._tts_enabled = self._load_tts_enabled()
         self._cloud_enabled = True
         self._history_enabled = True
         self._proactive_vision_enabled = os.getenv(
@@ -211,7 +216,34 @@ class PreferencesManager:
     ) -> PreferencesSnapshot:
         with self._lock:
             self._tts_enabled = bool(enabled)
+            self._save_tts_enabled()
             return self.snapshot()
+
+    def _load_tts_enabled(self) -> bool:
+        try:
+            payload = json.loads(PREFERENCES_PATH.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and isinstance(payload.get("tts_enabled"), bool):
+                return bool(payload["tts_enabled"])
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+        return True
+
+    def _save_tts_enabled(self) -> None:
+        payload: dict[str, Any] = {}
+        try:
+            current = json.loads(PREFERENCES_PATH.read_text(encoding="utf-8"))
+            if isinstance(current, dict):
+                payload.update(current)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            pass
+        payload["tts_enabled"] = self._tts_enabled
+        PREFERENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = PREFERENCES_PATH.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(PREFERENCES_PATH)
 
     def set_history_enabled(
         self,

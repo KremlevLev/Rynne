@@ -1128,6 +1128,7 @@ class ProactiveSuggestionEngine:
                 return []
 
             sequence = " → ".join(pattern)
+            workflow_name = "Nova workflow " + fingerprint[:6]
             suggestion = ProactiveSuggestion(
                 event_id=f"proactive_{uuid.uuid4().hex}",
                 kind=kind,
@@ -1143,6 +1144,11 @@ class ProactiveSuggestionEngine:
                 ),
                 source_key=source_key,
                 importance="normal",
+                suggested_request=(
+                    f"Начни запись workflow с именем «{workflow_name}». "
+                    "Я повторю действие ещё раз, после чего остановлю запись."
+                ),
+                action_label="Начать запись",
             )
             self._store(suggestion)
             self._last_emitted[kind] = now

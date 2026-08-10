@@ -770,6 +770,9 @@ def test_repeated_tool_sequence_suggests_workflow_once() -> None:
         assert "open_application → write_in_application" in (
             first[0].message
         )
+        assert first[0].action_label == "Начать запись"
+        assert first[0].suggested_request
+        assert "Начни запись workflow" in first[0].suggested_request
         assert repeated == []
         database.close()
 

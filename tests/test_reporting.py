@@ -176,6 +176,7 @@ def test_telegram_send_has_short_human_summary() -> None:
     assert response.display_text == (
         "Готово. Сообщение отправлено пользователю @vladosik585."
     )
+    assert response.speech_text == "Готово. Сообщение отправлено."
     assert "message_id" not in response.display_text
     assert "{" not in response.display_text
 

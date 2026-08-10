@@ -41,6 +41,18 @@ def test_long_text_is_shortened() -> None:
     assert "Подробности показаны на экране" in prepared
 
 
+def test_internal_tool_names_are_not_spoken() -> None:
+    prepared = prepare_text_for_speech(
+        "mcp_telegram_business_send_message отправил сообщение; "
+        "chat_id=123, message_id=456, получатель @Vladosik585."
+    )
+
+    assert "mcp_" not in prepared
+    assert "chat_id" not in prepared
+    assert "message_id" not in prepared
+    assert "Vladosik585" not in prepared
+
+
 def test_speech_chunks_respect_limit() -> None:
     source = (
         "Первое предложение. "

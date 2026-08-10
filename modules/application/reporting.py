@@ -39,7 +39,7 @@ def _telegram_summary(
     records: list[dict[str, Any]],
     *,
     language: str,
-) -> tuple[str, bool] | None:
+) -> tuple[str, str, bool] | None:
     telegram_records = [
         record
         for record in records
@@ -65,12 +65,14 @@ def _telegram_summary(
             if language == "en":
                 return (
                     f"Done. Message sent{f' to {recipient}' if recipient else ''}.",
+                    "Done. The message was sent.",
                     True,
                 )
             return (
                 "Готово. Сообщение отправлено"
                 + (f" пользователю {recipient}" if recipient else "")
                 + ".",
+                "Готово. Сообщение отправлено.",
                 True,
             )
 
@@ -81,11 +83,13 @@ def _telegram_summary(
         if language == "en":
             return (
                 f"I couldn't find {query or 'that chat'}. Send the exact @username.",
+                "I couldn't find that chat. Send the exact username.",
                 False,
             )
         return (
             f"Не нашла {f'«{query}»' if query else 'этот чат'}. "
             "Назови точный @username.",
+            "Не нашла этот чат. Назови точное имя пользователя.",
             False,
         )
     return None
@@ -378,7 +382,7 @@ def build_tool_execution_summary(
 ) -> ToolExecutionSummary:
     telegram_summary = _telegram_summary(records, language=language)
     if telegram_summary is not None:
-        text, completed = telegram_summary
+        text, speech_text, completed = telegram_summary
         failed_count = sum(
             not bool(_result_from_record(record).get("success"))
             for record in records
@@ -386,7 +390,7 @@ def build_tool_execution_summary(
         successful_count = len(records) - failed_count
         return ToolExecutionSummary(
             display_text=text,
-            speech_text=text,
+            speech_text=speech_text,
             success=completed and failed_count == 0 and not budget_exhausted,
             error_code=(
                 "AGENT_BUDGET_EXHAUSTED"
