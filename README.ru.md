@@ -11,6 +11,8 @@
 [![Tests](https://img.shields.io/badge/tests-887%20passing-22C55E?style=for-the-badge)](#проверка)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#контроль-и-безопасность)
 
+[Сайт](https://rynne-web.vercel.app/) · [Скачать для Windows](https://github.com/KremlevLev/Rynne/releases/latest)
+
 [English](README.md) · **Русский**
 
 </div>
@@ -260,8 +262,8 @@ Orpheus, стили речи и кнопка предпрослушивания 
 перегружает ноутбук: русский работает локально, а английский использует существующий пул
 Groq-ключей без второй нейросети в оперативной памяти.
 
-Текущий PySide6-интерфейс запускается вместе с Rynne и остаётся рабочим
-fallback на время миграции. Он даёт один центр управления:
+Основной desktop-интерфейс Rynne построен на React + TypeScript + Tauri. Он даёт
+один центр управления:
 
 - диалог и история выполнения;
 - фоновые процессы и их логи;
@@ -270,22 +272,16 @@ fallback на время миграции. Он даёт один центр у�
 - состояние моделей и провайдеров;
 - proactive-уведомления и причины их появления.
 
-Интерфейс можно отключить:
-
-```env
-NOVA_DESKTOP_UI=false
-```
-
-Новый desktop-клиент развивается в `apps/desktop`: React + TypeScript отвечают
-за presentation layer, Tauri — за окно, установщик и обновления, а всё AI-ядро
-остаётся в Python.
+React + TypeScript отвечают за presentation layer, Tauri — за нативное окно и
+установщик, а AI-ядро остаётся в Python. Старые PySide6-модули сохраняются только
+как legacy-код и не запускаются вместе с основным desktop-приложением.
 
 ### Обычная установка на Windows
 
 Пользователю нужен только один файл:
 
 ```text
-Rynne_0.1.6_x64-setup.exe
+Rynne_1.0.0_x64-setup.exe
 ```
 
 Запустите installer обычным двойным кликом. Rynne установится для текущего
@@ -352,7 +348,7 @@ npm run installer
 собирает Tauri release и создаёт:
 
 ```text
-apps\desktop\src-tauri\target\release\bundle\nsis\Rynne_0.1.6_x64-setup.exe
+apps\desktop\src-tauri\target\release\bundle\nsis\Rynne_1.0.0_x64-setup.exe
 ```
 
 Core использует source fingerprint: повторная сборка пропускает PyInstaller,
@@ -531,7 +527,7 @@ npm test
 npm run build
 ```
 
-Текущий regression suite: **797 Python-тестов + 16 desktop-тестов + 8/8 acceptance-сценариев оркестратора**.
+Текущий regression suite: **887 Python-тестов + 24 desktop-теста + 8/8 acceptance-сценариев оркестратора**.
 
 Для проверки именно оркестратора без Groq, сети и реальных действий:
 

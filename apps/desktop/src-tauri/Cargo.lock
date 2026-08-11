@@ -2792,7 +2792,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "rynne-desktop"
-version = "0.1.6"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",

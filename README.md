@@ -11,6 +11,8 @@
 [![Tests](https://img.shields.io/badge/tests-887%20passing-22C55E?style=for-the-badge)](#verification)
 [![Local first](https://img.shields.io/badge/local--first-your%20computer-8B5CF6?style=for-the-badge)](#control-and-safety)
 
+[Website](https://rynne-web.vercel.app/) · [Download for Windows](https://github.com/KremlevLev/Rynne/releases/latest)
+
 **English** · [Русский](README.ru.md)
 
 </div>
@@ -173,7 +175,7 @@ Groq is also used for cloud speech recognition when configured. Rynne does not r
 For a normal installation you only need one file:
 
 ```text
-Rynne_0.1.6_x64-setup.exe
+Rynne_1.0.0_x64-setup.exe
 ```
 
 Run it with a regular double click. Rynne installs for the current Windows user, appears in the Start menu and Installed Apps, and does not require Python, Node.js, or Rust on the user's machine.
@@ -275,7 +277,7 @@ Without `?demo=1`, a browser preview correctly reports that Tauri Core is unavai
 For the complete native desktop application:
 
 ```powershell
-cd C:\Users\you\path\to\nova
+cd C:\Users\you\path\to\rynne
 .\scripts\dev-desktop.ps1
 ```
 
@@ -310,7 +312,7 @@ npm run installer
 The build compiles React, packages headless Python Core with PyInstaller, compiles the Tauri release shell, and creates:
 
 ```text
-apps\desktop\src-tauri\target\release\bundle\nsis\Rynne_0.1.6_x64-setup.exe
+apps\desktop\src-tauri\target\release\bundle\nsis\Rynne_1.0.0_x64-setup.exe
 ```
 
 Core uses a source fingerprint, so repeated builds skip PyInstaller when Python Core has not changed. Force a clean Core package with:
@@ -487,7 +489,7 @@ npm run build
 python -m tests.orchestrator_acceptance
 ```
 
-Current regression suite: **806 Python tests + 16 desktop tests + 8/8 orchestrator acceptance scenarios**.
+Current regression suite: **887 Python tests + 24 desktop tests + 8/8 orchestrator acceptance scenarios**.
 
 The acceptance suite exercises the production selector, tool schemas, capability registry, policies, runtime validation, and execution events without consuming provider credits. Add every new capability to `GOLDEN_SCENARIOS` in [`tests/orchestrator_acceptance.py`](tests/orchestrator_acceptance.py).
 

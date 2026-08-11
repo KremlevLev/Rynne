@@ -2429,5 +2429,14 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Добавлены mobile layout, `prefers-reduced-motion`, SEO metadata, sitemap, robots и отдельная Open Graph обложка.
 - [x] Фоновый canvas ограничен примерно 30 FPS и полностью засыпает вне viewport, чтобы сложная графика не превращалась в постоянную нагрузку.
 - [x] Создан public GitHub repository `KremlevLev/rynne-web`, сайт опубликован в ветке `main`.
-- [ ] Импортировать `rynne-web` в Vercel и проверить production deployment.
-- [ ] После первого деплоя установить фактический `NEXT_PUBLIC_SITE_URL` и подключить собственный домен.
+- [x] `rynne-web` импортирован в Vercel; production deployment доступен на `https://rynne-web.vercel.app/`.
+- [ ] Подключить собственный домен и заменить временный `rynne-web.vercel.app` в metadata.
+
+# Первый публичный релиз Rynne 1.0 (11.08.2026)
+
+- [x] Версии desktop package, Tauri shell, Rust crate и bundled Core синхронизированы на `1.0.0`.
+- [x] Добавлены `CHANGELOG.md` и двуязычные release notes с честными ограничениями первого релиза.
+- [x] README ведёт на production-сайт и актуальный Windows installer `Rynne_1.0.0_x64-setup.exe`.
+- [x] Добавлен tag-driven GitHub Actions pipeline: Python и desktop tests, сборка NSIS, SHA-256 и публикация GitHub Release.
+- [x] Локальная release-проверка пройдена: 887 Python tests, 24 desktop tests, Rust compile check, 8/8 acceptance; собран installer размером 625.1 MiB с SHA-256.
+- [ ] Подписать Windows installer сертификатом и включить Tauri updater для следующих релизов.
