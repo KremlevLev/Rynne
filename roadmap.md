@@ -2440,4 +2440,5 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Добавлен tag-driven GitHub Actions pipeline: Python и desktop tests, сборка NSIS, SHA-256 и публикация GitHub Release.
 - [x] Локальная release-проверка пройдена: 887 Python tests, 24 desktop tests, Rust compile check, 8/8 acceptance; собран installer размером 625.1 MiB с SHA-256.
 - [x] Первый clean-run выявил и исправил скрытую зависимость тестовых/injected LLM adapters от локальных API-ключей: пустой managed route больше не блокирует явно переданный adapter.
+- [x] Test dependencies вынесены в `requirements-test.txt`; clean GitHub runner больше не зависит от pytest, случайно установленного в локальной Python-среде.
 - [ ] Подписать Windows installer сертификатом и включить Tauri updater для следующих релизов.
