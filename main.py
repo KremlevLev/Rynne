@@ -170,6 +170,7 @@ import winsound
 
 from modules.application.agent import AgentService
 from modules.application.speech import SpeechService
+from modules.integrations.cloud_remote import RynneCloudRemoteClient
 from modules.audio.stt import VoiceListener
 from modules.brain.llm import NovaLLM
 from modules.brain.memory import LocalMemory
@@ -1573,6 +1574,8 @@ async def async_main() -> None:
         intent_router=agent.intent_router,
     )
 
+    cloud_remote = RynneCloudRemoteClient.from_env()
+
     # =========================================================
     # ОБРАБОТЧИК ГОТОВОГО ОТВЕТА
     #
@@ -1650,6 +1653,18 @@ async def async_main() -> None:
                 )
             except Exception:
                 logger.exception("Could not return Rynne response through Telegram Remote.")
+
+        cloud_task_id = str(request.metadata.get("rynne_cloud_task_id") or "")
+        if cloud_task_id and cloud_remote.configured:
+            try:
+                await asyncio.to_thread(
+                    cloud_remote.event,
+                    cloud_task_id,
+                    "completed" if response.success else "failed",
+                    result=response.display_text,
+                )
+            except Exception:
+                logger.exception("Could not return Rynne response through Cloud Remote.")
 
         preferences_snapshot = (
             preferences.snapshot()
@@ -1882,6 +1897,92 @@ async def async_main() -> None:
         telegram_remote_worker(),
         name="nova-telegram-remote",
     )
+
+    async def cloud_remote_worker() -> None:
+        if not cloud_remote.configured:
+            return
+        remote_desktop = Path.home() / "Desktop"
+        if not remote_desktop.is_dir():
+            remote_desktop = Path.home()
+        last_heartbeat = 0.0
+        while not runtime.shutdown_event.is_set():
+            try:
+                current = request_service.current_request
+                current_task_id = (
+                    str(current.metadata.get("rynne_cloud_task_id") or "")
+                    if current is not None
+                    else ""
+                )
+                now = time.monotonic()
+                if now - last_heartbeat >= 10:
+                    await asyncio.to_thread(
+                        cloud_remote.heartbeat,
+                        name=socket.gethostname() or "Rynne on Windows",
+                        version="1.0.0",
+                        status="busy" if current is not None else "idle",
+                        current_task_id=current_task_id,
+                        permission_mode=runner.permission_manager.mode.value,
+                    )
+                    last_heartbeat = now
+
+                if current is not None and current_task_id:
+                    remote_state = await asyncio.to_thread(
+                        cloud_remote.task_status,
+                        current_task_id,
+                    )
+                    if remote_state and remote_state.get("status") == "cancel_requested":
+                        if await request_service.cancel_current():
+                            await asyncio.to_thread(
+                                cloud_remote.event,
+                                current_task_id,
+                                "cancelled",
+                                result="Task cancelled from Telegram Remote.",
+                            )
+                elif current is None:
+                    task = await asyncio.to_thread(cloud_remote.next_task)
+                    if task:
+                        task_id = str(task.get("task_id") or "")
+                        text = str(task.get("text") or "").strip()
+                        if task_id and text:
+                            await asyncio.to_thread(
+                                cloud_remote.event,
+                                task_id,
+                                "running",
+                                message="Rynne Core accepted the task.",
+                            )
+                            request = await input_coordinator.submit_text(
+                                text,
+                                source=RequestSource.API,
+                                session_id=f"rynne_cloud:{task.get('chat_id', '')}",
+                                metadata={
+                                    "rynne_cloud_remote": True,
+                                    "rynne_cloud_task_id": task_id,
+                                    "workspace_path": str(remote_desktop),
+                                    "workspace_name": "Desktop",
+                                    "workspace_locked": True,
+                                    "workspace_is_default": True,
+                                },
+                            )
+                            if request is None:
+                                await asyncio.to_thread(
+                                    cloud_remote.event,
+                                    task_id,
+                                    "failed",
+                                    result="Rynne Core rejected the task before execution.",
+                                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("Cloud Remote is temporarily unavailable: %s", exc)
+            try:
+                await asyncio.wait_for(runtime.shutdown_event.wait(), timeout=2.0)
+            except asyncio.TimeoutError:
+                pass
+
+    cloud_remote_task = asyncio.create_task(
+        cloud_remote_worker(),
+        name="rynne-cloud-remote",
+    )
     wake_detector = WakeWordDetector(
         activity_callback=publish_voice_activity("wake_word"),
     )
@@ -2103,6 +2204,7 @@ async def async_main() -> None:
         voice_task.cancel()
         request_service_task.cancel()
         telegram_remote_task.cancel()
+        cloud_remote_task.cancel()
         desktop_bridge_task.cancel()
         wake_runtime_task.cancel()
         proactive_task.cancel()
@@ -2113,6 +2215,7 @@ async def async_main() -> None:
             voice_task,
             request_service_task,
             telegram_remote_task,
+            cloud_remote_task,
             wake_runtime_task,
             desktop_bridge_task,
             proactive_task,

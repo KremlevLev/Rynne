@@ -372,6 +372,20 @@ Rynne будет получать разрешённые новые сообще
 ботом. На том же экране можно добавить Tavily API Key для более качественного
 поиска в интернете.
 
+### Постоянно доступный Telegram Remote (опциональное облако)
+
+Приватный `rynne-cloud` может постоянно принимать Telegram webhook и хранить
+очередь задач. Команды `/status`, `/tasks`, `/last`, `/cancel` и `/devices`
+работают даже при выключенном ПК. Обычная задача остаётся в очереди и будет
+передана Core после подключения. Core делает только исходящие HTTPS-запросы, а
+облако не может обойти локальный режим разрешений или само запускать Windows tools.
+
+```env
+RYNNE_CLOUD_REMOTE_URL=https://your-private-relay.vercel.app
+RYNNE_CLOUD_DEVICE_ID=windows-primary
+RYNNE_CLOUD_DEVICE_TOKEN=replace-with-the-device-token
+```
+
 ### Личный Telegram через MCP (расширенный режим)
 
 В Rynne теперь есть опциональный локальный Telegram MCP для обычного аккаунта,

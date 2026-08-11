@@ -2446,3 +2446,10 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] GitHub Release `v1.0.0` опубликован: production NSIS installer и отдельный SHA-256 asset доступны через `releases/latest`; сайт автоматически ведёт на этот выпуск.
 - [x] Release notes `v1.0.0` переведены на продуктовый английский; русская документация оставлена отдельной ссылкой на `README.ru.md`.
 - [ ] Подписать Windows installer сертификатом и включить Tauri updater для следующих релизов.
+
+# Always-on Telegram Remote relay (11.08.2026)
+
+- [x] Добавлен публичный outbound-only клиент `RynneCloudRemoteClient`: heartbeat, получение задач, статусы, отмена и возврат результата без входящего порта на ПК.
+- [x] Cloud-задачи исполняются через обычный `InputCoordinator`, получают безопасный Desktop workspace и сохраняют выбранный локальный permission mode.
+- [x] При выключенном Core облачная очередь не теряет команду; после подключения Core автоматически забирает её и отправляет результат обратно.
+- [ ] Добавить pairing Cloud Remote прямо в desktop UI вместо ручных environment variables.

@@ -335,6 +335,21 @@ API does not expose arbitrary old history: a chat appears after a new message
 is observed through the connection. The same settings screen accepts a Tavily
 API key for higher-quality web search.
 
+### Always-on Telegram Remote (optional cloud relay)
+
+Rynne can use a private `rynne-cloud` deployment as an always-available Telegram
+webhook and task queue. The bot keeps answering `/status`, `/tasks`, `/last`,
+`/cancel`, and `/devices` while the PC is offline. Plain-text tasks wait in the
+queue and are picked up when Core reconnects. Core only makes outbound HTTPS
+requests; the relay cannot bypass local permission policy or execute Windows
+tools itself.
+
+```env
+RYNNE_CLOUD_REMOTE_URL=https://your-private-relay.vercel.app
+RYNNE_CLOUD_DEVICE_ID=windows-primary
+RYNNE_CLOUD_DEVICE_TOKEN=replace-with-the-device-token
+```
+
 ### Personal Telegram through MCP (advanced)
 
 Rynne ships an optional local Telegram MCP adapter for your real account. It can
