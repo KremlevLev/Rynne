@@ -182,6 +182,13 @@ INTERACTIVE_BROWSER_CONTEXT_MARKERS = (
     "openrouter", "опенроутер", "опен роутер",
     "активност", "аккаунт", "кабинет",
 )
+USER_BROWSER_SESSION_MARKERS = (
+    "sign in", "log in", "login", "sign up", "register", "oauth",
+    "continue with google", "google account", "microsoft account",
+    "войти", "вход", "авториз", "зарегистр", "регистрац",
+    "через google", "через гугл", "через microsoft",
+    "личный кабинет", "мой аккаунт", "моя активность", "мой профиль",
+)
 NON_INTERACTIVE_WEB_TOOLS = {
     "search_web_tavily",
     "scrape_webpage",
@@ -408,6 +415,12 @@ def request_prefers_interactive_browser(request_text: str) -> bool:
     )
 
 
+def request_requires_user_browser_session(request_text: str) -> bool:
+    """Use the user's signed-in browser for account-bound workflows."""
+    lowered = _normalize(request_text)
+    return _contains_any(lowered, USER_BROWSER_SESSION_MARKERS)
+
+
 def request_allows_uncertainty_web_research(request_text: str) -> bool:
     """Keep recovery search public: never turn private/local context into a query."""
     lowered = _normalize(request_text)
@@ -445,6 +458,7 @@ def select_tools_for_request(
     interactive_browser = request_prefers_interactive_browser(
         request_text
     )
+    user_browser_session = request_requires_user_browser_session(request_text)
     request_tokens = _tokens(lowered)
     scores: dict[str, int] = {}
     priority = {
@@ -503,7 +517,7 @@ def select_tools_for_request(
             if tool_name in available:
                 scores[tool_name] = max(scores.get(tool_name, 0), 85)
 
-    if interactive_browser:
+    if interactive_browser and not user_browser_session:
         for index, tool_name in enumerate(
             (
                 "browser_open_url",
@@ -520,6 +534,30 @@ def select_tools_for_request(
         # into a search-engine answer. Search can be retried in a later turn
         # only if direct navigation produced a concrete blocker.
         for tool_name in NON_INTERACTIVE_WEB_TOOLS:
+            scores.pop(tool_name, None)
+
+    if user_browser_session:
+        # Account-bound work must stay in the user's regular browser/profile.
+        # These primitives are intentionally exposed only for this narrow path.
+        for index, tool_name in enumerate((
+            "open_url_in_browser",
+            "list_active_windows",
+            "focus_window",
+            "press_keyboard_combination",
+            "type_text",
+            "get_ui_tree",
+            "find_ui_element",
+            "ocr_screen",
+            "click_text",
+            "mouse_click",
+        )):
+            if tool_name in available:
+                scores[tool_name] = max(scores.get(tool_name, 0), 155 - index)
+        for tool_name in (
+            "browser_start", "browser_open_url", "browser_get_page_text",
+            "browser_click", "browser_fill", "browser_screenshot",
+            "browser_status", "browser_close",
+        ):
             scores.pop(tool_name, None)
 
     action_requested = _contains_any(f"{lowered} ", ACTION_MARKERS)

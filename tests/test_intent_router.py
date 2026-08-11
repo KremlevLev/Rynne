@@ -329,6 +329,20 @@ def test_browser_with_follow_up_goal_is_not_direct() -> None:
     assert decision.needs_tools
 
 
+def test_notion_google_signup_routes_to_user_chrome_surface() -> None:
+    decision = create_router().route(
+        "Открой notion.so, зарегистрируй новый аккаунт через Google, "
+        "создай workspace Rynne Test и страницу Первый запуск"
+    )
+
+    assert decision.intent == IntentKind.WEB
+    assert decision.strategy == ExecutionStrategy.SKILL
+    assert "open_url_in_browser" in decision.required_tools
+    assert "browser_open_url" not in decision.required_tools
+    assert decision.metadata["browser_surface"] == "user_chrome"
+    assert decision.metadata["human_takeover_on_challenge"] is True
+
+
 def test_open_telegram_in_chrome_uses_one_direct_browser_skill() -> None:
     decision = create_router().route(
         "Открой гугл хром, а в нем телеграм"

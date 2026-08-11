@@ -51,6 +51,7 @@ from modules.tools.runtime import ToolRegistry, ToolRunner
 from modules.tools.selection import (
     get_selected_tool_names,
     request_prefers_interactive_browser,
+    request_requires_user_browser_session,
 )
 from modules.agent.subagents import should_auto_delegate
 from modules.agent.execution_memory import ExecutionMemory
@@ -351,6 +352,21 @@ INTERACTIVE BROWSER:
 Для OpenRouter Activity используй https://openrouter.ai/activity. Если пользователь
 просит скрин или снимок результата, обязательно заверши browser_screenshot после
 навигации и проверки страницы. Не вызывай open_application для браузерной задачи.
+""".strip()
+
+AUTHENTICATED_BROWSER_PROMPT = """
+AUTHENTICATED USER BROWSER:
+This task needs the user's existing login/session. Open the official URL with
+open_url_in_browser using app_name="google chrome". Continue in that same visible
+Chrome window with Windows UI/accessibility tools. Never switch to browser_start,
+browser_open_url, or another isolated Playwright profile during this task.
+
+Inspect the visible UI before acting and verify every important transition. Do not
+claim completion merely because Chrome opened or a click returned successfully.
+If a CAPTCHA, anti-bot challenge, password prompt, passkey, 2FA, security key, or
+account chooser requiring private input appears, pause at that exact screen and ask
+the user to complete it. Do not solve or bypass CAPTCHA. After the user confirms,
+continue the original unfinished goal instead of restarting it.
 """.strip()
 
 CONTEXTUAL_FOLLOW_UP_PROMPT = """
@@ -2041,6 +2057,12 @@ class AgentService:
             )
             else ""
         )
+        authenticated_browser_prompt = (
+            "\n\n" + AUTHENTICATED_BROWSER_PROMPT
+            if request_requires_user_browser_session(selection_text)
+            else ""
+        )
+        interactive_browser_prompt += authenticated_browser_prompt
         execution_prompt = (
             "\n\n" + UNIVERSAL_EXECUTION_PROMPT
             if action_was_requested

@@ -8,6 +8,7 @@ from modules.tools.selection import (
     get_selected_tool_names,
     KEYWORDS_BY_TOOL,
     request_prefers_interactive_browser,
+    request_requires_user_browser_session,
 )
 from modules.tools.tool_visibility import (
     filter_tools_for_model,
@@ -363,6 +364,28 @@ def test_interactive_account_navigation_excludes_search_substitute() -> None:
     assert "search_web_tavily" not in result
     assert "scrape_webpage" not in result
     assert "open_website" not in result
+
+
+def test_google_signup_uses_regular_chrome_and_excludes_playwright() -> None:
+    request = (
+        "Открой notion.so, зарегистрируй новый аккаунт через Google, "
+        "создай workspace Rynne Test"
+    )
+    available = {
+        "open_url_in_browser", "list_active_windows", "focus_window",
+        "press_keyboard_combination", "type_text", "get_ui_tree",
+        "find_ui_element", "ocr_screen", "click_text", "mouse_click",
+        "browser_start", "browser_open_url", "browser_get_page_text",
+        "browser_click", "browser_fill", "browser_screenshot",
+    }
+
+    result = select_tools_for_request(request, available, max_tools=20)
+
+    assert request_requires_user_browser_session(request)
+    assert "open_url_in_browser" in result
+    assert "focus_window" in result
+    assert "get_ui_tree" in result
+    assert not any(name.startswith("browser_") for name in result)
 
 
 def test_broadened_unknown_public_action_can_research_before_clarifying() -> None:

@@ -164,6 +164,7 @@ WEB_MARKERS = (
     "открой сайт",
     "перейди на сайт",
 )
+from modules.tools.selection import request_requires_user_browser_session
 
 WEB_SERVICE_MARKERS = (
     "openrouter",
@@ -176,6 +177,7 @@ WEB_SERVICE_URLS = {
     "telegram": "https://web.telegram.org/a/",
     "телеграм": "https://web.telegram.org/a/",
     "телегу": "https://web.telegram.org/a/",
+    "notion": "https://www.notion.so/",
 }
 
 GENERAL_ACTION_MARKERS = (
@@ -777,6 +779,33 @@ class DeterministicIntentRouter:
             )
             or browser_is_part_of_larger_goal
         ):
+            if request_requires_user_browser_session(text):
+                return ExecutionDecision(
+                    strategy=ExecutionStrategy.SKILL,
+                    intent=IntentKind.WEB,
+                    required_tools={
+                        "open_url_in_browser",
+                        "list_active_windows",
+                        "focus_window",
+                        "press_keyboard_combination",
+                        "type_text",
+                        "get_ui_tree",
+                        "find_ui_element",
+                        "ocr_screen",
+                        "click_text",
+                    },
+                    needs_model=True,
+                    needs_tools=True,
+                    expected_model_calls=1,
+                    expected_tool_calls=4,
+                    confidence=0.96,
+                    reason="Account-bound web workflow uses the user's signed-in browser session.",
+                    metadata={
+                        "browser_surface": "user_chrome",
+                        "preferred_browser": "google chrome",
+                        "human_takeover_on_challenge": True,
+                    },
+                )
             return ExecutionDecision(
                 strategy=ExecutionStrategy.SKILL,
                 intent=IntentKind.WEB,
