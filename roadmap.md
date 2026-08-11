@@ -2453,3 +2453,4 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Cloud-задачи исполняются через обычный `InputCoordinator`, получают безопасный Desktop workspace и сохраняют выбранный локальный permission mode.
 - [x] При выключенном Core облачная очередь не теряет команду; после подключения Core автоматически забирает её и отправляет результат обратно.
 - [ ] Добавить pairing Cloud Remote прямо в desktop UI вместо ручных environment variables.
+- [x] Просроченные cloud Missions после подключения исполняются через обычный локальный permission и verification pipeline.

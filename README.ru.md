@@ -386,6 +386,11 @@ RYNNE_CLOUD_DEVICE_ID=windows-primary
 RYNNE_CLOUD_DEVICE_TOKEN=replace-with-the-device-token
 ```
 
+Rynne Remote также поддерживает постоянные Missions. Например,
+`/schedule каждый день в 09:00 | пришли состояние системы` хранится при
+выключенном ПК и после подключения попадает в обычный конвейер разрешений и
+проверки результата Core.
+
 ### Личный Telegram через MCP (расширенный режим)
 
 В Rynne теперь есть опциональный локальный Telegram MCP для обычного аккаунта,

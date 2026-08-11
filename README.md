@@ -344,6 +344,11 @@ queue and are picked up when Core reconnects. Core only makes outbound HTTPS
 requests; the relay cannot bypass local permission policy or execute Windows
 tools itself.
 
+Rynne Remote also supports persistent Missions. For example,
+`/schedule daily at 09:00 | send system status` remains stored while the PC is
+offline and enters the normal Core permission and verification pipeline after
+reconnecting.
+
 ```env
 RYNNE_CLOUD_REMOTE_URL=https://your-private-relay.vercel.app
 RYNNE_CLOUD_DEVICE_ID=windows-primary
