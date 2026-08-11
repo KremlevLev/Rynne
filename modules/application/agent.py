@@ -984,7 +984,12 @@ class AgentService:
                 if candidate.supports_vision
             ]
 
-        if not candidates:
+        # ``AgentService`` accepts an injected LLM implementation. Test,
+        # offline and embedded adapters do not necessarily use the configured
+        # cloud-provider catalog, so an empty managed route must not prevent
+        # their ``complete`` method from running. The production ``NovaLLM``
+        # still fails early with the useful configuration error below.
+        if not candidates and isinstance(self.llm, NovaLLM):
             if has_image:
                 raise RuntimeError(
                     "Нет доступной мультимодальной модели."
