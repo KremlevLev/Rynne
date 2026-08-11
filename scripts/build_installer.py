@@ -17,6 +17,17 @@ import sys
 from pathlib import Path
 
 
+def configure_console_output() -> None:
+    """Keep build logs writable on Windows runners with a non-UTF-8 locale."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
+configure_console_output()
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TAURI_ROOT = PROJECT_ROOT / "apps" / "desktop" / "src-tauri"
 CORE_RESOURCE_DIR = TAURI_ROOT / "resources" / "rynne-core"

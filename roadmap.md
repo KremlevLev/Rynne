@@ -2442,4 +2442,5 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Первый clean-run выявил и исправил скрытую зависимость тестовых/injected LLM adapters от локальных API-ключей: пустой managed route больше не блокирует явно переданный adapter.
 - [x] Test dependencies вынесены в `requirements-test.txt`; clean GitHub runner больше не зависит от pytest, случайно установленного в локальной Python-среде.
 - [x] MCP SDK закреплён на совместимой ветке `1.x`: релизный runner больше не подтягивает несовместимый `mcp 2.0`, в котором отсутствует используемый `FastMCP` API.
+- [x] Release-сборщик принудительно использует UTF-8 для stdout/stderr: Windows runner с локалью `cp1252` больше не падает после успешной сборки Core на кириллическом статусе.
 - [ ] Подписать Windows installer сертификатом и включить Tauri updater для следующих релизов.
