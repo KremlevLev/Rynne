@@ -2441,4 +2441,5 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Локальная release-проверка пройдена: 887 Python tests, 24 desktop tests, Rust compile check, 8/8 acceptance; собран installer размером 625.1 MiB с SHA-256.
 - [x] Первый clean-run выявил и исправил скрытую зависимость тестовых/injected LLM adapters от локальных API-ключей: пустой managed route больше не блокирует явно переданный adapter.
 - [x] Test dependencies вынесены в `requirements-test.txt`; clean GitHub runner больше не зависит от pytest, случайно установленного в локальной Python-среде.
+- [x] MCP SDK закреплён на совместимой ветке `1.x`: релизный runner больше не подтягивает несовместимый `mcp 2.0`, в котором отсутствует используемый `FastMCP` API.
 - [ ] Подписать Windows installer сертификатом и включить Tauri updater для следующих релизов.
