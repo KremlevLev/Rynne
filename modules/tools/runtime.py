@@ -1219,7 +1219,13 @@ class ToolRunner:
                 "session_id": actual_context.session_id,
                 "success": result.success,
                 "code": result.code,
-                "message": result.message,
+                # Full output stays in the ledger; live UI gets a bounded
+                # summary so process/page dumps cannot freeze rendering.
+                "message": (
+                    result.message
+                    if len(str(result.message)) <= 1_200
+                    else str(result.message)[:1_197].rstrip() + "..."
+                ),
                 "duration_ms": result.duration_ms,
                 "artifacts": result.artifacts,
                 "retryable": result.retryable,

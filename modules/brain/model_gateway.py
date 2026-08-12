@@ -75,6 +75,10 @@ LLM_REQUEST_TIMEOUT = float(
     getattr(config, "LLM_REQUEST_TIMEOUT", 90.0)
 )
 
+PROVIDER_ATTEMPT_TIMEOUT_SECONDS = float(
+    getattr(config, "PROVIDER_ATTEMPT_TIMEOUT_SECONDS", 25.0)
+)
+
 GROQ_RATE_LIMIT_COOLDOWN = float(
     getattr(config, "GROQ_RATE_LIMIT_COOLDOWN", 90.0)
 )
@@ -1327,17 +1331,30 @@ class ModelGateway:
 
                 try:
                     slot.in_flight_requests += 1
-                    response = await self._request_once(
-                        slot=slot,
-                        candidate=effective_candidate,
-                        messages=messages,
-                        tools=tools,
-                        allow_tools=allow_tools,
+                    response = await asyncio.wait_for(
+                        self._request_once(
+                            slot=slot,
+                            candidate=effective_candidate,
+                            messages=messages,
+                            tools=tools,
+                            allow_tools=allow_tools,
+                        ),
+                        timeout=PROVIDER_ATTEMPT_TIMEOUT_SECONDS,
                     )
 
                 except Exception as error:
-                    failure = self.classify_failure(
-                        error
+                    failure = (
+                        GatewayFailure(
+                            kind=FailureKind.TIMEOUT,
+                            message=(
+                                "Provider route did not respond within "
+                                f"{PROVIDER_ATTEMPT_TIMEOUT_SECONDS:g} seconds."
+                            ),
+                            retryable=True,
+                            cooldown_seconds=10.0,
+                        )
+                        if isinstance(error, asyncio.TimeoutError)
+                        else self.classify_failure(error)
                     )
 
                     self._register_failure(

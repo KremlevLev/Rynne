@@ -538,7 +538,7 @@ export function eventToItem(event: RynneEvent, locale: UiLocale = "ru"): Timelin
         title: payload.success === false
           ? tx(locale, "Инструмент завершился с ошибкой", "Tool failed")
           : tx(locale, "Действие выполнено", "Action completed"),
-        body: `${text(payload, "message", text(payload, "tool_name"))}${typeof payload.duration_ms === "number" ? ` · ${(payload.duration_ms / 1000).toFixed(1)}s` : ""}`,
+        body: `${text(payload, "message", text(payload, "tool_name")).slice(0, 1_200)}${typeof payload.duration_ms === "number" ? ` · ${(payload.duration_ms / 1000).toFixed(1)}s` : ""}`,
         status: payload.success === false ? "error" : "success",
         operationId: text(payload, "operation_id"),
       };

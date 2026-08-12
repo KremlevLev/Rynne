@@ -6,6 +6,7 @@ from pathlib import Path
 from modules.application.agent import (
     AgentService,
     DYNAMIC_TOOL_DISCOVERY_NAME,
+    GIT_CLONE_ACTION_RE,
     is_contextual_follow_up,
     is_telegram_capability_question,
     parse_telegram_forward_request,
@@ -65,6 +66,15 @@ def test_resolves_known_git_repository_without_model() -> None:
         "https://github.com/karpathy/nanoGPT.git",
         "nanoGPT",
     )
+
+
+def test_real_cyrillic_clone_command_uses_deterministic_intent() -> None:
+    command = "\u0441\u043a\u0430\u0447\u0430\u0439 \u0440\u0435\u043f\u043e nanoGPT"
+    assert GIT_CLONE_ACTION_RE.search(command)
+    assert resolve_git_clone_target(command) == (
+        "https://github.com/karpathy/nanoGPT.git",
+        "nanoGPT",
+    )
     assert resolve_git_clone_target(
         "скачай любой репозиторий Андрея Карпатого"
     ) == (
@@ -120,6 +130,47 @@ def test_git_clone_request_uses_direct_fast_path(tmp_path) -> None:
         str((Path.home() / "Desktop" / "nanoGPT").resolve()),
         True,
     )]
+
+
+def test_git_clone_defaults_to_desktop_even_with_agent_workspace(tmp_path) -> None:
+    class LLMThatMustNotRun:
+        history: list[dict] = []
+
+        async def complete(self, **kwargs):
+            raise AssertionError("Git clone fast path must not call the LLM")
+
+    calls: list[str] = []
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "git_clone_repository",
+            "description": "Clone repository.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "destination": {"type": "string"},
+                    "shallow": {"type": "boolean"},
+                },
+                "required": ["url", "destination"],
+            },
+        },
+    }
+
+    def clone(url: str, destination: str, shallow: bool = True) -> ToolResult:
+        calls.append(destination)
+        return ToolResult.ok("cloned")
+
+    registry = ToolRegistry.from_legacy([schema], {"git_clone_repository": clone})
+    runner = ToolRunner(registry, permission_manager=PermissionManager(mode=PermissionMode.FULL_ACCESS))
+    agent = AgentService(LLMThatMustNotRun(), registry, runner)
+    response = asyncio.run(agent.run(UserRequest.from_text(
+        "\u0441\u043a\u0430\u0447\u0430\u0439 \u0440\u0435\u043f\u043e nanoGPT",
+        metadata={"workspace_path": str(tmp_path)},
+    )))
+
+    assert response.success
+    assert calls == [str((Path.home() / "Desktop" / "nanoGPT").resolve())]
 
 
 def test_explicit_telegram_message_uses_fast_path() -> None:

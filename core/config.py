@@ -283,6 +283,12 @@ LLM_REQUEST_TIMEOUT = float(
     os.getenv("NOVA_LLM_REQUEST_TIMEOUT", "30")
 )
 
+# Hard deadline for one key/model route. A slow key must not hold the whole
+# logical request hostage; ModelGateway can immediately try the next route.
+PROVIDER_ATTEMPT_TIMEOUT_SECONDS = float(
+    os.getenv("NOVA_PROVIDER_ATTEMPT_TIMEOUT", "25")
+)
+
 # Один логический шаг может перебирать несколько ключей и провайдеров. Без
 # общего дедлайна последовательные сетевые таймауты складываются в минуты.
 LOGICAL_MODEL_TIMEOUT_SECONDS = float(

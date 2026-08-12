@@ -73,6 +73,15 @@ KNOWN_GITHUB_REPOSITORIES = {
     "min gpt": ("https://github.com/karpathy/minGPT.git", "minGPT"),
 }
 
+# Keep this expression ASCII-only: the previous Cyrillic literal was once
+# mojibake-corrupted and silently disabled the deterministic clone path.
+GIT_CLONE_ACTION_RE = re.compile(
+    r"(?:\bgit\s+clone\b|\bclone\b.*\brepo(?:sitory)?\b|"
+    r"(?:\u043a\u043b\u043e\u043d\u0438\u0440\u0443\u0439|\u043a\u043b\u043e\u043d\u0438\u0440\u043e\u0432\u0430\u0442\u044c|\u0441\u043a\u0430\u0447\u0430\u0439|\u0441\u043a\u0430\u0447\u0430\u0442\u044c)"
+    r".*(?:\u0440\u0435\u043f\u043e\u0437\u0438\u0442\u043e\u0440\u0438\u0439|\u0440\u0435\u043f\u043e|repo))",
+    re.IGNORECASE,
+)
+
 
 def resolve_git_clone_target(text: str) -> tuple[str, str] | None:
     raw = str(text).strip()
@@ -779,7 +788,7 @@ class AgentService:
         if target is None:
             if not explicit_intent:
                 return None
-            root = Path(workspace_path or (Path.home() / "Desktop")).expanduser().resolve()
+            root = (Path.home() / "Desktop").resolve()
             self._pending_git_clone_root = str(root)
             message = (
                 "Какой репозиторий клонировать? Пришли название или ссылку."
@@ -796,7 +805,8 @@ class AgentService:
         elif re.search(r"\b(?:рабоч(?:ий|его)\s+стол|desktop)\b", user_text, re.IGNORECASE):
             root = Path.home() / "Desktop"
         else:
-            root = Path(workspace_path or (Path.home() / "Desktop"))
+            # Downloaded third-party code is user content, not Rynne source.
+            root = Path.home() / "Desktop"
         root = root.expanduser().resolve()
         destination = root / repository_name
         self._emit_progress(
@@ -1383,13 +1393,18 @@ class AgentService:
     ) -> dict[str, Any]:
         function = tool_call.get("function", {})
 
+        result_data = result.to_dict()
+        message = str(result_data.get("message") or "")
+        if len(message) > 2_000:
+            result_data["message"] = message[:1_997].rstrip() + "..."
+
         return {
             "tool_call_id": tool_call.get("id"),
             "name": function.get("name", "unknown"),
             "arguments": AgentService._parse_tool_arguments(
                 tool_call
             ),
-            "result": result.to_dict(),
+            "result": result_data,
         }
 
     @staticmethod
