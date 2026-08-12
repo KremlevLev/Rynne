@@ -100,3 +100,14 @@ class RynneCloudRemoteClient:
             f"/v1/devices/{self.config.device_id}/tasks/{task_id}/events",
             payload={"status": status, "message": message, "result": result},
         )
+
+    def request_approval(self, *, task_id: str, operation_id: str, title: str, description: str, details: str = "", risk: str = "execute") -> None:
+        self._request(
+            "POST", f"/v1/devices/{self.config.device_id}/approvals",
+            payload={"task_id": task_id, "operation_id": operation_id, "title": title,
+                     "description": description, "details": details, "risk": risk},
+        )
+
+    def approval_decisions(self) -> list[dict[str, Any]]:
+        items = self._request("POST", f"/v1/devices/{self.config.device_id}/approvals/decisions").get("approvals")
+        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []

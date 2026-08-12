@@ -62,6 +62,20 @@ def test_cloud_wake_signal_is_polled_separately_from_tasks() -> None:
     assert session.calls[0]["url"].endswith("/v1/devices/pc/wake/next")
 
 
+def test_remote_approval_is_published_and_decision_is_polled() -> None:
+    remote, session = make_client([{"approval": {"operation_id": "op-1"}}, {
+        "approvals": [{"operation_id": "op-1", "status": "approved"}]
+    }])
+    remote.request_approval(
+        task_id="task-1", operation_id="op-1", title="Send message",
+        description="Send hello", details='{"chat":"Vlad"}', risk="execute",
+    )
+    decisions = remote.approval_decisions()
+    assert session.calls[0]["url"].endswith("/v1/devices/pc/approvals")
+    assert session.calls[0]["json"]["operation_id"] == "op-1"
+    assert decisions == [{"operation_id": "op-1", "status": "approved"}]
+
+
 def test_unconfigured_client_fails_without_network() -> None:
     with pytest.raises(CloudRemoteError):
         RynneCloudRemoteClient(CloudRemoteConfig()).next_task()

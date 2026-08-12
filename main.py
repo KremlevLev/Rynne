@@ -927,6 +927,25 @@ async def async_main() -> None:
                 )
             except RuntimeError:
                 logger.warning("Could not schedule Telegram approval outside the event loop.")
+        if event_type == "approval_requested" and cloud_remote.configured:
+            current_request = request_service.current_request
+            cloud_task_id = str(current_request.metadata.get("rynne_cloud_task_id") or "") if current_request is not None else ""
+            if cloud_task_id:
+                details = payload.get("arguments")
+                try:
+                    asyncio.get_running_loop().create_task(
+                        asyncio.to_thread(
+                            cloud_remote.request_approval,
+                            task_id=cloud_task_id,
+                            operation_id=str(payload.get("operation_id") or ""),
+                            title=str(payload.get("tool_name") or "Rynne requests permission"),
+                            description=str(payload.get("message") or "Approve this action?"),
+                            details=json.dumps(details, ensure_ascii=False, indent=2) if details else "",
+                            risk=str(payload.get("risk") or "execute"),
+                        ), name="rynne-cloud-approval-request",
+                    )
+                except RuntimeError:
+                    logger.warning("Could not schedule Rynne Cloud approval outside the event loop.")
         if (
             NOVA_PROACTIVE_ENABLED
             and "workflow_suggested"
@@ -1918,6 +1937,12 @@ async def async_main() -> None:
                     else ""
                 )
                 now = time.monotonic()
+                for approval in await asyncio.to_thread(cloud_remote.approval_decisions):
+                    operation_id = str(approval.get("operation_id") or "")
+                    if approval.get("status") == "approved":
+                        runner.permission_manager.confirm(operation_id)
+                    elif approval.get("status") == "denied":
+                        runner.permission_manager.deny(operation_id)
                 if now - last_heartbeat >= 10:
                     await asyncio.to_thread(
                         cloud_remote.heartbeat,
