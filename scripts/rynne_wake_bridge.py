@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import time
+import ctypes
 from pathlib import Path
 
 
@@ -13,6 +14,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from modules.integrations.cloud_remote import CloudRemoteError, RynneCloudRemoteClient
+
+
+_MUTEX_HANDLE = None
+
+
+def acquire_single_instance() -> bool:
+    """Keep exactly one poller alive per signed-in Windows user."""
+    global _MUTEX_HANDLE
+    if os.name != "nt":
+        return True
+    kernel32 = ctypes.windll.kernel32
+    _MUTEX_HANDLE = kernel32.CreateMutexW(None, False, "Local\\RynneWakeBridge")
+    return bool(_MUTEX_HANDLE) and kernel32.GetLastError() != 183
 
 
 def load_env(path: Path) -> None:
@@ -38,7 +52,6 @@ def launch_rynne() -> bool:
     candidates = [
         Path(os.getenv("LOCALAPPDATA", "")) / "Rynne" / "Rynne.exe",
         Path(os.getenv("LOCALAPPDATA", "")) / "Programs" / "Rynne" / "Rynne.exe",
-        ROOT / "apps" / "desktop" / "src-tauri" / "target" / "debug" / "rynne-desktop.exe",
     ]
     for executable in candidates:
         if executable.is_file():
@@ -56,6 +69,8 @@ def launch_rynne() -> bool:
 
 
 def main() -> int:
+    if not acquire_single_instance():
+        return 0
     load_env(ROOT / ".env")
     client = RynneCloudRemoteClient.from_env()
     if not client.configured:
