@@ -44,6 +44,7 @@ GEMINI_API_KEYS: tuple[str, ...] = tuple(
 )
 OPENAI_API_KEYS = tuple(getattr(config, "OPENAI_API_KEYS", ()))
 ANTHROPIC_API_KEYS = tuple(getattr(config, "ANTHROPIC_API_KEYS", ()))
+RYNNE_MANAGED_API_KEYS = tuple(getattr(config, "RYNNE_MANAGED_API_KEYS", ()))
 GROQ_KEY_MODELS: tuple[str, ...] = tuple(getattr(config, "GROQ_KEY_MODELS", ()))
 OPENROUTER_KEY_MODELS: tuple[str, ...] = tuple(
     getattr(config, "OPENROUTER_KEY_MODELS", ())
@@ -51,6 +52,7 @@ OPENROUTER_KEY_MODELS: tuple[str, ...] = tuple(
 GEMINI_KEY_MODELS: tuple[str, ...] = tuple(getattr(config, "GEMINI_KEY_MODELS", ()))
 OPENAI_KEY_MODELS = tuple(getattr(config, "OPENAI_KEY_MODELS", ()))
 ANTHROPIC_KEY_MODELS = tuple(getattr(config, "ANTHROPIC_KEY_MODELS", ()))
+RYNNE_MANAGED_KEY_MODELS = tuple(getattr(config, "RYNNE_MANAGED_KEY_MODELS", ()))
 
 GROQ_BASE_URL = getattr(
     config,
@@ -81,6 +83,7 @@ LLM_REQUEST_TIMEOUT = float(
 )
 OPENAI_BASE_URL = getattr(config, "OPENAI_BASE_URL", "https://api.openai.com/v1")
 ANTHROPIC_BASE_URL = getattr(config, "ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1/")
+RYNNE_MANAGED_BASE_URL = getattr(config, "RYNNE_MANAGED_BASE_URL", "https://rynne-cloud.vercel.app/v1/trial")
 
 PROVIDER_ATTEMPT_TIMEOUT_SECONDS = float(
     getattr(config, "PROVIDER_ATTEMPT_TIMEOUT_SECONDS", 25.0)
@@ -288,6 +291,9 @@ class ModelGateway:
             "anthropic": [KeySlot(provider="anthropic", index=index, api_key=api_key,
                 model_override=(ANTHROPIC_KEY_MODELS[index] or None) if index < len(ANTHROPIC_KEY_MODELS) else None)
                 for index, api_key in enumerate(ANTHROPIC_API_KEYS)],
+            "managed": [KeySlot(provider="managed", index=index, api_key=api_key,
+                model_override=(RYNNE_MANAGED_KEY_MODELS[index] or None) if index < len(RYNNE_MANAGED_KEY_MODELS) else None)
+                for index, api_key in enumerate(RYNNE_MANAGED_API_KEYS)],
         }
 
         self._clients: dict[
@@ -302,6 +308,7 @@ class ModelGateway:
             "gemini": 0,
             "openai": 0,
             "anthropic": 0,
+            "managed": 0,
         }
 
         # Cooldown конкретного маршрута:
@@ -351,6 +358,8 @@ class ModelGateway:
             return OPENAI_BASE_URL
         if provider == "anthropic":
             return ANTHROPIC_BASE_URL
+        if provider == "managed":
+            return RYNNE_MANAGED_BASE_URL
 
         raise ValueError(
             f"Неизвестный провайдер: {provider}"

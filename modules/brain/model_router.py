@@ -27,6 +27,7 @@ from core.config import (
     OPENAI_COMPLEX_MODELS, OPENAI_ULTRA_MODELS, OPENAI_VISION_MODELS,
     ANTHROPIC_API_KEYS, ANTHROPIC_CHAT_MODELS, ANTHROPIC_TOOL_MODELS,
     ANTHROPIC_COMPLEX_MODELS, ANTHROPIC_ULTRA_MODELS, ANTHROPIC_VISION_MODELS,
+    RYNNE_MANAGED_API_KEYS, RYNNE_MANAGED_KEY_MODELS,
 )
 
 
@@ -192,6 +193,13 @@ def build_model_route(
     complexity: TaskComplexity,
 ) -> list[ModelCandidate]:
     candidates: list[ModelCandidate] = []
+    if RYNNE_MANAGED_API_KEYS and complexity != TaskComplexity.VISION:
+        candidates.extend(_candidates(
+            "managed",
+            tuple(model for model in RYNNE_MANAGED_KEY_MODELS if model) or ("openai/gpt-oss-120b",),
+            supports_tools=complexity != TaskComplexity.CHAT,
+            start_priority=5,
+        ))
     extra_routes = {
         TaskComplexity.CHAT: (("openai", OPENAI_API_KEYS, OPENAI_CHAT_MODELS, False), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_CHAT_MODELS, False)),
         TaskComplexity.BASIC_TOOL: (("openai", OPENAI_API_KEYS, OPENAI_TOOL_MODELS, False), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_TOOL_MODELS, False)),

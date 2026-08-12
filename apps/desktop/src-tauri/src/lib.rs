@@ -75,6 +75,12 @@ struct ServiceSecretSummary {
     removable: bool,
 }
 
+#[derive(serde::Deserialize)]
+struct TrialSessionResponse {
+    token: String,
+    model: String,
+}
+
 fn service_variable(service: &str) -> Result<&'static str, String> {
     match service.trim().to_lowercase().as_str() {
         "telegram" => Ok("TELEGRAM_BOT_TOKEN"),
@@ -1051,7 +1057,12 @@ fn newest_diagnostic_bundle(directory: &Path) -> Option<PathBuf> {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("zip"))
-        .filter(|path| path.file_name().and_then(|value| value.to_str()).map(|name| name.starts_with("rynne-diagnostics-")).unwrap_or(false))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|value| value.to_str())
+                .map(|name| name.starts_with("rynne-diagnostics-"))
+                .unwrap_or(false)
+        })
         .max_by_key(|path| path.metadata().and_then(|value| value.modified()).ok())
 }
 
@@ -1061,22 +1072,35 @@ fn nova_collect_diagnostics() -> Result<String, String> {
         .map(PathBuf::from)
         .map(|path| path.join("Desktop").join("Rynne diagnostics"))
         .ok_or_else(|| "Cannot locate the Windows user profile.".to_owned())?;
-    create_dir_all(&output_directory).map_err(|error| format!("Cannot create the diagnostics directory: {error}"))?;
-    let script = repository_root()?.join("scripts").join("collect-diagnostics.ps1");
+    create_dir_all(&output_directory)
+        .map_err(|error| format!("Cannot create the diagnostics directory: {error}"))?;
+    let script = repository_root()?
+        .join("scripts")
+        .join("collect-diagnostics.ps1");
     if !script.is_file() {
         return Err("The diagnostics collector is missing. Update Rynne and try again.".to_owned());
     }
     let mut command = Command::new("powershell.exe");
-    command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-        .arg(&script).arg("-OutputDirectory").arg(&output_directory);
+    command
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&script)
+        .arg("-OutputDirectory")
+        .arg(&output_directory);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
-    let output = command.output().map_err(|error| format!("Cannot start the diagnostics collector: {error}"))?;
+    let output = command
+        .output()
+        .map_err(|error| format!("Cannot start the diagnostics collector: {error}"))?;
     if !output.status.success() {
         let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Err(if message.is_empty() { "The diagnostics collector failed.".to_owned() } else { format!("The diagnostics collector failed: {message}") });
+        return Err(if message.is_empty() {
+            "The diagnostics collector failed.".to_owned()
+        } else {
+            format!("The diagnostics collector failed: {message}")
+        });
     }
-    let bundle = newest_diagnostic_bundle(&output_directory).ok_or_else(|| "The diagnostics archive was not created.".to_owned())?;
+    let bundle = newest_diagnostic_bundle(&output_directory)
+        .ok_or_else(|| "The diagnostics archive was not created.".to_owned())?;
     let mut explorer = Command::new("explorer.exe");
     explorer.arg("/select,").arg(&bundle);
     #[cfg(windows)]
@@ -1086,23 +1110,78 @@ fn nova_collect_diagnostics() -> Result<String, String> {
 }
 
 fn percent_encode(value: &str) -> String {
-    value.as_bytes().iter().map(|byte| match byte {
-        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (*byte as char).to_string(),
-        _ => format!("%{byte:02X}"),
-    }).collect()
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (*byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
 }
 
 #[tauri::command]
 fn nova_report_issue() -> Result<String, String> {
     let title = "[Bug] Describe what Rynne could not complete";
     let body = "## What I asked Rynne to do\n\nDescribe the original goal.\n\n## What happened\n\nDescribe the visible result and the last stage shown in the UI.\n\n## Diagnostics\n\nAttach the ZIP created by Settings > Diagnostics. It excludes .env and secrets.\n";
-    let url = format!("https://github.com/KremlevLev/Rynne/issues/new?title={}&body={}", percent_encode(title), percent_encode(body));
+    let url = format!(
+        "https://github.com/KremlevLev/Rynne/issues/new?title={}&body={}",
+        percent_encode(title),
+        percent_encode(body)
+    );
     let mut command = Command::new("explorer.exe");
     command.arg(&url);
     #[cfg(windows)]
     command.creation_flags(CREATE_NO_WINDOW);
-    command.spawn().map_err(|error| format!("Cannot open the issue form: {error}"))?;
+    command
+        .spawn()
+        .map_err(|error| format!("Cannot open the issue form: {error}"))?;
     Ok(url)
+}
+
+#[tauri::command]
+fn nova_enable_trial(app: AppHandle, state: State<'_, Arc<CoreState>>) -> Result<String, String> {
+    let env_path = provider_env_path(&app)?;
+    let existing = std::fs::read_to_string(&env_path).unwrap_or_default();
+    let install_id = env_value(&existing, "RYNNE_INSTALL_ID").unwrap_or_else(|| {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        format!("rynne-{}-{nanos}", std::process::id())
+    });
+    let endpoint = "https://rynne-cloud.vercel.app/v1/trial/session";
+    let response = ureq::post(endpoint)
+        .send_json(serde_json::json!({ "install_id": install_id }))
+        .map_err(|error| format!("Trial service is unavailable: {error}"))?;
+    let session: TrialSessionResponse = response
+        .into_body()
+        .read_json()
+        .map_err(|error| format!("Trial service returned an invalid response: {error}"))?;
+    if session.token.len() < 24 || session.model.trim().is_empty() {
+        return Err("Trial service returned incomplete credentials.".to_owned());
+    }
+    write_plain_setting(&env_path, "RYNNE_INSTALL_ID", &install_id)?;
+    write_plain_setting(&env_path, "RYNNE_MANAGED_API_KEY", &session.token)?;
+    write_plain_setting(&env_path, "RYNNE_MANAGED_KEY_MODELS", session.model.trim())?;
+    write_plain_setting(
+        &env_path,
+        "RYNNE_MANAGED_BASE_URL",
+        "https://rynne-cloud.vercel.app/v1/trial",
+    )?;
+    let core_state = state.inner().clone();
+    stop_core(&core_state);
+    spawn_core(app, core_state)?;
+    Ok("Rynne Trial is enabled. Core is reconnecting.".to_owned())
+}
+
+#[tauri::command]
+fn nova_trial_enabled(app: AppHandle) -> Result<bool, String> {
+    let env_path = provider_env_path(&app)?;
+    let contents = std::fs::read_to_string(env_path).unwrap_or_default();
+    Ok(env_value(&contents, "RYNNE_MANAGED_API_KEY").is_some_and(|value| !value.is_empty()))
 }
 
 fn stop_core(state: &Arc<CoreState>) {
@@ -1145,7 +1224,9 @@ pub fn run() {
             nova_set_permission_mode,
             nova_open_logs,
             nova_collect_diagnostics,
-            nova_report_issue
+            nova_report_issue,
+            nova_enable_trial,
+            nova_trial_enabled
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {

@@ -96,6 +96,7 @@ GEMINI_API_KEYS = _collect_keys(
 )
 OPENAI_API_KEYS = _collect_keys("OPENAI_API_KEYS", "OPENAI_API_KEY", "OPENAI_API_KEY")
 ANTHROPIC_API_KEYS = _collect_keys("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
+RYNNE_MANAGED_API_KEYS = _collect_keys("RYNNE_MANAGED_API_KEYS", "RYNNE_MANAGED_API_KEY", "RYNNE_MANAGED_API_KEY")
 
 # Старые импорты продолжают работать.
 GROQ_API_KEY = GROQ_API_KEYS[0] if GROQ_API_KEYS else ""
@@ -114,6 +115,7 @@ HAS_MODEL_PROVIDER: Final[bool] = bool(
     or GEMINI_API_KEYS
     or OPENAI_API_KEYS
     or ANTHROPIC_API_KEYS
+    or RYNNE_MANAGED_API_KEYS
 )
 
 GROQ_KEY_MODELS = _aligned_key_models(
@@ -130,12 +132,14 @@ GEMINI_KEY_MODELS = _aligned_key_models(
 )
 OPENAI_KEY_MODELS = _aligned_key_models("RYNNE_OPENAI_KEY_MODELS", len(OPENAI_API_KEYS))
 ANTHROPIC_KEY_MODELS = _aligned_key_models("RYNNE_ANTHROPIC_KEY_MODELS", len(ANTHROPIC_API_KEYS))
+RYNNE_MANAGED_KEY_MODELS = _aligned_key_models("RYNNE_MANAGED_KEY_MODELS", len(RYNNE_MANAGED_API_KEYS))
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1/"
+RYNNE_MANAGED_BASE_URL = os.getenv("RYNNE_MANAGED_BASE_URL", "https://rynne-cloud.vercel.app/v1/trial")
 GEMINI_QUOTA_GROUP = os.getenv("GEMINI_QUOTA_GROUP", "gemini-project-main")
 
 # Сохраняем совместимость со старым кодом.

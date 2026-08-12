@@ -2503,4 +2503,5 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [ ] Add an explicit onboarding consent screen for anonymous aggregate launch metrics.
 - [x] Add one-click redacted support bundle export and issue template.
 - [x] Add an in-app first-run readiness checklist for Core, provider, voice and the first completed response.
+- [x] Add a one-click managed trial route so a new user can run the first tasks without registering a provider key.
 - [x] Documented the consent boundary, activation funnel and failure-triage order for public testing.

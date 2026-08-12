@@ -44,6 +44,8 @@ export interface RynneTransport {
   openLogs(): Promise<string>;
   collectDiagnostics(): Promise<string>;
   reportIssue(): Promise<string>;
+  enableTrial(): Promise<string>;
+  trialEnabled(): Promise<boolean>;
 }
 
 export class TauriRynneTransport implements RynneTransport {
@@ -177,6 +179,14 @@ export class TauriRynneTransport implements RynneTransport {
   async reportIssue(): Promise<string> {
     return invoke<string>("nova_report_issue");
   }
+
+  async enableTrial(): Promise<string> {
+    return invoke<string>("nova_enable_trial");
+  }
+
+  async trialEnabled(): Promise<boolean> {
+    return invoke<boolean>("nova_trial_enabled");
+  }
 }
 
 class DemoRynneTransport implements RynneTransport {
@@ -197,6 +207,14 @@ class DemoRynneTransport implements RynneTransport {
 
   async reportIssue(): Promise<string> {
     return "https://github.com/KremlevLev/Rynne/issues/new";
+  }
+
+  async enableTrial(): Promise<string> {
+    return "Trial enabled";
+  }
+
+  async trialEnabled(): Promise<boolean> {
+    return false;
   }
 
   async connect(

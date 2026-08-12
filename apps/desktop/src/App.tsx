@@ -652,6 +652,7 @@ export function App() {
   const [apiKey, setApiKey] = useState("");
   const [apiModel, setApiModel] = useState("");
   const [providerKeys, setProviderKeys] = useState<ProviderKeySummary[]>([]);
+  const [trialEnabled, setTrialEnabled] = useState(false);
   const [providerRuntime, setProviderRuntime] = useState<ProviderRuntime | null>(null);
   const [providerKeysLoading, setProviderKeysLoading] = useState(false);
   const [serviceSecrets, setServiceSecrets] = useState<ServiceSecretSummary[]>([]);
@@ -926,6 +927,7 @@ export function App() {
   useEffect(() => {
     if (connection === "connected") {
       void refreshProviderKeys();
+      void transport.trialEnabled().then(setTrialEnabled).catch(() => setTrialEnabled(false));
       void refreshServiceSecrets();
       void refreshPermissionMode();
     }
@@ -1634,7 +1636,7 @@ export function App() {
               <div className="launch-checklist">
                 {[
                   [connection === "connected", tx(locale, "Rynne Core подключён", "Rynne Core is connected")],
-                  [providerKeys.length > 0, tx(locale, "Добавлен ключ модели", "A model key is configured")],
+                  [providerKeys.length > 0 || trialEnabled, tx(locale, "Модель готова", "A model is ready")],
                   [wakeWordAvailable, tx(locale, "Голосовая модель установлена", "Voice model is installed")],
                   [timeline.some((item) => item.kind === "assistant" && item.status !== "error"), tx(locale, "Первая задача получила ответ", "The first task received a response")],
                 ].map(([ready, label]) => (
@@ -1644,6 +1646,11 @@ export function App() {
                   </div>
                 ))}
               </div>
+              {providerKeys.length === 0 && !trialEnabled && (
+                <button className="save-settings" onClick={() => void transport.enableTrial().then((message) => { setTrialEnabled(true); setSettingsStatus(message); }).catch((error) => setSettingsStatus(error instanceof Error ? error.message : "Trial is unavailable."))}>
+                  <Orbit size={15} />{tx(locale, "Попробовать без API-ключа", "Try without an API key")}
+                </button>
+              )}
               <small>{tx(locale, "Голос необязателен: текстовые задачи работают и без Vosk.", "Voice is optional: text tasks work without Vosk.")}</small>
             </div>
             <div className="settings-card language-card">
