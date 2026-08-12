@@ -892,3 +892,4 @@ ease-in-out: cubic-bezier(0.65, 0, 0.35, 1)
   - какие команды использовать для запуска и проверки.
 
 - [x] Cloud Remote approvals: local PermissionManager publishes requests to Mini App and consumes one-time owner decisions.
+- [x] Cloud Remote Live Execution streams real ToolRunner starts, outcomes, failures and durations into a persistent task replay.

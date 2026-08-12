@@ -76,6 +76,16 @@ def test_remote_approval_is_published_and_decision_is_polled() -> None:
     assert decisions == [{"operation_id": "op-1", "status": "approved"}]
 
 
+def test_live_timeline_event_is_sent_to_cloud() -> None:
+    remote, session = make_client([{"ok": True}])
+    remote.timeline_event(
+        "task-1", event_type="tool_completed", title="Completed inspect_project",
+        tool_name="inspect_project", success=True, duration_ms=840,
+    )
+    assert session.calls[0]["url"].endswith("/v1/devices/pc/tasks/task-1/timeline")
+    assert session.calls[0]["json"]["duration_ms"] == 840
+
+
 def test_unconfigured_client_fails_without_network() -> None:
     with pytest.raises(CloudRemoteError):
         RynneCloudRemoteClient(CloudRemoteConfig()).next_task()

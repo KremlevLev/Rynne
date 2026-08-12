@@ -111,3 +111,11 @@ class RynneCloudRemoteClient:
     def approval_decisions(self) -> list[dict[str, Any]]:
         items = self._request("POST", f"/v1/devices/{self.config.device_id}/approvals/decisions").get("approvals")
         return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+    def timeline_event(self, task_id: str, *, event_type: str, title: str, message: str = "", tool_name: str = "", operation_id: str = "", success: bool | None = None, duration_ms: int = 0) -> None:
+        self._request(
+            "POST", f"/v1/devices/{self.config.device_id}/tasks/{task_id}/timeline",
+            payload={"event_type": event_type, "title": title, "message": message,
+                     "tool_name": tool_name, "operation_id": operation_id,
+                     "success": success, "duration_ms": duration_ms},
+        )

@@ -912,6 +912,30 @@ async def async_main() -> None:
     ) -> None:
         if NOVA_DESKTOP_UI:
             desktop_service.publish(event_type, payload)
+        if event_type in {"tool_started", "tool_completed"} and cloud_remote.configured:
+            current_request = request_service.current_request
+            cloud_task_id = str(current_request.metadata.get("rynne_cloud_task_id") or "") if current_request is not None else ""
+            if cloud_task_id:
+                tool_name = str(payload.get("tool_name") or "tool")
+                success = payload.get("success") if event_type == "tool_completed" else None
+                title = (
+                    f"Started {tool_name}" if event_type == "tool_started"
+                    else f"Completed {tool_name}" if success
+                    else f"Failed {tool_name}"
+                )
+                try:
+                    asyncio.get_running_loop().create_task(
+                        asyncio.to_thread(
+                            cloud_remote.timeline_event, cloud_task_id,
+                            event_type=event_type, title=title,
+                            message=str(payload.get("message") or payload.get("description") or ""),
+                            tool_name=tool_name, operation_id=str(payload.get("operation_id") or ""),
+                            success=success if isinstance(success, bool) else None,
+                            duration_ms=int(payload.get("duration_ms") or 0),
+                        ), name="rynne-cloud-timeline-event",
+                    )
+                except RuntimeError:
+                    logger.warning("Could not schedule Rynne Cloud timeline event outside the event loop.")
         remote_chat_id = payload.get("telegram_remote_chat_id")
         if event_type == "approval_requested" and remote_chat_id is None:
             current_request = request_service.current_request
