@@ -1,0 +1,46 @@
+name: Updater signing smoke test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-updater-signing:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Validate secret presence
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) { throw "TAURI_SIGNING_PRIVATE_KEY is missing" }
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD)) { throw "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is missing" }
+
+      - name: Install Tauri CLI
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Sign smoke-test artifact
+        working-directory: apps/desktop
+        run: npx tauri signer sign ../../.github/updater-signing-smoke.txt
+
+      - name: Confirm signature
+        shell: pwsh
+        run: |
+          $signature = ".github/updater-signing-smoke.txt.sig"
+          if (-not (Test-Path -LiteralPath $signature)) { throw "Signature was not created" }
+          if ((Get-Item -LiteralPath $signature).Length -lt 50) { throw "Signature is unexpectedly short" }
+          Write-Host "Updater signing secrets are valid."
