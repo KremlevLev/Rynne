@@ -1,6 +1,9 @@
 import {
   Activity,
   BookOpen,
+  Bug,
+  CheckCircle2,
+  Circle,
   Bot,
   ChevronRight,
   Command,
@@ -1621,6 +1624,28 @@ export function App() {
           <Guide locale={locale} />
         ) : view === "settings" ? (
           <div className="settings-view">
+            <div className="settings-card launch-readiness-card">
+              <span className="settings-icon"><CheckCircle2 size={22} /></span>
+              <div>
+                <span className="eyebrow">FIRST RUN</span>
+                <h2>{tx(locale, "Готовность к реальному тесту", "Ready for a real test")}</h2>
+                <p>{tx(locale, "Четыре быстрые проверки перед первой задачей.", "Four quick checks before the first task.")}</p>
+              </div>
+              <div className="launch-checklist">
+                {[
+                  [connection === "connected", tx(locale, "Rynne Core подключён", "Rynne Core is connected")],
+                  [providerKeys.length > 0, tx(locale, "Добавлен ключ модели", "A model key is configured")],
+                  [wakeWordAvailable, tx(locale, "Голосовая модель установлена", "Voice model is installed")],
+                  [timeline.some((item) => item.kind === "assistant" && item.status !== "error"), tx(locale, "Первая задача получила ответ", "The first task received a response")],
+                ].map(([ready, label]) => (
+                  <div className={ready ? "ready" : "pending"} key={String(label)}>
+                    {ready ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                    <span>{String(label)}</span>
+                  </div>
+                ))}
+              </div>
+              <small>{tx(locale, "Голос необязателен: текстовые задачи работают и без Vosk.", "Voice is optional: text tasks work without Vosk.")}</small>
+            </div>
             <div className="settings-card language-card">
               <span className="settings-icon"><Languages size={22} /></span>
               <div>
@@ -1715,6 +1740,14 @@ export function App() {
                 <FolderOpen size={15} />
                 {tx(locale, "Открыть папку логов", "Open log folder")}
               </button>
+              <div className="diagnostics-actions">
+                <button className="save-settings secondary" onClick={() => void transport.collectDiagnostics().then((path) => setSettingsStatus(tx(locale, `Архив готов: ${path}`, `Archive ready: ${path}`))).catch((error) => setSettingsStatus(error instanceof Error ? error.message : "Could not build diagnostics."))}>
+                  <Terminal size={15} />{tx(locale, "Собрать ZIP", "Build ZIP")}
+                </button>
+                <button className="save-settings secondary" onClick={() => void transport.reportIssue().catch((error) => setSettingsStatus(error instanceof Error ? error.message : "Could not open GitHub Issue."))}>
+                  <Bug size={15} />{tx(locale, "Сообщить об ошибке", "Report a bug")}
+                </button>
+              </div>
               <small>{tx(
                 locale,
                 "Полный ZIP: запустите scripts\\collect-diagnostics.ps1. Секреты и .env в архив не попадают.",

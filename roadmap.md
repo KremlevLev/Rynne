@@ -2501,5 +2501,6 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Optional privacy-first Cloud diagnostics: device health and structured failures, never prompts, file contents, API keys or tokens.
 - [x] OpenAI and Anthropic/Claude are available as multi-key pools with per-key model overrides in Desktop settings.
 - [ ] Add an explicit onboarding consent screen for anonymous aggregate launch metrics.
-- [ ] Add one-click redacted support bundle export and issue template.
+- [x] Add one-click redacted support bundle export and issue template.
+- [x] Add an in-app first-run readiness checklist for Core, provider, voice and the first completed response.
 - [x] Documented the consent boundary, activation funnel and failure-triage order for public testing.

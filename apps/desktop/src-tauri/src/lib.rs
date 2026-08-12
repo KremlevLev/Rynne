@@ -1037,6 +1037,74 @@ fn nova_open_logs(app: AppHandle) -> Result<String, String> {
     Ok(directory.to_string_lossy().into_owned())
 }
 
+fn repository_root() -> Result<PathBuf, String> {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .map(Path::to_path_buf)
+        .ok_or_else(|| "Cannot locate the Rynne repository.".to_owned())
+}
+
+fn newest_diagnostic_bundle(directory: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(directory)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("zip"))
+        .filter(|path| path.file_name().and_then(|value| value.to_str()).map(|name| name.starts_with("rynne-diagnostics-")).unwrap_or(false))
+        .max_by_key(|path| path.metadata().and_then(|value| value.modified()).ok())
+}
+
+#[tauri::command]
+fn nova_collect_diagnostics() -> Result<String, String> {
+    let output_directory = std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .map(|path| path.join("Desktop").join("Rynne diagnostics"))
+        .ok_or_else(|| "Cannot locate the Windows user profile.".to_owned())?;
+    create_dir_all(&output_directory).map_err(|error| format!("Cannot create the diagnostics directory: {error}"))?;
+    let script = repository_root()?.join("scripts").join("collect-diagnostics.ps1");
+    if !script.is_file() {
+        return Err("The diagnostics collector is missing. Update Rynne and try again.".to_owned());
+    }
+    let mut command = Command::new("powershell.exe");
+    command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&script).arg("-OutputDirectory").arg(&output_directory);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command.output().map_err(|error| format!("Cannot start the diagnostics collector: {error}"))?;
+    if !output.status.success() {
+        let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        return Err(if message.is_empty() { "The diagnostics collector failed.".to_owned() } else { format!("The diagnostics collector failed: {message}") });
+    }
+    let bundle = newest_diagnostic_bundle(&output_directory).ok_or_else(|| "The diagnostics archive was not created.".to_owned())?;
+    let mut explorer = Command::new("explorer.exe");
+    explorer.arg("/select,").arg(&bundle);
+    #[cfg(windows)]
+    explorer.creation_flags(CREATE_NO_WINDOW);
+    let _ = explorer.spawn();
+    Ok(bundle.to_string_lossy().into_owned())
+}
+
+fn percent_encode(value: &str) -> String {
+    value.as_bytes().iter().map(|byte| match byte {
+        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (*byte as char).to_string(),
+        _ => format!("%{byte:02X}"),
+    }).collect()
+}
+
+#[tauri::command]
+fn nova_report_issue() -> Result<String, String> {
+    let title = "[Bug] Describe what Rynne could not complete";
+    let body = "## What I asked Rynne to do\n\nDescribe the original goal.\n\n## What happened\n\nDescribe the visible result and the last stage shown in the UI.\n\n## Diagnostics\n\nAttach the ZIP created by Settings > Diagnostics. It excludes .env and secrets.\n";
+    let url = format!("https://github.com/KremlevLev/Rynne/issues/new?title={}&body={}", percent_encode(title), percent_encode(body));
+    let mut command = Command::new("explorer.exe");
+    command.arg(&url);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command.spawn().map_err(|error| format!("Cannot open the issue form: {error}"))?;
+    Ok(url)
+}
+
 fn stop_core(state: &Arc<CoreState>) {
     state.connected.store(false, Ordering::Release);
     state.generation.fetch_add(1, Ordering::AcqRel);
@@ -1075,7 +1143,9 @@ pub fn run() {
             nova_remove_service_secret,
             nova_get_permission_mode,
             nova_set_permission_mode,
-            nova_open_logs
+            nova_open_logs,
+            nova_collect_diagnostics,
+            nova_report_issue
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {

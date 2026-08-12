@@ -42,6 +42,8 @@ export interface RynneTransport {
   getPermissionMode(): Promise<PermissionMode>;
   setPermissionMode(mode: PermissionMode): Promise<void>;
   openLogs(): Promise<string>;
+  collectDiagnostics(): Promise<string>;
+  reportIssue(): Promise<string>;
 }
 
 export class TauriRynneTransport implements RynneTransport {
@@ -167,6 +169,14 @@ export class TauriRynneTransport implements RynneTransport {
   async openLogs(): Promise<string> {
     return invoke<string>("nova_open_logs");
   }
+
+  async collectDiagnostics(): Promise<string> {
+    return invoke<string>("nova_collect_diagnostics");
+  }
+
+  async reportIssue(): Promise<string> {
+    return invoke<string>("nova_report_issue");
+  }
 }
 
 class DemoRynneTransport implements RynneTransport {
@@ -179,6 +189,14 @@ class DemoRynneTransport implements RynneTransport {
 
   async openLogs(): Promise<string> {
     return "Rynne logs";
+  }
+
+  async collectDiagnostics(): Promise<string> {
+    return "Rynne diagnostics.zip";
+  }
+
+  async reportIssue(): Promise<string> {
+    return "https://github.com/KremlevLev/Rynne/issues/new";
   }
 
   async connect(

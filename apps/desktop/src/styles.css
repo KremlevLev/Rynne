@@ -334,6 +334,14 @@ kbd { margin-left: auto; color: #827f91; border: 0; font-size: 10px; font-family
 .integration-secret-row input { min-width: 0; }
 .integration-secret-row .save-settings { margin: 0; white-space: nowrap; }
 .save-settings { display: flex; align-items: center; gap: 7px; }
+.save-settings.secondary { color: #bcd3c6; background: rgba(91,201,145,.07); }
+.diagnostics-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.launch-readiness-card { max-width: 820px; }
+.launch-checklist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.launch-checklist > div { display: flex; align-items: center; gap: 9px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; color: #778293; background: rgba(8,11,16,.48); font-size: 10px; }
+.launch-checklist > div.ready { color: #bde1cc; border-color: rgba(91,201,145,.24); background: rgba(91,201,145,.055); }
+.launch-checklist > div.ready svg { color: #5bc991; }
+.launch-checklist > div.pending svg { color: #556071; }
 .appearance-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .appearance-option { display: grid; align-content: start; gap: 11px; min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 12px; color: #8f99aa; background: rgba(8,11,16,.55); text-align: left; cursor: pointer; transition: .18s ease; }
 .appearance-option:hover { color: #d8dce5; border-color: rgba(91,201,145,.25); transform: translateY(-1px); }
