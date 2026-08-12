@@ -2502,3 +2502,4 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] OpenAI and Anthropic/Claude are available as multi-key pools with per-key model overrides in Desktop settings.
 - [ ] Add an explicit onboarding consent screen for anonymous aggregate launch metrics.
 - [ ] Add one-click redacted support bundle export and issue template.
+- [x] Documented the consent boundary, activation funnel and failure-triage order for public testing.
