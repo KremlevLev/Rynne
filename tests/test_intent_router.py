@@ -388,6 +388,18 @@ def test_send_telegram_message_is_never_routed_as_chat() -> None:
     assert "mcp_telegram_business_send_message" in decision.required_tools
 
 
+def test_short_tg_message_is_never_routed_to_desktop_application() -> None:
+    decision = create_router().route(
+        'напиши @vladosik585 в тг "здарова бро"'
+    )
+
+    assert decision.intent == IntentKind.MESSAGING
+    assert decision.strategy == ExecutionStrategy.SKILL
+    assert "mcp_telegram_business_resolve_chat" in decision.required_tools
+    assert "mcp_telegram_business_send_message" in decision.required_tools
+    assert "open_application" not in decision.required_tools
+
+
 def test_reply_in_telegram_is_never_routed_as_chat() -> None:
     decision = create_router().route("Ответь Владу в телеграме: привет")
 

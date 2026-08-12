@@ -225,7 +225,7 @@ TELEGRAM_MESSAGE_ACTIONS = (
 )
 
 TELEGRAM_MARKERS = (
-    "telegram", "телеграм", "телеграме", "телегу",
+    "telegram", "телеграм", "телеграме", "телегу", "телеге", "тг",
 )
 
 

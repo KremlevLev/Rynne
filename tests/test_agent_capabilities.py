@@ -39,6 +39,9 @@ def test_parses_short_telegram_alias_without_model() -> None:
     assert parse_telegram_message_request(
         'чат vladosik585 в @s3kvoiyas от 13:54, сообщение "привет влад"'
     ) is None
+    assert parse_telegram_message_request(
+        'напиши @vladosik585 в тг "здарова бро"'
+    ) == ("@vladosik585", "здарова бро")
 
 
 def test_parses_real_telegram_forward_without_confusing_chat_names() -> None:
