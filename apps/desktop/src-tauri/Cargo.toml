@@ -19,3 +19,5 @@ ureq = { version = "3", features = ["json"] }
 tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"

@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   isRynneEvent,
   makeCommand,
@@ -28,6 +30,11 @@ export interface ServiceSecretSummary {
   source: "nova" | "environment";
   removable: boolean;
 }
+export interface UpdateSummary {
+  available: boolean;
+  version: string;
+  notes: string;
+}
 
 export interface RynneTransport {
   connect(onEvent: EventListener, onConnection: ConnectionListener): Promise<() => void>;
@@ -46,9 +53,12 @@ export interface RynneTransport {
   reportIssue(): Promise<string>;
   enableTrial(): Promise<string>;
   trialEnabled(): Promise<boolean>;
+  checkForUpdate(): Promise<UpdateSummary>;
+  installUpdate(): Promise<void>;
 }
 
 export class TauriRynneTransport implements RynneTransport {
+  private pendingUpdate: Awaited<ReturnType<typeof check>> = null;
   async connect(
     onEvent: EventListener,
     onConnection: ConnectionListener,
@@ -187,6 +197,20 @@ export class TauriRynneTransport implements RynneTransport {
   async trialEnabled(): Promise<boolean> {
     return invoke<boolean>("nova_trial_enabled");
   }
+
+  async checkForUpdate(): Promise<UpdateSummary> {
+    this.pendingUpdate = await check({ timeout: 20_000 });
+    return this.pendingUpdate
+      ? { available: true, version: this.pendingUpdate.version, notes: this.pendingUpdate.body ?? "" }
+      : { available: false, version: "", notes: "" };
+  }
+
+  async installUpdate(): Promise<void> {
+    const update = this.pendingUpdate ?? await check({ timeout: 20_000 });
+    if (!update) return;
+    await update.downloadAndInstall();
+    await relaunch();
+  }
 }
 
 class DemoRynneTransport implements RynneTransport {
@@ -215,6 +239,14 @@ class DemoRynneTransport implements RynneTransport {
 
   async trialEnabled(): Promise<boolean> {
     return false;
+  }
+
+  async checkForUpdate(): Promise<UpdateSummary> {
+    return { available: false, version: "", notes: "" };
+  }
+
+  async installUpdate(): Promise<void> {
+    return Promise.resolve();
   }
 
   async connect(

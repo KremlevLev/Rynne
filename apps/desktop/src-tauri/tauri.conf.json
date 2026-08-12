@@ -27,6 +27,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
     "category": "Productivity",
     "publisher": "Rynne",
@@ -48,6 +49,17 @@
         "installMode": "currentUser",
         "languages": ["Russian", "English"],
         "startMenuFolder": "Rynne"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxMDY5RDQ0NjIwRkY5QgpSV1NiL3lCRzFHa1FDTTZZaU9uVlRXQmpvZnV4Z0RZYjhGRzNTWE1iZ3V3U2pxQWk0OG4wK08zUQo=",
+      "endpoints": [
+        "https://github.com/KremlevLev/Rynne/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

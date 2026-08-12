@@ -324,6 +324,19 @@ The build compiles React, packages headless Python Core with PyInstaller, compil
 apps\desktop\src-tauri\target\release\bundle\nsis\Rynne_1.0.0_x64-setup.exe
 ```
 
+### Automatic updates
+
+Installed builds check the latest GitHub Release and can download, verify, and install a
+signed update from Settings without manually running a new installer. Before publishing the
+next tag, add these GitHub Actions repository secrets:
+
+- `TAURI_SIGNING_PRIVATE_KEY` — contents of the local private updater key;
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — its password.
+
+The release workflow publishes `latest.json`, the updater archive, and its signature. Never
+commit the private key. The generated local key is stored outside the repository under
+`C:\Users\Utest\.rynne\signing` and should be backed up securely.
+
 Core uses a source fingerprint, so repeated builds skip PyInstaller when Python Core has not changed. Force a clean Core package with:
 
 ```powershell

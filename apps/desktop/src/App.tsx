@@ -26,6 +26,7 @@ import {
   Square,
   Terminal,
   Trash2,
+  RefreshCw,
   Volume2,
   Workflow,
   Wrench,
@@ -662,6 +663,8 @@ export function App() {
     tavily: "",
   });
   const [settingsStatus, setSettingsStatus] = useState("");
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [ttsSettings, setTtsSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
   const [ttsSpeedDraft, setTtsSpeedDraft] = useState(1);
   const [ttsVoices, setTtsVoices] = useState<TtsVoice[]>([]);
@@ -932,6 +935,15 @@ export function App() {
       void refreshPermissionMode();
     }
   }, [connection]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void transport.checkForUpdate().then((update) => {
+        if (update.available) setUpdateVersion(update.version);
+      }).catch(() => undefined);
+    }, 8_000);
+    return () => window.clearTimeout(timer);
+  }, [transport]);
 
   useEffect(() => {
     writeUiMode(
@@ -1726,6 +1738,32 @@ export function App() {
                   ))}
                 </div>
               ) : <small>{tx(locale, "Жду первый замер Core…", "Waiting for the first Core sample…")}</small>}
+            </div>
+            <div className="settings-card diagnostics-card">
+              <span className="settings-icon"><RefreshCw size={22} /></span>
+              <div>
+                <span className="eyebrow">UPDATES</span>
+                <h2>{tx(locale, "Обновления без переустановки", "Updates without reinstalling")}</h2>
+                <p>{updateVersion
+                  ? tx(locale, `Доступна Rynne ${updateVersion}. Пакет подписан и будет установлен автоматически.`, `Rynne ${updateVersion} is available. The signed package will be installed automatically.`)
+                  : tx(locale, "Rynne проверяет GitHub Releases после запуска. Настройки, ключи и история сохраняются.", "Rynne checks GitHub Releases after launch. Settings, keys and history are preserved.")}</p>
+              </div>
+              <button className="save-settings" disabled={updateBusy} onClick={() => {
+                setUpdateBusy(true);
+                const action = updateVersion ? transport.installUpdate() : transport.checkForUpdate().then((update) => {
+                  if (update.available) {
+                    setUpdateVersion(update.version);
+                    setSettingsStatus(tx(locale, `Доступна версия ${update.version}.`, `Version ${update.version} is available.`));
+                  } else {
+                    setSettingsStatus(tx(locale, "Установлена последняя версия.", "You are up to date."));
+                  }
+                });
+                void action.catch((error) => setSettingsStatus(error instanceof Error ? error.message : "Update failed."))
+                  .finally(() => setUpdateBusy(false));
+              }}>
+                <RefreshCw size={15} className={updateBusy ? "spin" : ""} />
+                {updateVersion ? tx(locale, `Обновить до ${updateVersion}`, `Update to ${updateVersion}`) : tx(locale, "Проверить обновления", "Check for updates")}
+              </button>
             </div>
             <div className="settings-card diagnostics-card">
               <span className="settings-icon"><FolderOpen size={22} /></span>

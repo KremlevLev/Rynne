@@ -1208,6 +1208,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(core_state.clone())
         .invoke_handler(tauri::generate_handler![
             nova_connect,

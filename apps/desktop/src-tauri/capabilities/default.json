@@ -4,6 +4,8 @@
   "description": "Minimal permissions for the Rynne presentation layer.",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

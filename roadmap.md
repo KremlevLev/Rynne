@@ -2487,7 +2487,7 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Release-сборщик принудительно использует UTF-8 для stdout/stderr: Windows runner с локалью `cp1252` больше не падает после успешной сборки Core на кириллическом статусе.
 - [x] GitHub Release `v1.0.0` опубликован: production NSIS installer и отдельный SHA-256 asset доступны через `releases/latest`; сайт автоматически ведёт на этот выпуск.
 - [x] Release notes `v1.0.0` переведены на продуктовый английский; русская документация оставлена отдельной ссылкой на `README.ru.md`.
-- [ ] Подписать Windows installer сертификатом и включить Tauri updater для следующих релизов.
+- [x] Включён подписанный Tauri updater: проверка из UI, фоновая проверка после запуска, passive install и `latest.json` в GitHub Release. Отдельная Authenticode-подпись Windows installer всё ещё требует сертификат.
 
 # Always-on Telegram Remote relay (11.08.2026)
 
