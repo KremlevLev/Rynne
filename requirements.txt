@@ -3,6 +3,7 @@ keyboard>=0.13.5
 mcp>=1.27,<2
 numpy>=2.5.1
 openai>=2.45.0
+anthropic>=0.72.0
 packaging>=24.0
 pillow>=12.3.0
 psutil>=7.2.2

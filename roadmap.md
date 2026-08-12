@@ -2496,3 +2496,9 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] При выключенном Core облачная очередь не теряет команду; после подключения Core автоматически забирает её и отправляет результат обратно.
 - [ ] Добавить pairing Cloud Remote прямо в desktop UI вместо ручных environment variables.
 - [x] Просроченные cloud Missions после подключения исполняются через обычный локальный permission и verification pipeline.
+## Launch readiness and diagnostics
+
+- [x] Optional privacy-first Cloud diagnostics: device health and structured failures, never prompts, file contents, API keys or tokens.
+- [x] OpenAI and Anthropic/Claude are available as multi-key pools with per-key model overrides in Desktop settings.
+- [ ] Add an explicit onboarding consent screen for anonymous aggregate launch metrics.
+- [ ] Add one-click redacted support bundle export and issue template.

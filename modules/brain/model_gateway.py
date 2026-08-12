@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import Any
 
 from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 
 import core.config as config
 from modules.brain.model_router import ModelCandidate
@@ -41,11 +42,15 @@ OPENROUTER_API_KEYS: tuple[str, ...] = tuple(
 GEMINI_API_KEYS: tuple[str, ...] = tuple(
     getattr(config, "GEMINI_API_KEYS", ())
 )
+OPENAI_API_KEYS = tuple(getattr(config, "OPENAI_API_KEYS", ()))
+ANTHROPIC_API_KEYS = tuple(getattr(config, "ANTHROPIC_API_KEYS", ()))
 GROQ_KEY_MODELS: tuple[str, ...] = tuple(getattr(config, "GROQ_KEY_MODELS", ()))
 OPENROUTER_KEY_MODELS: tuple[str, ...] = tuple(
     getattr(config, "OPENROUTER_KEY_MODELS", ())
 )
 GEMINI_KEY_MODELS: tuple[str, ...] = tuple(getattr(config, "GEMINI_KEY_MODELS", ()))
+OPENAI_KEY_MODELS = tuple(getattr(config, "OPENAI_KEY_MODELS", ()))
+ANTHROPIC_KEY_MODELS = tuple(getattr(config, "ANTHROPIC_KEY_MODELS", ()))
 
 GROQ_BASE_URL = getattr(
     config,
@@ -74,6 +79,8 @@ GEMINI_QUOTA_GROUP = getattr(
 LLM_REQUEST_TIMEOUT = float(
     getattr(config, "LLM_REQUEST_TIMEOUT", 90.0)
 )
+OPENAI_BASE_URL = getattr(config, "OPENAI_BASE_URL", "https://api.openai.com/v1")
+ANTHROPIC_BASE_URL = getattr(config, "ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1/")
 
 PROVIDER_ATTEMPT_TIMEOUT_SECONDS = float(
     getattr(config, "PROVIDER_ATTEMPT_TIMEOUT_SECONDS", 25.0)
@@ -275,17 +282,26 @@ class ModelGateway:
                     GEMINI_API_KEYS
                 )
             ],
+            "openai": [KeySlot(provider="openai", index=index, api_key=api_key,
+                model_override=(OPENAI_KEY_MODELS[index] or None) if index < len(OPENAI_KEY_MODELS) else None)
+                for index, api_key in enumerate(OPENAI_API_KEYS)],
+            "anthropic": [KeySlot(provider="anthropic", index=index, api_key=api_key,
+                model_override=(ANTHROPIC_KEY_MODELS[index] or None) if index < len(ANTHROPIC_KEY_MODELS) else None)
+                for index, api_key in enumerate(ANTHROPIC_API_KEYS)],
         }
 
         self._clients: dict[
             tuple[str, int],
             AsyncOpenAI,
         ] = {}
+        self._anthropic_clients: dict[int, AsyncAnthropic] = {}
 
         self._preferred_key_index: dict[str, int] = {
             "groq": 0,
             "openrouter": 0,
             "gemini": 0,
+            "openai": 0,
+            "anthropic": 0,
         }
 
         # Cooldown конкретного маршрута:
@@ -316,6 +332,8 @@ class ModelGateway:
     async def close(self) -> None:
         clients = list(self._clients.values())
         self._clients.clear()
+        clients.extend(self._anthropic_clients.values())
+        self._anthropic_clients.clear()
 
         await _gather_client_closes(clients)
 
@@ -329,6 +347,10 @@ class ModelGateway:
 
         if provider == "gemini":
             return GEMINI_BASE_URL
+        if provider == "openai":
+            return OPENAI_BASE_URL
+        if provider == "anthropic":
+            return ANTHROPIC_BASE_URL
 
         raise ValueError(
             f"Неизвестный провайдер: {provider}"
@@ -951,6 +973,74 @@ class ModelGateway:
                     function_delta.arguments
                 )
 
+    async def _request_anthropic(
+        self, *, slot: KeySlot, candidate: ModelCandidate,
+        messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None,
+        allow_tools: bool,
+    ) -> ModelResponse:
+        client = self._anthropic_clients.get(slot.index)
+        if client is None:
+            client = AsyncAnthropic(api_key=slot.api_key, timeout=LLM_REQUEST_TIMEOUT, max_retries=0)
+            self._anthropic_clients[slot.index] = client
+        system_parts: list[str] = []
+        converted: list[dict[str, Any]] = []
+        for item in messages:
+            role = str(item.get("role") or "user")
+            content = item.get("content")
+            if role == "system":
+                system_parts.append(str(content or ""))
+                continue
+            if role == "tool":
+                converted.append({"role": "user", "content": [{
+                    "type": "tool_result", "tool_use_id": str(item.get("tool_call_id") or ""),
+                    "content": str(content or ""),
+                }]})
+                continue
+            blocks: Any = content
+            if role == "assistant" and item.get("tool_calls"):
+                blocks = ([{"type": "text", "text": str(content)}] if content else []) + [{
+                    "type": "tool_use", "id": str(call.get("id") or ""),
+                    "name": str(call.get("function", {}).get("name") or ""),
+                    "input": self._safe_json_object(call.get("function", {}).get("arguments")),
+                } for call in item["tool_calls"]]
+            converted.append({"role": "assistant" if role == "assistant" else "user", "content": blocks})
+        arguments: dict[str, Any] = {
+            "model": candidate.model, "max_tokens": 4096,
+            "messages": converted, "system": "\n\n".join(system_parts),
+        }
+        if allow_tools and tools and candidate.supports_tools:
+            arguments["tools"] = [{
+                "name": item["function"]["name"],
+                "description": item["function"].get("description", ""),
+                "input_schema": item["function"].get("parameters", {"type": "object", "properties": {}}),
+            } for item in tools if item.get("type") == "function"]
+        response = await client.messages.create(**arguments)
+        text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        for block in response.content:
+            if getattr(block, "type", "") == "text":
+                text_parts.append(str(getattr(block, "text", "")))
+            elif getattr(block, "type", "") == "tool_use":
+                tool_calls.append({"id": block.id, "type": "function", "function": {
+                    "name": block.name, "arguments": __import__("json").dumps(block.input, ensure_ascii=False),
+                }})
+        return ModelResponse(
+            provider="anthropic", model=candidate.model, key_label=slot.label,
+            text="".join(text_parts).strip(), tool_calls=tool_calls,
+            finish_reason=str(response.stop_reason or ""),
+            usage=response.usage.model_dump() if hasattr(response.usage, "model_dump") else {},
+        )
+
+    @staticmethod
+    def _safe_json_object(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        try:
+            parsed = __import__("json").loads(str(value or "{}"))
+            return parsed if isinstance(parsed, dict) else {}
+        except (TypeError, ValueError):
+            return {}
+
     async def _request_once(
         self,
         *,
@@ -960,6 +1050,11 @@ class ModelGateway:
         tools: list[dict[str, Any]] | None,
         allow_tools: bool,
     ) -> ModelResponse:
+        if candidate.provider == "anthropic":
+            return await self._request_anthropic(
+                slot=slot, candidate=candidate, messages=messages,
+                tools=tools, allow_tools=allow_tools,
+            )
         client = self._get_client(slot)
 
         request_arguments: dict[str, Any] = {

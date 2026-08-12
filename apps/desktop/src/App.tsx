@@ -214,6 +214,8 @@ export const PROVIDER_OPTIONS: ReadonlyArray<{
     placeholder: "AIza…",
     modelPlaceholder: "gemini-2.5-flash",
   },
+  { key: "openai", label: "OpenAI", description: "Direct OpenAI models for reliable tools, reasoning and vision", placeholder: "sk-…", modelPlaceholder: "gpt-5-mini" },
+  { key: "anthropic", label: "Anthropic Claude", description: "Claude models for long context, tools and complex tasks", placeholder: "sk-ant-…", modelPlaceholder: "claude-sonnet-4-5" },
 ];
 
 function providerOptions(locale: UiLocale) {

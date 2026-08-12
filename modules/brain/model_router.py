@@ -23,6 +23,10 @@ from core.config import (
     GEMINI_COMPLEX_MODELS,
     GEMINI_ULTRA_MODELS,
     GEMINI_VISION_MODELS,
+    OPENAI_API_KEYS, OPENAI_CHAT_MODELS, OPENAI_TOOL_MODELS,
+    OPENAI_COMPLEX_MODELS, OPENAI_ULTRA_MODELS, OPENAI_VISION_MODELS,
+    ANTHROPIC_API_KEYS, ANTHROPIC_CHAT_MODELS, ANTHROPIC_TOOL_MODELS,
+    ANTHROPIC_COMPLEX_MODELS, ANTHROPIC_ULTRA_MODELS, ANTHROPIC_VISION_MODELS,
 )
 
 
@@ -188,6 +192,19 @@ def build_model_route(
     complexity: TaskComplexity,
 ) -> list[ModelCandidate]:
     candidates: list[ModelCandidate] = []
+    extra_routes = {
+        TaskComplexity.CHAT: (("openai", OPENAI_API_KEYS, OPENAI_CHAT_MODELS, False), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_CHAT_MODELS, False)),
+        TaskComplexity.BASIC_TOOL: (("openai", OPENAI_API_KEYS, OPENAI_TOOL_MODELS, False), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_TOOL_MODELS, False)),
+        TaskComplexity.COMPLEX_TOOL: (("openai", OPENAI_API_KEYS, OPENAI_COMPLEX_MODELS, False), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_COMPLEX_MODELS, False)),
+        TaskComplexity.ULTRA: (("openai", OPENAI_API_KEYS, OPENAI_ULTRA_MODELS, False), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_ULTRA_MODELS, False)),
+        TaskComplexity.VISION: (("openai", OPENAI_API_KEYS, OPENAI_VISION_MODELS, True), ("anthropic", ANTHROPIC_API_KEYS, ANTHROPIC_VISION_MODELS, True)),
+    }
+    for offset, (provider, keys, models, vision) in enumerate(extra_routes[complexity], start=1):
+        if keys:
+            candidates.extend(_candidates(
+                provider, models, supports_tools=complexity != TaskComplexity.CHAT,
+                supports_vision=vision, start_priority=50 + offset * 10,
+            ))
 
     if complexity == TaskComplexity.VISION:
         if GROQ_API_KEYS:

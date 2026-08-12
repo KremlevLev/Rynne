@@ -11,7 +11,7 @@ import {
 export type ConnectionState = "connecting" | "connected" | "disconnected";
 export type EventListener = (event: RynneEvent) => void;
 export type ConnectionListener = (state: ConnectionState) => void;
-export type ProviderName = "groq" | "openrouter" | "gemini";
+export type ProviderName = "groq" | "openrouter" | "gemini" | "openai" | "anthropic";
 export type ServiceName = "telegram" | "telegram_remote" | "tavily";
 export type PermissionMode = "full_access" | "risky_only" | "always_ask";
 export interface ProviderKeySummary {

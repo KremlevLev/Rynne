@@ -89,6 +89,8 @@ fn provider_variables(provider: &str) -> Result<(&'static str, &'static str), St
         "groq" => Ok(("GROQ_API_KEYS", "GROQ_API_KEY")),
         "openrouter" => Ok(("OPENROUTER_API_KEYS", "OPENROUTER_API_KEY")),
         "gemini" => Ok(("GEMINI_API_KEYS", "GEMINI_API_KEY")),
+        "openai" => Ok(("OPENAI_API_KEYS", "OPENAI_API_KEY")),
+        "anthropic" => Ok(("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY")),
         _ => Err("Unsupported model provider.".to_owned()),
     }
 }
@@ -98,6 +100,8 @@ fn provider_model_variable(provider: &str) -> Result<&'static str, String> {
         "groq" => Ok("NOVA_GROQ_KEY_MODELS"),
         "openrouter" => Ok("NOVA_OPENROUTER_KEY_MODELS"),
         "gemini" => Ok("NOVA_GEMINI_KEY_MODELS"),
+        "openai" => Ok("RYNNE_OPENAI_KEY_MODELS"),
+        "anthropic" => Ok("RYNNE_ANTHROPIC_KEY_MODELS"),
         _ => Err("Unsupported model provider.".to_owned()),
     }
 }
@@ -471,7 +475,7 @@ fn nova_list_provider_keys(app: AppHandle) -> Result<Vec<ProviderKeySummary>, St
     let contents = std::fs::read_to_string(&env_path).unwrap_or_default();
     let mut summaries = Vec::new();
 
-    for provider in ["groq", "openrouter", "gemini"] {
+    for provider in ["groq", "openrouter", "gemini", "openai", "anthropic"] {
         let file_keys = file_provider_keys(&contents, provider)?;
         let file_models = provider_models(&contents, provider, file_keys.len())?;
         let inherited_keys = inherited_provider_keys(provider)?;
@@ -784,7 +788,7 @@ fn legacy_core_binary_name() -> PathBuf {
 fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<(), String> {
     let env_path = provider_env_path(app)?;
     let contents = std::fs::read_to_string(env_path).unwrap_or_default();
-    for provider in ["groq", "openrouter", "gemini"] {
+    for provider in ["groq", "openrouter", "gemini", "openai", "anthropic"] {
         let (plural, _) = provider_variables(provider)?;
         let model_variable = provider_model_variable(provider)?;
         let mut keys = file_provider_keys(&contents, provider)?;

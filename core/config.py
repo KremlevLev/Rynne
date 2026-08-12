@@ -94,6 +94,8 @@ GEMINI_API_KEYS = _collect_keys(
     "GEMINI_API_KEY",
     "GEMINI_API_KEY",
 )
+OPENAI_API_KEYS = _collect_keys("OPENAI_API_KEYS", "OPENAI_API_KEY", "OPENAI_API_KEY")
+ANTHROPIC_API_KEYS = _collect_keys("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY")
 
 # Старые импорты продолжают работать.
 GROQ_API_KEY = GROQ_API_KEYS[0] if GROQ_API_KEYS else ""
@@ -110,6 +112,8 @@ HAS_MODEL_PROVIDER: Final[bool] = bool(
     GROQ_API_KEYS
     or OPENROUTER_API_KEYS
     or GEMINI_API_KEYS
+    or OPENAI_API_KEYS
+    or ANTHROPIC_API_KEYS
 )
 
 GROQ_KEY_MODELS = _aligned_key_models(
@@ -124,10 +128,14 @@ GEMINI_KEY_MODELS = _aligned_key_models(
     "NOVA_GEMINI_KEY_MODELS",
     len(GEMINI_API_KEYS),
 )
+OPENAI_KEY_MODELS = _aligned_key_models("RYNNE_OPENAI_KEY_MODELS", len(OPENAI_API_KEYS))
+ANTHROPIC_KEY_MODELS = _aligned_key_models("RYNNE_ANTHROPIC_KEY_MODELS", len(ANTHROPIC_API_KEYS))
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1/"
 GEMINI_QUOTA_GROUP = os.getenv("GEMINI_QUOTA_GROUP", "gemini-project-main")
 
 # Сохраняем совместимость со старым кодом.
@@ -143,6 +151,14 @@ elif OPENROUTER_API_KEYS:
     PROVIDER = "openrouter"
     BASE_URL = OPENROUTER_BASE_URL
     API_KEY = OPENROUTER_API_KEYS[0]
+elif OPENAI_API_KEYS:
+    PROVIDER = "openai"
+    BASE_URL = OPENAI_BASE_URL
+    API_KEY = OPENAI_API_KEYS[0]
+elif ANTHROPIC_API_KEYS:
+    PROVIDER = "anthropic"
+    BASE_URL = ANTHROPIC_BASE_URL
+    API_KEY = ANTHROPIC_API_KEYS[0]
 else:
     # A freshly installed desktop app must reach onboarding/settings without
     # an API key. ModelGateway already represents providers as empty key-slot
@@ -220,6 +236,16 @@ GEMINI_VISION_MODELS = _model_list(
     "NOVA_GEMINI_VISION_MODELS",
     "gemini-2.5-flash",
 )
+OPENAI_CHAT_MODELS = _model_list("RYNNE_OPENAI_CHAT_MODELS", "gpt-5-mini")
+OPENAI_TOOL_MODELS = _model_list("RYNNE_OPENAI_TOOL_MODELS", "gpt-5-mini")
+OPENAI_COMPLEX_MODELS = _model_list("RYNNE_OPENAI_COMPLEX_MODELS", "gpt-5")
+OPENAI_ULTRA_MODELS = _model_list("RYNNE_OPENAI_ULTRA_MODELS", "gpt-5")
+OPENAI_VISION_MODELS = _model_list("RYNNE_OPENAI_VISION_MODELS", "gpt-5-mini")
+ANTHROPIC_CHAT_MODELS = _model_list("RYNNE_ANTHROPIC_CHAT_MODELS", "claude-sonnet-4-5")
+ANTHROPIC_TOOL_MODELS = _model_list("RYNNE_ANTHROPIC_TOOL_MODELS", "claude-sonnet-4-5")
+ANTHROPIC_COMPLEX_MODELS = _model_list("RYNNE_ANTHROPIC_COMPLEX_MODELS", "claude-sonnet-4-5")
+ANTHROPIC_ULTRA_MODELS = _model_list("RYNNE_ANTHROPIC_ULTRA_MODELS", "claude-opus-4-1")
+ANTHROPIC_VISION_MODELS = _model_list("RYNNE_ANTHROPIC_VISION_MODELS", "claude-sonnet-4-5")
 
 # Добавляем Gemini в список моделей
 MODELS_LIST = list(
@@ -239,6 +265,11 @@ MODELS_LIST = list(
             *GEMINI_COMPLEX_MODELS,
             *GEMINI_ULTRA_MODELS,
             *GEMINI_VISION_MODELS,
+            *OPENAI_CHAT_MODELS, *OPENAI_TOOL_MODELS, *OPENAI_COMPLEX_MODELS,
+            *OPENAI_ULTRA_MODELS, *OPENAI_VISION_MODELS,
+            *ANTHROPIC_CHAT_MODELS, *ANTHROPIC_TOOL_MODELS,
+            *ANTHROPIC_COMPLEX_MODELS, *ANTHROPIC_ULTRA_MODELS,
+            *ANTHROPIC_VISION_MODELS,
         ]
     )
 )
@@ -248,6 +279,10 @@ DEFAULT_MODEL = (
     if GROQ_API_KEYS
     else GEMINI_CHAT_MODELS[0]
     if GEMINI_API_KEYS
+    else OPENAI_CHAT_MODELS[0]
+    if OPENAI_API_KEYS
+    else ANTHROPIC_CHAT_MODELS[0]
+    if ANTHROPIC_API_KEYS
     else OPENROUTER_CHAT_MODELS[0]
 )
 

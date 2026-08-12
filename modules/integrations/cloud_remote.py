@@ -16,6 +16,7 @@ class CloudRemoteConfig:
     base_url: str = ""
     device_id: str = ""
     device_token: str = ""
+    telemetry_enabled: bool = False
 
     @property
     def configured(self) -> bool:
@@ -31,6 +32,7 @@ class CloudRemoteConfig:
             base_url=os.getenv("RYNNE_CLOUD_REMOTE_URL", "").strip().rstrip("/"),
             device_id=os.getenv("RYNNE_CLOUD_DEVICE_ID", "").strip(),
             device_token=os.getenv("RYNNE_CLOUD_DEVICE_TOKEN", "").strip(),
+            telemetry_enabled=os.getenv("RYNNE_TELEMETRY_ENABLED", "false").lower() in {"1", "true", "yes", "on"},
         )
 
 
@@ -70,7 +72,8 @@ class RynneCloudRemoteClient:
             raise CloudRemoteError("Cloud returned an invalid response")
         return data
 
-    def heartbeat(self, *, name: str, version: str, status: str, current_task_id: str = "", permission_mode: str = "") -> None:
+    def heartbeat(self, *, name: str, version: str, status: str, current_task_id: str = "", permission_mode: str = "", metrics: dict[str, Any] | None = None) -> None:
+        safe_metrics = metrics or {}
         self._request(
             "POST",
             f"/v1/devices/{self.config.device_id}/heartbeat",
@@ -80,8 +83,22 @@ class RynneCloudRemoteClient:
                 "status": status,
                 "current_task_id": current_task_id,
                 "permission_mode": permission_mode,
+                "telemetry_enabled": self.config.telemetry_enabled,
+                "cpu_percent": safe_metrics.get("cpu_percent", 0) if self.config.telemetry_enabled else 0,
+                "memory_mb": safe_metrics.get("memory_mb", 0) if self.config.telemetry_enabled else 0,
+                "uptime_seconds": safe_metrics.get("uptime_seconds", 0) if self.config.telemetry_enabled else 0,
+                "provider_count": safe_metrics.get("provider_count", 0) if self.config.telemetry_enabled else 0,
             },
         )
+
+    def diagnostic_event(self, *, event_type: str, error_code: str = "", component: str = "core", severity: str = "error", duration_ms: int = 0, provider: str = "", model: str = "", message: str = "") -> None:
+        if not self.config.telemetry_enabled:
+            return
+        self._request("POST", f"/v1/devices/{self.config.device_id}/diagnostics", payload={
+            "event_type": event_type, "error_code": error_code, "component": component,
+            "severity": severity, "duration_ms": duration_ms, "provider": provider,
+            "model": model, "message": message[:500],
+        })
 
     def next_task(self) -> dict[str, Any] | None:
         task = self._request("POST", f"/v1/devices/{self.config.device_id}/tasks/next").get("task")

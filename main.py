@@ -1968,6 +1968,19 @@ async def async_main() -> None:
                     elif approval.get("status") == "denied":
                         runner.permission_manager.deny(operation_id)
                 if now - last_heartbeat >= 10:
+                    telemetry_metrics: dict[str, object] = {}
+                    if cloud_remote.config.telemetry_enabled:
+                        try:
+                            import psutil
+                            process = psutil.Process()
+                            telemetry_metrics = {
+                                "cpu_percent": process.cpu_percent(interval=None),
+                                "memory_mb": round(process.memory_info().rss / 1024 / 1024, 1),
+                                "uptime_seconds": max(0, int(time.time() - process.create_time())),
+                                "provider_count": sum(len(items) for items in gateway._key_slots.values()),
+                            }
+                        except Exception:
+                            telemetry_metrics = {}
                     await asyncio.to_thread(
                         cloud_remote.heartbeat,
                         name=socket.gethostname() or "Rynne on Windows",
@@ -1975,6 +1988,7 @@ async def async_main() -> None:
                         status="busy" if current is not None else "idle",
                         current_task_id=current_task_id,
                         permission_mode=runner.permission_manager.mode.value,
+                        metrics=telemetry_metrics,
                     )
                     last_heartbeat = now
 

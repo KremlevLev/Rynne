@@ -280,6 +280,8 @@ describe("provider key pools", () => {
       "groq",
       "openrouter",
       "gemini",
+      "openai",
+      "anthropic",
     ]);
   });
 });
