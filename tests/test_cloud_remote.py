@@ -56,6 +56,12 @@ def test_claim_and_complete_remote_task() -> None:
     assert session.calls[1]["json"]["result"] == "Done"
 
 
+def test_cloud_wake_signal_is_polled_separately_from_tasks() -> None:
+    remote, session = make_client([{"wake": True}])
+    assert remote.next_wake() is True
+    assert session.calls[0]["url"].endswith("/v1/devices/pc/wake/next")
+
+
 def test_unconfigured_client_fails_without_network() -> None:
     with pytest.raises(CloudRemoteError):
         RynneCloudRemoteClient(CloudRemoteConfig()).next_task()

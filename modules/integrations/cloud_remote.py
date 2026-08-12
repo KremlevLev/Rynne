@@ -87,6 +87,9 @@ class RynneCloudRemoteClient:
         task = self._request("POST", f"/v1/devices/{self.config.device_id}/tasks/next").get("task")
         return task if isinstance(task, dict) else None
 
+    def next_wake(self) -> bool:
+        return bool(self._request("POST", f"/v1/devices/{self.config.device_id}/wake/next").get("wake"))
+
     def task_status(self, task_id: str) -> dict[str, Any] | None:
         task = self._request("GET", f"/v1/devices/{self.config.device_id}/tasks/{task_id}").get("task")
         return task if isinstance(task, dict) else None
