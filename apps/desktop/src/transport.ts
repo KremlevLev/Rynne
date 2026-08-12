@@ -41,6 +41,7 @@ export interface RynneTransport {
   removeServiceSecret(service: ServiceName): Promise<void>;
   getPermissionMode(): Promise<PermissionMode>;
   setPermissionMode(mode: PermissionMode): Promise<void>;
+  openLogs(): Promise<string>;
 }
 
 export class TauriRynneTransport implements RynneTransport {
@@ -162,6 +163,10 @@ export class TauriRynneTransport implements RynneTransport {
   async setPermissionMode(mode: PermissionMode): Promise<void> {
     await invoke("nova_set_permission_mode", { mode });
   }
+
+  async openLogs(): Promise<string> {
+    return invoke<string>("nova_open_logs");
+  }
 }
 
 class DemoRynneTransport implements RynneTransport {
@@ -171,6 +176,10 @@ class DemoRynneTransport implements RynneTransport {
   private voiceActive = false;
   private inputMode = "sleep";
   private permissionMode: PermissionMode = "risky_only";
+
+  async openLogs(): Promise<string> {
+    return "Rynne logs";
+  }
 
   async connect(
     onEvent: EventListener,

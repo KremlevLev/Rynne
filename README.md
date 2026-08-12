@@ -263,6 +263,15 @@ Press **`Ctrl+Shift+Space`** and say:
 
 ## Desktop development
 
+### Logs and bug reports
+
+Installed desktop logs are stored in `%LOCALAPPDATA%\ai.nova.desktop\logs`.
+Use **Settings → Diagnostics → Open log folder** to open it. `rynne-core.log`
+contains the combined Core history, `rynne-desktop.log` contains supervisor
+events, and `sessions\rynne-core-*.log` contains one immutable log per Core
+launch. For a complete safe bundle run `scripts\collect-diagnostics.ps1`; it
+creates a ZIP on the Desktop and excludes `.env` and API keys.
+
 For a clickable browser-only UI preview:
 
 ```powershell

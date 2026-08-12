@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 use std::{
-    fs::{create_dir_all, File, OpenOptions},
+    fs::{create_dir_all, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -9,7 +9,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -323,13 +323,18 @@ fn validate_service_secret(secret: &str) -> Result<&str, String> {
 
 fn validate_telegram_control_ids(value: &str) -> Result<String, String> {
     let mut ids = Vec::new();
-    for raw in value.split(|character: char| character == ',' || character == ';' || character.is_whitespace()) {
+    for raw in value
+        .split(|character: char| character == ',' || character == ';' || character.is_whitespace())
+    {
         let id = raw.trim();
         if id.is_empty() {
             continue;
         }
-        if id.len() < 5 || id.len() > 20 || !id.chars().all(|character| character.is_ascii_digit()) {
-            return Err("Telegram Remote accepts numeric Telegram user IDs separated by commas.".to_owned());
+        if id.len() < 5 || id.len() > 20 || !id.chars().all(|character| character.is_ascii_digit())
+        {
+            return Err(
+                "Telegram Remote accepts numeric Telegram user IDs separated by commas.".to_owned(),
+            );
         }
         if !ids.iter().any(|known| known == id) {
             ids.push(id.to_owned());
@@ -341,7 +346,11 @@ fn validate_telegram_control_ids(value: &str) -> Result<String, String> {
     Ok(ids.join(","))
 }
 
-fn write_service_secret(env_path: &Path, variable: &str, value: Option<&str>) -> Result<(), String> {
+fn write_service_secret(
+    env_path: &Path,
+    variable: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
     let current = std::fs::read_to_string(env_path).unwrap_or_default();
     let mut lines: Vec<String> = current
         .lines()
@@ -351,7 +360,11 @@ fn write_service_secret(env_path: &Path, variable: &str, value: Option<&str>) ->
     if let Some(secret) = value.filter(|secret| !secret.is_empty()) {
         lines.push(format!("{variable}={secret}"));
     }
-    let contents = if lines.is_empty() { String::new() } else { format!("{}\n", lines.join("\n")) };
+    let contents = if lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", lines.join("\n"))
+    };
     std::fs::write(env_path, contents)
         .map_err(|error| format!("Cannot save Rynne integration settings: {error}"))
 }
@@ -683,8 +696,8 @@ fn nova_remove_provider_key(
 }
 
 fn build_core_command(app: &AppHandle) -> Result<Command, String> {
-    if let Some(executable) = std::env::var_os("RYNNE_CORE_SIDECAR")
-        .or_else(|| std::env::var_os("NOVA_CORE_SIDECAR"))
+    if let Some(executable) =
+        std::env::var_os("RYNNE_CORE_SIDECAR").or_else(|| std::env::var_os("NOVA_CORE_SIDECAR"))
     {
         return Ok(Command::new(executable));
     }
@@ -836,10 +849,31 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
         .stderr
         .take()
         .ok_or_else(|| "Rynne Core stderr is unavailable.".to_owned())?;
-    let core_log = app.path().app_log_dir().ok().and_then(|directory| {
-        create_dir_all(&directory).ok()?;
-        File::create(directory.join("rynne-core.log")).ok()
-    });
+    let session_stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let (core_log, session_log) = app
+        .path()
+        .app_log_dir()
+        .ok()
+        .and_then(|directory| {
+            create_dir_all(&directory).ok()?;
+            let sessions = directory.join("sessions");
+            create_dir_all(&sessions).ok()?;
+            let current = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(directory.join("rynne-core.log"))
+                .ok();
+            let session = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(sessions.join(format!("rynne-core-{session_stamp}.log")))
+                .ok();
+            Some((current, session))
+        })
+        .unwrap_or((None, None));
 
     let process_id = child.id();
     let generation = state.generation.fetch_add(1, Ordering::AcqRel) + 1;
@@ -900,6 +934,16 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
 
     std::thread::spawn(move || {
         let mut core_log = core_log;
+        let mut session_log = session_log;
+        let start_marker = format!(
+            "=== RYNNE SESSION START unix={session_stamp} pid={process_id} generation={generation} ==="
+        );
+        if let Some(log) = core_log.as_mut() {
+            let _ = writeln!(log, "{start_marker}");
+        }
+        if let Some(log) = session_log.as_mut() {
+            let _ = writeln!(log, "{start_marker}");
+        }
         let mut reader = BufReader::new(stderr);
         let mut bytes = Vec::new();
         loop {
@@ -914,6 +958,22 @@ fn spawn_core(app: AppHandle, state: Arc<CoreState>) -> Result<(), String> {
             if let Some(log) = core_log.as_mut() {
                 let _ = writeln!(log, "{line}");
             }
+            if let Some(log) = session_log.as_mut() {
+                let _ = writeln!(log, "{line}");
+            }
+        }
+        let end_marker = format!(
+            "=== RYNNE SESSION END unix={} pid={process_id} generation={generation} ===",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        );
+        if let Some(log) = core_log.as_mut() {
+            let _ = writeln!(log, "{end_marker}");
+        }
+        if let Some(log) = session_log.as_mut() {
+            let _ = writeln!(log, "{end_marker}");
         }
     });
 
@@ -944,11 +1004,33 @@ fn append_supervisor_log(app: &AppHandle, message: &str) {
     let Ok(mut log) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(directory.join("nova-desktop.log"))
+        .open(directory.join("rynne-desktop.log"))
     else {
         return;
     };
-    let _ = writeln!(log, "{message}");
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let _ = writeln!(log, "{timestamp} | {message}");
+}
+
+#[tauri::command]
+fn nova_open_logs(app: AppHandle) -> Result<String, String> {
+    let directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| format!("Cannot resolve Rynne log directory: {error}"))?;
+    create_dir_all(&directory)
+        .map_err(|error| format!("Cannot create Rynne log directory: {error}"))?;
+    let mut command = Command::new("explorer.exe");
+    command.arg(&directory);
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+        .spawn()
+        .map_err(|error| format!("Cannot open Rynne log directory: {error}"))?;
+    Ok(directory.to_string_lossy().into_owned())
 }
 
 fn stop_core(state: &Arc<CoreState>) {
@@ -988,7 +1070,8 @@ pub fn run() {
             nova_set_service_secret,
             nova_remove_service_secret,
             nova_get_permission_mode,
-            nova_set_permission_mode
+            nova_set_permission_mode,
+            nova_open_logs
         ])
         .setup(move |app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -1025,8 +1108,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        file_provider_keys, key_hint, normalize_permission_mode, service_variable,
-        split_key_list, validate_telegram_control_ids,
+        file_provider_keys, key_hint, normalize_permission_mode, service_variable, split_key_list,
+        validate_telegram_control_ids,
     };
 
     #[test]
@@ -1044,9 +1127,18 @@ mod tests {
 
     #[test]
     fn permission_modes_are_explicit_and_validated() {
-        assert_eq!(normalize_permission_mode("full_access").unwrap(), "full_access");
-        assert_eq!(normalize_permission_mode("risky_only").unwrap(), "risky_only");
-        assert_eq!(normalize_permission_mode("always_ask").unwrap(), "always_ask");
+        assert_eq!(
+            normalize_permission_mode("full_access").unwrap(),
+            "full_access"
+        );
+        assert_eq!(
+            normalize_permission_mode("risky_only").unwrap(),
+            "risky_only"
+        );
+        assert_eq!(
+            normalize_permission_mode("always_ask").unwrap(),
+            "always_ask"
+        );
         assert!(normalize_permission_mode("anything").is_err());
     }
 

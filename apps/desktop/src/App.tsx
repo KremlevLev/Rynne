@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Command,
   Cpu,
+  FolderOpen,
   History,
   KeyRound,
   Languages,
@@ -1691,6 +1692,32 @@ export function App() {
                   ))}
                 </div>
               ) : <small>{tx(locale, "Жду первый замер Core…", "Waiting for the first Core sample…")}</small>}
+            </div>
+            <div className="settings-card diagnostics-card">
+              <span className="settings-icon"><FolderOpen size={22} /></span>
+              <div>
+                <span className="eyebrow">DIAGNOSTICS</span>
+                <h2>{tx(locale, "Логи каждого запуска", "Logs for every launch")}</h2>
+                <p>{tx(
+                  locale,
+                  "Rynne сохраняет общий журнал Core, журнал desktop-supervisor и отдельный файл для каждого запуска. При баге откройте папку и пришлите последний файл из sessions.",
+                  "Rynne keeps the current Core log, the desktop supervisor log, and a separate file for every launch. For a bug report, open the folder and send the latest file from sessions.",
+                )}</p>
+              </div>
+              <button
+                className="save-settings"
+                onClick={() => void transport.openLogs().catch((error) => {
+                  setSettingsStatus(error instanceof Error ? error.message : tx(locale, "Не удалось открыть папку логов.", "Could not open the log folder."));
+                })}
+              >
+                <FolderOpen size={15} />
+                {tx(locale, "Открыть папку логов", "Open log folder")}
+              </button>
+              <small>{tx(
+                locale,
+                "Полный ZIP: запустите scripts\\collect-diagnostics.ps1. Секреты и .env в архив не попадают.",
+                "Full ZIP: run scripts\\collect-diagnostics.ps1. Secrets and .env are excluded.",
+              )}</small>
             </div>
             <div className="settings-card access-card">
               <span className="settings-icon"><ShieldCheck size={22} /></span>
