@@ -19,14 +19,23 @@ from modules.integrations.cloud_remote import CloudRemoteError, RynneCloudRemote
 _MUTEX_HANDLE = None
 
 
-def acquire_single_instance() -> bool:
+def acquire_single_instance(*, timeout_seconds: float = 5.0) -> bool:
     """Keep exactly one poller alive per signed-in Windows user."""
     global _MUTEX_HANDLE
     if os.name != "nt":
         return True
     kernel32 = ctypes.windll.kernel32
-    _MUTEX_HANDLE = kernel32.CreateMutexW(None, False, "Local\\RynneWakeBridge")
-    return bool(_MUTEX_HANDLE) and kernel32.GetLastError() != 183
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        handle = kernel32.CreateMutexW(None, False, "Local\\RynneWakeBridge")
+        if handle and kernel32.GetLastError() != 183:
+            _MUTEX_HANDLE = handle
+            return True
+        if handle:
+            kernel32.CloseHandle(handle)
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.25)
 
 
 def load_env(path: Path) -> None:
@@ -87,15 +96,21 @@ def launch_rynne() -> bool:
 
 
 def main() -> int:
-    if not acquire_single_instance():
-        return 0
     load_env(ROOT / ".env")
-    client = RynneCloudRemoteClient.from_env()
-    if not client.configured:
-        return 2
     log_dir = Path(os.getenv("LOCALAPPDATA", str(ROOT))) / "ai.nova.desktop" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=log_dir / "rynne-wake-bridge.log", level=logging.INFO)
+    logging.basicConfig(
+        filename=log_dir / "rynne-wake-bridge.log", level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s", force=True,
+    )
+    if not acquire_single_instance():
+        logging.warning("Another wake bridge still owns the single-instance lock; exiting")
+        return 0
+    client = RynneCloudRemoteClient.from_env()
+    if not client.configured:
+        logging.error("Cloud remote is not configured; check URL, device ID and device token")
+        return 2
+    logging.info("Wake bridge started; device=%s url=%s", client.config.device_id, client.config.base_url)
     while True:
         try:
             if client.next_wake() and not rynne_running():

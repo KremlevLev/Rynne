@@ -23,6 +23,14 @@ $shortcut.Save()
 Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*rynne_wake_bridge.py*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Milliseconds 750
 Start-Process -FilePath $pythonw -ArgumentList ('"' + $script + '"') -WorkingDirectory $repoRoot -WindowStyle Hidden
+Start-Sleep -Milliseconds 750
+$bridge = Get-CimInstance Win32_Process -Filter "Name = 'pythonw.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like '*rynne_wake_bridge.py*' } |
+    Select-Object -First 1
+if (-not $bridge) {
+    throw "Rynne Wake Bridge exited during startup. Check the wake bridge log."
+}
 Write-Host "Rynne Wake Bridge installed and started." -ForegroundColor Green
 Write-Host $shortcutPath
