@@ -49,22 +49,40 @@ def rynne_running() -> bool:
 
 
 def launch_rynne() -> bool:
+    log_dir = Path(os.getenv("LOCALAPPDATA", str(ROOT))) / "ai.nova.desktop" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    launch_log = log_dir / "rynne-wake-launch.log"
     candidates = [
         Path(os.getenv("LOCALAPPDATA", "")) / "Rynne" / "Rynne.exe",
         Path(os.getenv("LOCALAPPDATA", "")) / "Programs" / "Rynne" / "Rynne.exe",
     ]
     for executable in candidates:
         if executable.is_file():
-            subprocess.Popen([str(executable)], creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+            with launch_log.open("ab") as output:
+                process = subprocess.Popen(
+                    [str(executable)], stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                    close_fds=True,
+                )
+            time.sleep(2)
+            if process.poll() is not None:
+                logging.error("Installed Rynne exited during startup with code %s; log=%s", process.returncode, launch_log)
+                continue
             return True
     dev_script = ROOT / "scripts" / "dev-desktop.ps1"
     if dev_script.is_file():
-        subprocess.Popen(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(dev_script)],
-            cwd=ROOT,
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-        )
-        return True
+        with launch_log.open("ab") as output:
+            process = subprocess.Popen(
+                ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(dev_script)],
+                cwd=ROOT, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
+        time.sleep(3)
+        if process.poll() is None:
+            logging.info("Development runtime started with pid=%s; log=%s", process.pid, launch_log)
+            return True
+        logging.error("Development runtime exited with code %s; log=%s", process.returncode, launch_log)
     return False
 
 
