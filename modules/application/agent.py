@@ -361,12 +361,19 @@ open_url_in_browser using app_name="google chrome". Continue in that same visibl
 Chrome window with Windows UI/accessibility tools. Never switch to browser_start,
 browser_open_url, or another isolated Playwright profile during this task.
 
-Inspect the visible UI before acting and verify every important transition. Do not
+Call inspect_active_window before interacting, then prefer click_ui_element by its
+visible label. Re-inspect after every navigation. Use coordinates only as the last
+fallback after a fresh observation. Inspect the visible UI before acting and verify
+every important transition. Do not
 claim completion merely because Chrome opened or a click returned successfully.
 If a CAPTCHA, anti-bot challenge, password prompt, passkey, 2FA, security key, or
 account chooser requiring private input appears, pause at that exact screen and ask
 the user to complete it. Do not solve or bypass CAPTCHA. After the user confirms,
 continue the original unfinished goal instead of restarting it.
+
+Opening the browser is never completion of a compound web task. Keep executing all
+requested outcomes until they are verified or the exact current screen requires
+private human input.
 """.strip()
 
 CONTEXTUAL_FOLLOW_UP_PROMPT = """
@@ -754,6 +761,7 @@ class AgentService:
         self._pending_telegram_message: str | None = None
         self._last_telegram_failure: dict[str, str] | None = None
         self._pending_git_clone_root: str | None = None
+        self._pending_goal_text: str | None = None
 
     async def _try_fast_git_clone(
         self,
@@ -1695,8 +1703,12 @@ class AgentService:
         )
         previous_history = list(self.history)
         contextual_follow_up = self.can_resolve_contextual_follow_up(user_text)
+        if self._pending_goal_text and len(user_text.split()) <= 20:
+            contextual_follow_up = True
         previous_user_text = self._last_message_text(previous_history, "user")
-        if contextual_follow_up:
+        if contextual_follow_up and self._pending_goal_text:
+            previous_user_text = self._pending_goal_text
+        if contextual_follow_up and not self._pending_goal_text:
             previous_user_text = (
                 self._last_actionable_user_text(previous_history)
                 or previous_user_text
@@ -2941,6 +2953,7 @@ class AgentService:
         )
         remaining_requirements = goal_ledger.unmet(executed_tool_results)
         if remaining_requirements:
+            self._pending_goal_text = selection_text
             missing_text = "; ".join(
                 item.description
                 for item in remaining_requirements
@@ -2969,6 +2982,7 @@ class AgentService:
                 ],
             }
         elif goal_ledger.requirements:
+            self._pending_goal_text = None
             final_response.data["goal_ledger"] = {
                 "complete": True,
                 "missing": [],

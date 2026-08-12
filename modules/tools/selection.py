@@ -543,6 +543,8 @@ def select_tools_for_request(
             "open_url_in_browser",
             "list_active_windows",
             "focus_window",
+            "inspect_active_window",
+            "click_ui_element",
             "press_keyboard_combination",
             "type_text",
             "get_ui_tree",

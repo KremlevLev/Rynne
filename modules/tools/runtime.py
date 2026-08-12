@@ -78,6 +78,8 @@ RISK_BY_TOOL: dict[str, RiskLevel] = {
     "change_volume": RiskLevel.LOW,
     "manage_media": RiskLevel.LOW,
     "focus_window": RiskLevel.LOW,
+    "inspect_active_window": RiskLevel.READ_ONLY,
+    "click_ui_element": RiskLevel.EXECUTE,
 
     "type_text": RiskLevel.WRITE,
     "write_in_application": RiskLevel.WRITE,
@@ -139,6 +141,8 @@ CATEGORY_BY_TOOL: dict[str, ToolCategory] = {
     "close_application": ToolCategory.APPLICATION,
     "focus_window": ToolCategory.GUI_WRITE,
     "list_active_windows": ToolCategory.GUI_READ,
+    "inspect_active_window": ToolCategory.GUI_READ,
+    "click_ui_element": ToolCategory.GUI_WRITE,
 
     "type_text": ToolCategory.GUI_WRITE,
     "write_in_application": ToolCategory.GUI_WRITE,

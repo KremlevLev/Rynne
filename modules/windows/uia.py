@@ -231,6 +231,39 @@ class UIAGrounder:
         
         return None
 
+    def inspect_active_window(self, limit: int = 80) -> ToolResult:
+        """Return a compact snapshot of labelled controls in the foreground window."""
+        elements = self.get_active_window_elements()
+        visible = [item for item in elements if item.name.strip()][:max(1, min(limit, 200))]
+        return ToolResult.ok(
+            f"Найдено элементов активного окна: {len(visible)}.",
+            data={"elements": [item.to_dict() for item in visible]},
+        )
+
+    def click_ui_element(self, query: str) -> ToolResult:
+        """Find a visible control through Windows UIA and click its centre."""
+        clean_query = str(query).strip()
+        if not clean_query:
+            return ToolResult.failure("UI_QUERY_EMPTY", "Не указан элемент для нажатия.")
+        elements = self.get_active_window_elements()
+        element = self.find_element(clean_query, elements)
+        if element is None:
+            candidates = [item.name for item in elements if item.name.strip()][:30]
+            return ToolResult.failure(
+                "UI_ELEMENT_NOT_FOUND",
+                f"Элемент '{clean_query}' не найден в активном окне.",
+                data={"visible_candidates": candidates},
+            )
+        try:
+            import pyautogui
+            pyautogui.click(*element.center)
+        except Exception as exc:
+            return ToolResult.failure("UI_CLICK_FAILED", f"Не удалось нажать '{element.name}': {exc}")
+        return ToolResult.ok(
+            f"Нажат видимый элемент '{element.name}'.",
+            data={"element": element.to_dict(), "query": clean_query},
+        )
+
 
 def create_uia_tools() -> dict[str, Any]:
     """Создаёт словарь UIA инструментов."""
@@ -241,4 +274,6 @@ def create_uia_tools() -> dict[str, Any]:
         "find_element": grounder.find_element,
         "number_elements": grounder.number_elements,
         "get_element_by_number": grounder.get_element_by_number,
+        "inspect_active_window": grounder.inspect_active_window,
+        "click_ui_element": grounder.click_ui_element,
     }

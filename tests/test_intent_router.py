@@ -338,6 +338,8 @@ def test_notion_google_signup_routes_to_user_chrome_surface() -> None:
     assert decision.intent == IntentKind.WEB
     assert decision.strategy == ExecutionStrategy.SKILL
     assert "open_url_in_browser" in decision.required_tools
+    assert "inspect_active_window" in decision.required_tools
+    assert "click_ui_element" in decision.required_tools
     assert "browser_open_url" not in decision.required_tools
     assert decision.metadata["browser_surface"] == "user_chrome"
     assert decision.metadata["human_takeover_on_challenge"] is True

@@ -3,6 +3,19 @@ from __future__ import annotations
 import asyncio
 
 from modules.agent.goal_ledger import GoalLedger
+
+
+def test_authenticated_signup_cannot_finish_after_opening_browser_only() -> None:
+    ledger = GoalLedger.from_request(
+        "Открой notion.so, зарегистрируйся через Google, создай workspace Rynne Test",
+        {"open_url_in_browser", "inspect_active_window", "click_ui_element", "type_text"},
+    )
+    missing = ledger.unmet([
+        {"name": "open_url_in_browser", "result": {"success": True}},
+    ])
+    assert {item.key for item in missing} == {
+        "browser_ui_inspection", "browser_ui_interaction", "browser_form_input"
+    }
 from modules.application.agent import AgentService
 from modules.brain.model_gateway import ModelResponse
 from modules.domain.results import ToolResult

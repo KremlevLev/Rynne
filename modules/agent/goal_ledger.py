@@ -44,6 +44,29 @@ class GoalLedger:
                 "Открыть нужную страницу, а не только браузер или поиск.",
                 {"browser_open_url", "open_website"},
             )
+        authenticated_workflow = _contains(normalized, (
+            "зарегистр", "регистрац", "войти через", "вход через", "sign up",
+            "sign in with", "continue with google", "workspace", "onboarding",
+        ))
+        if authenticated_workflow:
+            require(
+                "browser_ui_inspection",
+                "Прочитать фактические элементы страницы в пользовательском браузере.",
+                {"inspect_active_window"},
+            )
+            require(
+                "browser_ui_interaction",
+                "Выполнить действие на странице, а не только открыть её.",
+                {"click_ui_element"},
+            )
+        if authenticated_workflow and _contains(normalized, (
+            "создай", "create ", "workspace", "страниц", "page ",
+        )):
+            require(
+                "browser_form_input",
+                "Ввести запрошенные данные в веб-интерфейс.",
+                {"type_text"},
+            )
         if browser_context and _contains(normalized, (
             "проверь", "посмотри", "прочитай", "покажи", "активност",
             "что там", "найди на", "check ", "read ",

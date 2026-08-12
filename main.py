@@ -161,6 +161,7 @@ from typing import Any, Callable
 from modules.domain.results import ToolResult
 from modules.tools.skills import WindowsSkills
 from modules.domain.windows_context import WindowsContext
+from modules.windows.uia import create_uia_tools
 from modules.domain.workspace_context import (
     WorkspaceContextResolver,
 )
@@ -422,6 +423,7 @@ def build_handlers(
             for item in results
         )
 
+    uia_tools = create_uia_tools()
     return {
         "get_current_time": get_current_time,
         "open_application": launch_application,
@@ -461,6 +463,8 @@ def build_handlers(
         "run_terminal_command": run_terminal_command,
         "list_active_windows": list_active_windows,
         "focus_window": focus_window,
+        "inspect_active_window": uia_tools["inspect_active_window"],
+        "click_ui_element": uia_tools["click_ui_element"],
         "start_process": start_process_handler,
         "get_process_status": (
             get_process_status_handler

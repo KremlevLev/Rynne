@@ -423,6 +423,24 @@ focus_window_tool = {
     }
 }
 
+inspect_active_window_tool = {
+    "type": "function",
+    "function": {
+        "name": "inspect_active_window",
+        "description": "Читает видимые подписанные элементы активного окна Windows через UI Automation. Используйте перед кликом в обычном Chrome или другом приложении.",
+        "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "additionalProperties": False},
+    },
+}
+
+click_ui_element_tool = {
+    "type": "function",
+    "function": {
+        "name": "click_ui_element",
+        "description": "Находит видимый элемент активного окна по подписи через Windows UI Automation и нажимает его.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"], "additionalProperties": False},
+    },
+}
+
 # Единый плоский список всех инструментов для Nova
 ALL_TOOLS = [
     open_app_tool,
@@ -456,6 +474,8 @@ ALL_TOOLS = [
     press_hotkey_tool,
     list_windows_tool,
     focus_window_tool,
+    inspect_active_window_tool,
+    click_ui_element_tool,
     write_in_application_tool,
     open_telegram_chat_tool,
 ]

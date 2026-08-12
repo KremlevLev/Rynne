@@ -373,6 +373,7 @@ def test_google_signup_uses_regular_chrome_and_excludes_playwright() -> None:
     )
     available = {
         "open_url_in_browser", "list_active_windows", "focus_window",
+        "inspect_active_window", "click_ui_element",
         "press_keyboard_combination", "type_text", "get_ui_tree",
         "find_ui_element", "ocr_screen", "click_text", "mouse_click",
         "browser_start", "browser_open_url", "browser_get_page_text",
@@ -384,6 +385,8 @@ def test_google_signup_uses_regular_chrome_and_excludes_playwright() -> None:
     assert request_requires_user_browser_session(request)
     assert "open_url_in_browser" in result
     assert "focus_window" in result
+    assert "inspect_active_window" in result
+    assert "click_ui_element" in result
     assert "get_ui_tree" in result
     assert not any(name.startswith("browser_") for name in result)
 
