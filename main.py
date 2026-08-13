@@ -1998,7 +1998,7 @@ async def async_main() -> None:
                         cloud_remote.task_status,
                         current_task_id,
                     )
-                    if remote_state and remote_state.get("status") == "cancel_requested":
+                    if remote_state and remote_state.get("status") in {"cancel_requested", "cancelled"}:
                         if await request_service.cancel_current():
                             await asyncio.to_thread(
                                 cloud_remote.event,
