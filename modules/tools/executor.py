@@ -1,7 +1,4 @@
 # modules/tools/executor.py
-import sys
-import io
-import ast
 import ctypes
 import logging
 import pyautogui
@@ -34,80 +31,17 @@ def prompt_hitl_permission(action_type: str, details: str) -> bool:
     return result == 6  # 6 соответствует выбору 'Да' (IDYES)
 
 def check_dangerous_patterns(code: str) -> tuple[bool, str]:
-    """
-    Проводит статический анализ синтаксического дерева кода (AST) перед его выполнением.
-    """
-    # Текстовые маркеры грубой деструкции системы
-    blacklist = [
-        "shutil.rmtree", "os.remove", "os.unlink", "format", 
-        "os.system", "subprocess", "ctypes.windll.ntdll", "regdelete"
-    ]
-    for word in blacklist:
-        if word in code:
-            return False, f"Обнаружена заблокированная системная функция: '{word}'."
-            
-    try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            # Проверка на бесконечные циклы while True:
-            if isinstance(node, ast.While):
-                if isinstance(node.test, ast.Constant) and node.test.value is True:
-                    return False, "Обнаружен потенциально бесконечный цикл 'while True'."
-    except SyntaxError as e:
-        return False, f"Синтаксическая ошибка в коде: {e}"
-        
-    return True, "Базовые проверки безопасности пройдены."
+    """Retained for compatibility; arbitrary Python is intentionally disabled."""
+    return False, "Произвольный Python отключён политикой безопасности."
 
 def execute_python_code(code: str) -> str:
-    logger.info("Запрос на выполнение динамического Python-кода.")
-
-    is_safe, check_msg = check_dangerous_patterns(code)
-
-    if not is_safe:
-        return (
-            "Ошибка: Выполнение заблокировано системой безопасности. "
-            f"{check_msg}"
-        )
-
-    # PermissionManager already applied the selected permission mode before
-    # calling this legacy handler. A second native dialog deadlocks remote
-    # tasks and incorrectly ignores the user's Full access setting.
-    # 3. Перехват стандартных потоков вывода
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    redirected_output = io.StringIO()
-    redirected_error = io.StringIO()
-    sys.stdout = redirected_output
-    sys.stderr = redirected_error
-    
-    # Предоставляем безопасный контекст исполнения с предустановленными библиотеками
-    local_scope = {
-        "pyautogui": pyautogui,
-        "ctypes": ctypes,
-        "sys": sys,
-        "io": io,
-        "os": os,
-    }
-    
-    try:
-        # Выполнение в изолированном контексте
-        exec(code, {}, local_scope)
-        
-        stdout_val = redirected_output.getvalue()
-        stderr_val = redirected_error.getvalue()
-        
-        result_str = stdout_val
-        if stderr_val:
-            result_str += f"\nОшибки исполнения:\n{stderr_val}"
-            
-        return result_str if result_str.strip() else "Код выполнен успешно, пустой консольный вывод."
-    except pyautogui.FailSafeException:
-        return "Аварийная остановка: Сработал аппаратный предохранитель мыши (FailSafe)."
-    except Exception as e:
-        return f"Сбой в процессе работы скрипта: {e}"
-    finally:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
+    del code
+    logger.warning("Заблокирована попытка выполнить произвольный Python-код.")
+    return (
+        "Ошибка: произвольный Python-код отключён политикой безопасности. "
+        "Используйте специализированный инструмент для файлов, Git, браузера "
+        "или терминала с явным подтверждением."
+    )
 
 def mouse_click(x: int, y: int, click_type: str = "single") -> str:
     """

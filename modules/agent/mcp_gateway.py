@@ -382,10 +382,9 @@ class MCPConnectionPool:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={
-                    **os.environ,
-                    **config.env,
-                },
+                # Never expose the parent process environment (provider,
+                # Telegram and cloud credentials) to third-party MCP code.
+                env=dict(config.env),
             )
             self._processes[name] = process
             self._locks[name] = asyncio.Lock()

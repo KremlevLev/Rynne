@@ -15,11 +15,19 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+use windows_sys::Win32::{
+    Foundation::LocalFree,
+    Security::Cryptography::{
+        CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    },
+};
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const CORE_STARTUP_TIMEOUT: Duration = Duration::from_secs(45);
 const CORE_RESTART_COOLDOWN: Duration = Duration::from_secs(5);
+const DPAPI_PREFIX: &str = "dpapi:";
 
 struct CoreProcess {
     child: Child,
@@ -152,6 +160,155 @@ fn env_value(contents: &str, variable: &str) -> Option<String> {
     })
 }
 
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
+    if value.len() % 2 != 0 {
+        return Err("Encrypted secret has an invalid length.".to_owned());
+    }
+    (0..value.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&value[index..index + 2], 16)
+                .map_err(|_| "Encrypted secret is corrupted.".to_owned())
+        })
+        .collect()
+}
+
+#[cfg(windows)]
+fn protect_secret(value: &str) -> Result<String, String> {
+    if value.starts_with(DPAPI_PREFIX) {
+        return Ok(value.to_owned());
+    }
+    let mut plaintext = value.as_bytes().to_vec();
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: plaintext.len() as u32,
+        pbData: plaintext.as_mut_ptr(),
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+    let success = unsafe {
+        CryptProtectData(
+            &mut input,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if success == 0 {
+        return Err("Windows DPAPI could not encrypt the secret.".to_owned());
+    }
+    let encrypted = unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) };
+    let encoded = format!("{DPAPI_PREFIX}{}", hex_encode(encrypted));
+    unsafe { LocalFree(output.pbData as _) };
+    plaintext.fill(0);
+    Ok(encoded)
+}
+
+#[cfg(not(windows))]
+fn protect_secret(_value: &str) -> Result<String, String> {
+    Err("Secure secret storage is currently supported on Windows only.".to_owned())
+}
+
+fn is_secret_variable(variable: &str) -> bool {
+    if matches!(
+        variable,
+        "TELEGRAM_BOT_TOKEN" | "TAVILY_API_KEY" | "RYNNE_MANAGED_API_KEY"
+    ) {
+        return true;
+    }
+    for provider in ["GROQ", "OPENROUTER", "GEMINI", "OPENAI", "ANTHROPIC"] {
+        if variable == format!("{provider}_API_KEY")
+            || variable == format!("{provider}_API_KEYS")
+            || variable
+                .strip_prefix(&format!("{provider}_API_KEY_"))
+                .is_some_and(|suffix| suffix.parse::<usize>().is_ok())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn migrate_secret_file(env_path: &Path) -> Result<(), String> {
+    let contents = std::fs::read_to_string(env_path).unwrap_or_default();
+    let mut changed = false;
+    let mut lines = Vec::new();
+    for line in contents.lines() {
+        let Some((name, value)) = line.split_once('=') else {
+            lines.push(line.to_owned());
+            continue;
+        };
+        if is_secret_variable(name.trim())
+            && !value.trim().is_empty()
+            && !value.trim().starts_with(DPAPI_PREFIX)
+        {
+            lines.push(format!("{}={}", name.trim(), protect_secret(value.trim())?));
+            changed = true;
+        } else {
+            lines.push(line.to_owned());
+        }
+    }
+    if changed {
+        std::fs::write(env_path, format!("{}\n", lines.join("\n")))
+            .map_err(|error| format!("Cannot migrate Rynne secrets: {error}"))?;
+    }
+    restrict_secret_file(env_path)
+}
+
+#[cfg(windows)]
+fn unprotect_secret(value: &str) -> Result<String, String> {
+    let Some(encoded) = value.strip_prefix(DPAPI_PREFIX) else {
+        return Ok(value.to_owned());
+    };
+    let mut encrypted = hex_decode(encoded)?;
+    let mut input = CRYPT_INTEGER_BLOB {
+        cbData: encrypted.len() as u32,
+        pbData: encrypted.as_mut_ptr(),
+    };
+    let mut output = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
+    let success = unsafe {
+        CryptUnprotectData(
+            &mut input,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut output,
+        )
+    };
+    if success == 0 {
+        return Err("Windows DPAPI could not decrypt the secret for this account.".to_owned());
+    }
+    let plaintext = unsafe { std::slice::from_raw_parts(output.pbData, output.cbData as usize) };
+    let result = String::from_utf8(plaintext.to_vec())
+        .map_err(|_| "Decrypted secret is not valid UTF-8.".to_owned());
+    unsafe { LocalFree(output.pbData as _) };
+    result
+}
+
+#[cfg(not(windows))]
+fn unprotect_secret(value: &str) -> Result<String, String> {
+    Ok(value.to_owned())
+}
+
+fn secret_env_value(contents: &str, variable: &str) -> Result<Option<String>, String> {
+    env_value(contents, variable)
+        .map(|value| unprotect_secret(&value))
+        .transpose()
+}
+
 fn numbered_key_values<'a>(
     pairs: impl Iterator<Item = (&'a str, &'a str)>,
     prefix: &str,
@@ -171,10 +328,10 @@ fn numbered_key_values<'a>(
 
 fn file_provider_keys(contents: &str, provider: &str) -> Result<Vec<String>, String> {
     let (plural, legacy) = provider_variables(provider)?;
-    let mut keys = env_value(contents, plural)
+    let mut keys = secret_env_value(contents, plural)?
         .map(|value| split_key_list(&value))
         .unwrap_or_default();
-    if let Some(value) = env_value(contents, legacy) {
+    if let Some(value) = secret_env_value(contents, legacy)? {
         for key in split_key_list(&value) {
             if !keys.contains(&key) {
                 keys.push(key);
@@ -249,6 +406,29 @@ fn provider_env_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir.join(".env"))
 }
 
+fn restrict_secret_file(env_path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let account = std::env::var("USERNAME")
+            .map_err(|_| "Cannot identify the current Windows account.".to_owned())?;
+        let grant = format!("{account}:F");
+        let mut command = Command::new("icacls");
+        command
+            .arg(env_path)
+            .args(["/inheritance:r", "/grant:r", &grant])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command.creation_flags(CREATE_NO_WINDOW);
+        let status = command
+            .status()
+            .map_err(|error| format!("Cannot restrict secret file permissions: {error}"))?;
+        if !status.success() {
+            return Err("Windows rejected the secret file ACL update.".to_owned());
+        }
+    }
+    Ok(())
+}
+
 fn write_provider_configuration(
     env_path: &Path,
     provider: &str,
@@ -273,7 +453,7 @@ fn write_provider_configuration(
         .map(str::to_owned)
         .collect();
     if !keys.is_empty() {
-        lines.push(format!("{plural}={}", keys.join(",")));
+        lines.push(format!("{plural}={}", protect_secret(&keys.join(","))?));
         let mut aligned_models = models.to_vec();
         aligned_models.resize(keys.len(), String::new());
         aligned_models.truncate(keys.len());
@@ -287,7 +467,8 @@ fn write_provider_configuration(
         format!("{}\n", lines.join("\n"))
     };
     std::fs::write(env_path, contents)
-        .map_err(|error| format!("Cannot save Rynne provider settings: {error}"))
+        .map_err(|error| format!("Cannot save Rynne provider settings: {error}"))?;
+    migrate_secret_file(env_path)
 }
 
 fn validate_model(model: &str) -> Result<&str, String> {
@@ -368,7 +549,7 @@ fn write_service_secret(
         .map(str::to_owned)
         .collect();
     if let Some(secret) = value.filter(|secret| !secret.is_empty()) {
-        lines.push(format!("{variable}={secret}"));
+        lines.push(format!("{variable}={}", protect_secret(secret)?));
     }
     let contents = if lines.is_empty() {
         String::new()
@@ -376,7 +557,8 @@ fn write_service_secret(
         format!("{}\n", lines.join("\n"))
     };
     std::fs::write(env_path, contents)
-        .map_err(|error| format!("Cannot save Rynne integration settings: {error}"))
+        .map_err(|error| format!("Cannot save Rynne integration settings: {error}"))?;
+    migrate_secret_file(env_path)
 }
 
 const PERMISSION_MODE_VARIABLE: &str = "NOVA_PERMISSION_MODE";
@@ -399,7 +581,12 @@ fn write_plain_setting(env_path: &Path, variable: &str, value: &str) -> Result<(
         .collect();
     lines.push(format!("{variable}={value}"));
     std::fs::write(env_path, format!("{}\n", lines.join("\n")))
-        .map_err(|error| format!("Cannot save Rynne settings: {error}"))
+        .map_err(|error| format!("Cannot save Rynne settings: {error}"))?;
+    migrate_secret_file(env_path)
+}
+
+fn write_secret_setting(env_path: &Path, variable: &str, value: &str) -> Result<(), String> {
+    write_plain_setting(env_path, variable, &protect_secret(value)?)
 }
 
 #[tauri::command]
@@ -522,7 +709,9 @@ fn nova_list_service_secrets(app: AppHandle) -> Result<Vec<ServiceSecretSummary>
     let mut summaries = Vec::new();
     for service in ["telegram", "telegram_remote", "tavily"] {
         let variable = service_variable(service)?;
-        if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
+        if let Some(value) =
+            secret_env_value(&contents, variable)?.filter(|value| !value.is_empty())
+        {
             summaries.push(ServiceSecretSummary {
                 service: service.to_owned(),
                 hint: key_hint(&value),
@@ -814,7 +1003,9 @@ fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<
     }
     for service in ["telegram", "telegram_remote", "tavily"] {
         let variable = service_variable(service)?;
-        if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
+        if let Some(value) =
+            secret_env_value(&contents, variable)?.filter(|value| !value.is_empty())
+        {
             command.env(variable, value);
         } else if let Ok(value) = std::env::var(variable) {
             if !value.trim().is_empty() {
@@ -826,6 +1017,20 @@ fn apply_provider_environment(command: &mut Command, app: &AppHandle) -> Result<
         command.env(PERMISSION_MODE_VARIABLE, normalize_permission_mode(&value)?);
     } else if let Ok(value) = std::env::var(PERMISSION_MODE_VARIABLE) {
         command.env(PERMISSION_MODE_VARIABLE, normalize_permission_mode(&value)?);
+    }
+    if let Some(value) =
+        secret_env_value(&contents, "RYNNE_MANAGED_API_KEY")?.filter(|value| !value.is_empty())
+    {
+        command.env("RYNNE_MANAGED_API_KEY", value);
+    }
+    for variable in [
+        "RYNNE_INSTALL_ID",
+        "RYNNE_MANAGED_KEY_MODELS",
+        "RYNNE_MANAGED_BASE_URL",
+    ] {
+        if let Some(value) = env_value(&contents, variable).filter(|value| !value.is_empty()) {
+            command.env(variable, value);
+        }
     }
     Ok(())
 }
@@ -1164,7 +1369,7 @@ fn nova_enable_trial(app: AppHandle, state: State<'_, Arc<CoreState>>) -> Result
         return Err("Trial service returned incomplete credentials.".to_owned());
     }
     write_plain_setting(&env_path, "RYNNE_INSTALL_ID", &install_id)?;
-    write_plain_setting(&env_path, "RYNNE_MANAGED_API_KEY", &session.token)?;
+    write_secret_setting(&env_path, "RYNNE_MANAGED_API_KEY", &session.token)?;
     write_plain_setting(&env_path, "RYNNE_MANAGED_KEY_MODELS", session.model.trim())?;
     write_plain_setting(
         &env_path,
@@ -1181,7 +1386,10 @@ fn nova_enable_trial(app: AppHandle, state: State<'_, Arc<CoreState>>) -> Result
 fn nova_trial_enabled(app: AppHandle) -> Result<bool, String> {
     let env_path = provider_env_path(&app)?;
     let contents = std::fs::read_to_string(env_path).unwrap_or_default();
-    Ok(env_value(&contents, "RYNNE_MANAGED_API_KEY").is_some_and(|value| !value.is_empty()))
+    Ok(
+        secret_env_value(&contents, "RYNNE_MANAGED_API_KEY")?
+            .is_some_and(|value| !value.is_empty()),
+    )
 }
 
 fn stop_core(state: &Arc<CoreState>) {
@@ -1191,6 +1399,24 @@ fn stop_core(state: &Arc<CoreState>) {
         if let Some(mut process) = guard.take() {
             terminate_core_process(&mut process);
         }
+    }
+}
+
+#[cfg(all(test, windows))]
+mod security_tests {
+    use super::{protect_secret, unprotect_secret, DPAPI_PREFIX};
+
+    #[test]
+    fn dpapi_round_trip_is_bound_to_windows_account() {
+        let plaintext = "gsk_security_test_value_123456";
+        let encrypted = protect_secret(plaintext).expect("DPAPI encryption must succeed");
+
+        assert!(encrypted.starts_with(DPAPI_PREFIX));
+        assert!(!encrypted.contains(plaintext));
+        assert_eq!(
+            unprotect_secret(&encrypted).expect("DPAPI decryption must succeed"),
+            plaintext
+        );
     }
 }
 

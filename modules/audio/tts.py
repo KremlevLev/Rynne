@@ -1,5 +1,6 @@
 # modules/audio/tts.py
 import os
+import hashlib
 import logging
 import threading
 import time
@@ -188,6 +189,8 @@ def is_tts_capture_blocked(cooldown_seconds: float = 1.0) -> bool:
 
 # Путь для хранения JIT-модели Silero v5
 MODEL_PATH = "data/v5_ru.pt"
+SILERO_MODEL_URL = "https://models.silero.ai/models/tts/ru/v5_ru.pt"
+SILERO_MODEL_SHA256 = "7ba04d42340fe0398042eed2e0d12d62e23096d626b1b9feff4dcb1309197ab4"
 _silero_model = None
 _torch_module = None
 _silero_engine_lock = threading.Lock()
@@ -221,11 +224,23 @@ def _get_silero_engine():
         device = torch.device("cpu")
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         
+        def model_checksum(path: str) -> str:
+            digest = hashlib.sha256()
+            with open(path, "rb") as model_file:
+                for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+
         # Автоматическое скачивание модели при первом запуске
         if not os.path.exists(MODEL_PATH):
             logger.info("Файл модели Silero v5 не найден. Начинаю загрузку с официального сервера...")
             try:
-                torch.hub.download_url_to_file('https://models.silero.ai/models/tts/ru/v5_ru.pt', MODEL_PATH)
+                temporary_model_path = f"{MODEL_PATH}.download"
+                torch.hub.download_url_to_file(SILERO_MODEL_URL, temporary_model_path)
+                if model_checksum(temporary_model_path) != SILERO_MODEL_SHA256:
+                    os.unlink(temporary_model_path)
+                    raise RuntimeError("контрольная сумма модели Silero не совпала")
+                os.replace(temporary_model_path, MODEL_PATH)
                 logger.info("Модель Silero v5 успешно загружена на диск.")
             except Exception as e:
                 logger.error(f"Не удалось скачать модель Silero v5: {e}")
@@ -234,6 +249,11 @@ def _get_silero_engine():
                 return None
                 
         try:
+            if model_checksum(MODEL_PATH) != SILERO_MODEL_SHA256:
+                raise RuntimeError(
+                    "модель Silero повреждена или подменена; удалите data/v5_ru.pt "
+                    "для безопасной повторной загрузки"
+                )
             logger.info("Загрузка Silero v5 в оперативную память...")
             torch.set_num_threads(2)
             try:

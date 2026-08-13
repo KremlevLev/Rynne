@@ -852,6 +852,7 @@ async def async_main() -> None:
         if (
             tool_schema["function"]["name"]
             not in deferred_tool_names
+            and tool_schema["function"]["name"] != "execute_python_code"
         )
     ]
     # =========================================================

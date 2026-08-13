@@ -363,3 +363,11 @@ def test_sandbox_does_not_leak_env() -> None:
         assert "MISSING" in result.data["output"]
 
     asyncio.run(scenario())
+
+
+def test_legacy_python_executor_is_fail_closed() -> None:
+    from modules.tools.executor import execute_python_code
+
+    result = execute_python_code("print(__import__('os').environ)")
+
+    assert "отключён политикой безопасности" in result
