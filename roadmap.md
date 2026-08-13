@@ -2515,3 +2515,14 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Add an in-app first-run readiness checklist for Core, provider, voice and the first completed response.
 - [x] Add a one-click managed trial route so a new user can run the first tasks without registering a provider key.
 - [x] Documented the consent boundary, activation funnel and failure-triage order for public testing.
+
+## Public beta 1.0.1 release gate (13.08.2026)
+
+- [x] Desktop, Rust and Tauri versions aligned on `1.0.1`.
+- [x] Python regression suite passed: 909 tests.
+- [x] Desktop UI regression suite passed: 24 tests.
+- [x] Cloud regression suite passed: 40 tests.
+- [x] NSIS installer hook fixed for the always-on Remote Bridge startup shortcut.
+- [x] Installer metadata and release notes verified as valid UTF-8.
+- [ ] Perform one clean-machine installation smoke test, including Remote wake while the desktop app is closed.
+- [ ] Obtain an Authenticode certificate to remove the Windows SmartScreen warning before calling the release stable.

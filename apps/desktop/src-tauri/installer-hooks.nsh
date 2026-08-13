@@ -1,5 +1,5 @@
 !macro NSIS_HOOK_POSTINSTALL
-  CreateShortCut "$SMSTARTUP\Rynne Remote Bridge.lnk" "$INSTDIR\rynne-wake\rynne-wake-bridge.exe" "" "$INSTDIR\rynne-wake\rynne-wake-bridge.exe" 0 SW_HIDE
+  CreateShortCut "$SMSTARTUP\Rynne Remote Bridge.lnk" "$INSTDIR\rynne-wake\rynne-wake-bridge.exe" "" "$INSTDIR\rynne-wake\rynne-wake-bridge.exe" 0 SW_SHOWMINIMIZED
   Exec '"$INSTDIR\rynne-wake\rynne-wake-bridge.exe"'
 !macroend
 
