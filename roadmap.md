@@ -12,6 +12,8 @@
 
 ## Remote wake bridge
 
+- ✅ Remote wake теперь запускает установленный production `rynne-desktop.exe`: bridge читает путь из реестра NSIS, поддерживает нестандартную папку установки и явный `RYNNE_DESKTOP_EXE`. Медленный Vite/Cargo dev runtime отключён по умолчанию и доступен только через `RYNNE_WAKE_ALLOW_DEV=1`.
+
 - ✅ Mini App может отправить отдельный защищённый wake-сигнал, не забирая
   пользовательскую задачу из очереди. Лёгкий Windows bridge запускается вместе с
   пользователем, опрашивает только wake endpoint и поднимает Rynne Desktop.

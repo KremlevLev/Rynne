@@ -8,6 +8,12 @@ import sys
 import time
 import ctypes
 from pathlib import Path
+from typing import Iterable
+
+try:
+    import winreg
+except ImportError:  # pragma: no cover - Windows-only discovery
+    winreg = None
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +23,88 @@ from modules.integrations.cloud_remote import CloudRemoteError, RynneCloudRemote
 
 
 _MUTEX_HANDLE = None
+
+
+def installation_root() -> Path:
+    """Return the installer directory when frozen, otherwise the repository."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return ROOT
+
+
+def _clean_registry_path(value: str) -> Path | None:
+    raw = str(value or "").strip().strip('"')
+    if not raw:
+        return None
+    # DisplayIcon may contain a resource suffix such as `app.exe,0`.
+    raw = raw.rsplit(",", 1)[0].strip().strip('"')
+    return Path(os.path.expandvars(raw))
+
+
+def _registered_executables() -> Iterable[Path]:
+    if os.name != "nt" or winreg is None:
+        return []
+    found: list[Path] = []
+    roots = (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE)
+    uninstall = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+    views = (0, getattr(winreg, "KEY_WOW64_64KEY", 0), getattr(winreg, "KEY_WOW64_32KEY", 0))
+    for root in roots:
+        for view in views:
+            try:
+                parent = winreg.OpenKey(root, uninstall, 0, winreg.KEY_READ | view)
+            except OSError:
+                continue
+            with parent:
+                for index in range(winreg.QueryInfoKey(parent)[0]):
+                    try:
+                        child = winreg.OpenKey(parent, winreg.EnumKey(parent, index))
+                        with child:
+                            name = str(winreg.QueryValueEx(child, "DisplayName")[0]).strip()
+                            if name.casefold() != "rynne":
+                                continue
+                            try:
+                                icon = _clean_registry_path(winreg.QueryValueEx(child, "DisplayIcon")[0])
+                            except OSError:
+                                icon = None
+                            if icon is not None:
+                                found.append(icon)
+                            try:
+                                location = _clean_registry_path(winreg.QueryValueEx(child, "InstallLocation")[0])
+                            except OSError:
+                                location = None
+                            if location is not None:
+                                found.extend((location / "rynne-desktop.exe", location / "Rynne.exe"))
+                    except OSError:
+                        continue
+    return found
+
+
+def installed_executable_candidates() -> list[Path]:
+    """Production binaries only, ordered from explicit to discovered paths."""
+    local = Path(os.getenv("LOCALAPPDATA", ""))
+    program_files = Path(os.getenv("ProgramFiles", ""))
+    explicit = _clean_registry_path(os.getenv("RYNNE_DESKTOP_EXE", ""))
+    candidates = [
+        explicit,
+        installation_root() / "rynne-desktop.exe",
+        installation_root() / "Rynne.exe",
+        local / "Rynne" / "rynne-desktop.exe",
+        local / "Rynne" / "Rynne.exe",
+        local / "Programs" / "Rynne" / "rynne-desktop.exe",
+        local / "Programs" / "Rynne" / "Rynne.exe",
+        program_files / "Rynne" / "rynne-desktop.exe",
+        *_registered_executables(),
+    ]
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        if path is None:
+            continue
+        key = str(path).casefold()
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
 
 
 def acquire_single_instance(*, timeout_seconds: float = 5.0) -> bool:
@@ -38,14 +126,27 @@ def acquire_single_instance(*, timeout_seconds: float = 5.0) -> bool:
         time.sleep(0.25)
 
 
-def load_env(path: Path) -> None:
+def load_env(path: Path, *, overwrite: bool = False) -> None:
     if not path.is_file():
         return
     for raw in path.read_text(encoding="utf-8-sig").splitlines():
         if "=" not in raw or raw.lstrip().startswith("#"):
             continue
         key, value = raw.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        name = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if overwrite or name not in os.environ:
+            os.environ[name] = value
+
+
+def load_runtime_env() -> None:
+    for env_path in (
+        Path(os.getenv("APPDATA", "")) / "ai.nova.desktop" / ".env",
+        Path(os.getenv("LOCALAPPDATA", "")) / "ai.nova.desktop" / ".env",
+        installation_root() / ".env",
+        ROOT / ".env",
+    ):
+        load_env(env_path, overwrite=True)
 
 
 def rynne_running() -> bool:
@@ -61,11 +162,7 @@ def launch_rynne() -> bool:
     log_dir = Path(os.getenv("LOCALAPPDATA", str(ROOT))) / "ai.nova.desktop" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     launch_log = log_dir / "rynne-wake-launch.log"
-    candidates = [
-        Path(os.getenv("LOCALAPPDATA", "")) / "Rynne" / "Rynne.exe",
-        Path(os.getenv("LOCALAPPDATA", "")) / "Programs" / "Rynne" / "Rynne.exe",
-    ]
-    for executable in candidates:
+    for executable in installed_executable_candidates():
         if executable.is_file():
             with launch_log.open("ab") as output:
                 process = subprocess.Popen(
@@ -78,8 +175,9 @@ def launch_rynne() -> bool:
                 logging.error("Installed Rynne exited during startup with code %s; log=%s", process.returncode, launch_log)
                 continue
             return True
+    # Never surprise a normal user with Vite + Cargo. Developers can opt in.
     dev_script = ROOT / "scripts" / "dev-desktop.ps1"
-    if dev_script.is_file():
+    if os.getenv("RYNNE_WAKE_ALLOW_DEV", "").strip() == "1" and dev_script.is_file():
         with launch_log.open("ab") as output:
             process = subprocess.Popen(
                 ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(dev_script)],
@@ -92,11 +190,12 @@ def launch_rynne() -> bool:
             logging.info("Development runtime started with pid=%s; log=%s", process.pid, launch_log)
             return True
         logging.error("Development runtime exited with code %s; log=%s", process.returncode, launch_log)
+    logging.error("Installed Rynne executable was not found; checked=%s", [str(item) for item in installed_executable_candidates()])
     return False
 
 
 def main() -> int:
-    load_env(ROOT / ".env")
+    load_runtime_env()
     log_dir = Path(os.getenv("LOCALAPPDATA", str(ROOT))) / "ai.nova.desktop" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
@@ -107,16 +206,21 @@ def main() -> int:
         logging.warning("Another wake bridge still owns the single-instance lock; exiting")
         return 0
     client = RynneCloudRemoteClient.from_env()
-    if not client.configured:
-        logging.error("Cloud remote is not configured; check URL, device ID and device token")
-        return 2
-    logging.info("Wake bridge started; device=%s url=%s", client.config.device_id, client.config.base_url)
+    logging.info("Wake bridge started")
     while True:
+        if not client.configured:
+            logging.info("Cloud remote is not configured yet; waiting for desktop settings")
+            time.sleep(10)
+            load_runtime_env()
+            client = RynneCloudRemoteClient.from_env()
+            continue
         try:
             if client.next_wake() and not rynne_running():
                 logging.info("Cloud wake received; launch=%s", launch_rynne())
         except CloudRemoteError as exc:
             logging.warning("Cloud wake poll failed: %s", exc)
+            load_runtime_env()
+            client = RynneCloudRemoteClient.from_env()
         time.sleep(5)
 
 

@@ -32,8 +32,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TAURI_ROOT = PROJECT_ROOT / "apps" / "desktop" / "src-tauri"
 CORE_RESOURCE_DIR = TAURI_ROOT / "resources" / "rynne-core"
 CORE_BUILD_MANIFEST = TAURI_ROOT / "resources" / "rynne-core.build.json"
+WAKE_RESOURCE_DIR = TAURI_ROOT / "resources" / "rynne-wake"
 PYINSTALLER_ROOT = PROJECT_ROOT / "build" / "pyinstaller"
 CORE_ENTRY_POINT = PROJECT_ROOT / "nova_sidecar.py"
+WAKE_ENTRY_POINT = PROJECT_ROOT / "scripts" / "rynne_wake_bridge.py"
 BUILD_RECIPE_VERSION = 4
 
 
@@ -201,6 +203,46 @@ def build_core(*, force: bool = False) -> Path:
     return executable
 
 
+def build_wake_bridge() -> Path:
+    """Build the tiny always-on cloud poller shipped beside the desktop app."""
+    executable = WAKE_RESOURCE_DIR / "rynne-wake-bridge.exe"
+    if WAKE_RESOURCE_DIR.exists():
+        shutil.rmtree(WAKE_RESOURCE_DIR)
+    WAKE_RESOURCE_DIR.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--onefile",
+        "--windowed",
+        "--name",
+        "rynne-wake-bridge",
+        "--distpath",
+        str(WAKE_RESOURCE_DIR),
+        "--workpath",
+        str(PYINSTALLER_ROOT / "wake-work"),
+        "--specpath",
+        str(PYINSTALLER_ROOT),
+        "--paths",
+        str(PROJECT_ROOT),
+        "--exclude-module",
+        "torch",
+        "--exclude-module",
+        "numpy",
+        "--exclude-module",
+        "playwright",
+        "--exclude-module",
+        "PySide6",
+        str(WAKE_ENTRY_POINT),
+    ]
+    run(command)
+    if not executable.is_file():
+        raise RuntimeError(f"Wake bridge executable was not produced: {executable}")
+    print(f"Rynne Wake Bridge ready: {executable}", flush=True)
+    return executable
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Build the packaged Rynne Python Core for Tauri.",
@@ -233,6 +275,7 @@ def main() -> int:
         return 0
 
     build_core(force=args.force)
+    build_wake_bridge()
     return 0
 
 

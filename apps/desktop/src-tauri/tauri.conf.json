@@ -34,7 +34,8 @@
     "shortDescription": "Персональный AI-агент для Windows",
     "longDescription": "Rynne выполняет задачи в Windows, работает с файлами, браузером, приложениями и подключёнными инструментами.",
     "resources": {
-      "resources/rynne-core/": "rynne-core-1.0.0"
+      "resources/rynne-core/": "rynne-core-1.0.0",
+      "resources/rynne-wake/rynne-wake-bridge.exe": "rynne-wake/rynne-wake-bridge.exe"
     },
     "icon": [
       "icons/32x32.png",
@@ -48,7 +49,8 @@
         "compression": "zlib",
         "installMode": "currentUser",
         "languages": ["Russian", "English"],
-        "startMenuFolder": "Rynne"
+        "startMenuFolder": "Rynne",
+        "installerHooks": "installer-hooks.nsh"
       }
     }
   },
