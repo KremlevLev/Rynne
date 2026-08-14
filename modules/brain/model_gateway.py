@@ -914,7 +914,9 @@ class ModelGateway:
 
         prepared_tools = copy.deepcopy(tools)
 
-        if provider != "groq":
+        # The managed trial endpoint currently proxies requests to Groq, so it
+        # must receive the same relaxed JSON schemas as a direct Groq route.
+        if provider not in {"groq", "managed"}:
             return prepared_tools
 
         def relax_schema(value: Any) -> None:
@@ -1066,10 +1068,15 @@ class ModelGateway:
             )
         client = self._get_client(slot)
 
+        # Rynne Cloud's trial proxy deliberately returns a regular OpenAI
+        # completion instead of an SSE stream. Asking the OpenAI SDK to parse
+        # that response as a stream silently produces zero chunks and looks
+        # like an empty model answer.
+        use_stream = candidate.provider != "managed"
         request_arguments: dict[str, Any] = {
             "model": candidate.model,
             "messages": messages,
-            "stream": True,
+            "stream": use_stream,
         }
 
         prepared_tools = (
@@ -1107,11 +1114,68 @@ class ModelGateway:
             # Gemini не требует extra_headers, но можно добавить если нужно
             pass
 
-        stream = await (
+        completion = await (
             client.chat.completions.create(
                 **request_arguments
             )
         )
+
+        if not use_stream:
+            if not completion.choices:
+                raise GatewayFailure(
+                    kind=FailureKind.EMPTY_RESPONSE,
+                    message="Модель вернула пустой ответ.",
+                    retryable=True,
+                    cooldown_seconds=10.0,
+                )
+
+            choice = completion.choices[0]
+            message = choice.message
+            response_text = str(message.content or "").strip()
+            response_tool_calls = [
+                {
+                    "id": str(tool_call.id or ""),
+                    "type": "function",
+                    "function": {
+                        "name": str(tool_call.function.name or ""),
+                        "arguments": str(tool_call.function.arguments or "{}"),
+                    },
+                }
+                for tool_call in (message.tool_calls or [])
+            ]
+            completion_usage = getattr(completion, "usage", None)
+            usage = (
+                completion_usage.model_dump()
+                if completion_usage is not None
+                and hasattr(completion_usage, "model_dump")
+                else {}
+            )
+
+            if not response_text and not response_tool_calls:
+                raise GatewayFailure(
+                    kind=FailureKind.EMPTY_RESPONSE,
+                    message="Модель вернула пустой ответ.",
+                    retryable=True,
+                    cooldown_seconds=10.0,
+                )
+
+            if not response_tool_calls and is_internal_control_label(response_text):
+                raise GatewayFailure(
+                    kind=FailureKind.EMPTY_RESPONSE,
+                    message="Provider returned an internal control label instead of an answer.",
+                    retryable=True,
+                    cooldown_seconds=10.0,
+                )
+
+            return ModelResponse(
+                provider=candidate.provider,
+                model=candidate.model,
+                key_label=slot.label,
+                text=response_text,
+                tool_calls=response_tool_calls,
+                finish_reason=str(choice.finish_reason or ""),
+                usage=usage,
+            )
 
         text_parts: list[str] = []
         accumulated_tool_calls: dict[
@@ -1122,7 +1186,7 @@ class ModelGateway:
         finish_reason: str | None = None
         usage: dict[str, Any] = {}
 
-        async for chunk in stream:
+        async for chunk in completion:
             chunk_usage = getattr(
                 chunk,
                 "usage",

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from types import SimpleNamespace
 
 import modules.brain.model_gateway as gateway_module
 from modules.brain.model_gateway import (
@@ -34,6 +35,134 @@ def create_candidate(
         supports_vision=False,
         priority=10,
     )
+
+
+def test_managed_route_reads_regular_completion_instead_of_stream(
+    monkeypatch,
+) -> None:
+    gateway = ModelGateway()
+    captured: dict[str, object] = {}
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=None,
+                        tool_calls=[SimpleNamespace(
+                            id="call-1",
+                            function=SimpleNamespace(
+                                name="open_application",
+                                arguments='{"app_name":"telegram"}',
+                            ),
+                        )],
+                    ),
+                    finish_reason="tool_calls",
+                )],
+                usage=SimpleNamespace(
+                    model_dump=lambda: {"total_tokens": 42},
+                ),
+            )
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=FakeCompletions(),
+        ),
+    )
+    monkeypatch.setattr(gateway, "_get_client", lambda _slot: client)
+
+    response = asyncio.run(gateway._request_once(
+        slot=KeySlot(provider="managed", index=0, api_key="trial-token"),
+        candidate=create_candidate(
+            "openai/gpt-oss-120b",
+            provider="managed",
+        ),
+        messages=[{"role": "user", "content": "open telegram"}],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "open_application",
+                "description": "Open an application",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"app_name": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+            },
+        }],
+        allow_tools=True,
+    ))
+
+    assert captured["stream"] is False
+    assert response.text == ""
+    assert response.tool_calls == [{
+        "id": "call-1",
+        "type": "function",
+        "function": {
+            "name": "open_application",
+            "arguments": '{"app_name":"telegram"}',
+        },
+    }]
+    assert response.usage == {"total_tokens": 42}
+    assert "additionalProperties" not in (
+        captured["tools"][0]["function"]["parameters"]
+    )
+
+
+def test_managed_tool_schema_relaxation_does_not_mutate_registry() -> None:
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": "example",
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+            },
+        },
+    }]
+
+    prepared = ModelGateway._prepare_tools_for_provider(tools, "managed")
+
+    assert "additionalProperties" not in prepared[0]["function"]["parameters"]
+    assert tools[0]["function"]["parameters"]["additionalProperties"] is False
+
+
+def test_managed_route_reads_regular_text_completion(monkeypatch) -> None:
+    gateway = ModelGateway()
+
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            assert kwargs["stream"] is False
+            return SimpleNamespace(
+                choices=[SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="Короткий ответ.",
+                        tool_calls=None,
+                    ),
+                    finish_reason="stop",
+                )],
+                usage=None,
+            )
+
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions()),
+    )
+    monkeypatch.setattr(gateway, "_get_client", lambda _slot: client)
+
+    response = asyncio.run(gateway._request_once(
+        slot=KeySlot(provider="managed", index=0, api_key="trial-token"),
+        candidate=create_candidate(
+            "openai/gpt-oss-120b",
+            provider="managed",
+        ),
+        messages=[{"role": "user", "content": "Что произошло?"}],
+        tools=None,
+        allow_tools=False,
+    ))
+
+    assert response.text == "Короткий ответ."
+    assert response.tool_calls == []
 
 
 def test_rate_limit_blocks_only_route() -> None:
