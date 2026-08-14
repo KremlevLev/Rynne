@@ -895,3 +895,4 @@ ease-in-out: cubic-bezier(0.65, 0, 0.35, 1)
 - [x] Cloud Remote Live Execution streams real ToolRunner starts, outcomes, failures and durations into a persistent task replay.
 - [x] Rynne 1.0.1 release workflow publishes the actual signed Tauri NSIS executable, its updater signature, checksum, and `latest.json`.
 - [x] Rynne 1.0.1 release workflow fails early when updater signing secrets are missing.
+- [x] Rynne 1.0.1 packages the FastMCP RFC 3987 grammar explicitly on clean GitHub runners.

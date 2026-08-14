@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import shutil
 import subprocess
@@ -36,7 +37,7 @@ WAKE_RESOURCE_DIR = TAURI_ROOT / "resources" / "rynne-wake"
 PYINSTALLER_ROOT = PROJECT_ROOT / "build" / "pyinstaller"
 CORE_ENTRY_POINT = PROJECT_ROOT / "nova_sidecar.py"
 WAKE_ENTRY_POINT = PROJECT_ROOT / "scripts" / "rynne_wake_bridge.py"
-BUILD_RECIPE_VERSION = 5
+BUILD_RECIPE_VERSION = 6
 CORE_REQUIRED_RUNTIME_ASSETS = (
     Path("_internal") / "rfc3987_syntax" / "syntax_rfc3987.lark",
 )
@@ -55,6 +56,24 @@ def ensure_pyinstaller() -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+    )
+
+
+def resolve_package_asset(package: str, relative_path: str) -> Path:
+    """Resolve package data explicitly so PyInstaller cannot omit it."""
+    spec = importlib.util.find_spec(package)
+    if spec is None:
+        raise RuntimeError(f"Required build package is unavailable: {package}")
+
+    roots = [Path(path) for path in (spec.submodule_search_locations or [])]
+    if spec.origin:
+        roots.append(Path(spec.origin).parent)
+    for root in roots:
+        asset = root / relative_path
+        if asset.is_file():
+            return asset
+    raise RuntimeError(
+        f"Required package asset is unavailable: {package}/{relative_path}"
     )
     if result.returncode != 0:
         raise SystemExit(
@@ -142,6 +161,10 @@ def build_core(*, force: bool = False) -> Path:
     ensure_pyinstaller()
     clean_core_output()
     PYINSTALLER_ROOT.mkdir(parents=True, exist_ok=True)
+    rfc3987_grammar = resolve_package_asset(
+        "rfc3987_syntax",
+        "syntax_rfc3987.lark",
+    )
 
     command = [
         sys.executable,
@@ -166,8 +189,8 @@ def build_core(*, force: bool = False) -> Path:
         # importlib.resources. PyInstaller discovers the Python package but
         # not its non-Python ``.lark`` file, so a packaged Telegram MCP server
         # otherwise fails only after installation.
-        "--collect-data",
-        "rfc3987_syntax",
+        "--add-data",
+        f"{rfc3987_grammar};rfc3987_syntax",
         # The Tauri process owns the UI. These legacy presentation packages
         # must not add hundreds of megabytes to the headless Core.
         "--exclude-module",
