@@ -45,6 +45,16 @@ def test_parses_short_telegram_alias_without_model() -> None:
     ) == ("@vladosik585", "здарова бро")
 
 
+def test_parses_real_cyrillic_telegram_command_without_model() -> None:
+    assert parse_telegram_message_request(
+        '\u043d\u0430\u043f\u0438\u0448\u0438 @vladosik585 \u0432 \u0442\u0433 "\u043a\u0440\u0430\u0441\u0430\u0432\u0430"'
+    ) == ("@vladosik585", "\u043a\u0440\u0430\u0441\u0430\u0432\u0430")
+    assert parse_telegram_message_request(
+        '\u041e\u0442\u043f\u0440\u0430\u0432\u044c \u0432 Telegram \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044e @vladosik585 '
+        '\u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u00ab\u041f\u0440\u0438\u0432\u0435\u0442\u00bb'
+    ) == ("@vladosik585", "\u041f\u0440\u0438\u0432\u0435\u0442")
+
+
 def test_parses_real_telegram_forward_without_confusing_chat_names() -> None:
     assert parse_telegram_forward_request(
         'перешли сообщение "привет влад" из чата с son в чат XIII. именно переслать'
@@ -271,6 +281,29 @@ def test_explicit_telegram_message_uses_fast_path() -> None:
         ("resolve", "XIII"),
         ("Vladosik585", "привет влад"),
     ]
+
+
+def test_explicit_telegram_message_reports_missing_integration_without_model() -> None:
+    class LLMThatMustNotRun:
+        history: list[dict] = []
+
+        async def complete(self, **kwargs):
+            raise AssertionError("Missing Telegram configuration must not call the LLM")
+
+    registry = ToolRegistry()
+    agent = AgentService(
+        LLMThatMustNotRun(),
+        registry,
+        ToolRunner(registry),
+    )
+
+    response = asyncio.run(
+        agent.run('напиши @vladosik585 в тг "красава"')
+    )
+
+    assert not response.success
+    assert response.error_code == "TELEGRAM_NOT_CONFIGURED"
+    assert "Telegram не подключён" in response.display_text
 
 
 def test_telegram_failure_explanation_uses_real_previous_error() -> None:

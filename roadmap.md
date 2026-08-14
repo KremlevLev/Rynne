@@ -2515,12 +2515,13 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Add an in-app first-run readiness checklist for Core, provider, voice and the first completed response.
 - [x] Add a one-click managed trial route so a new user can run the first tasks without registering a provider key.
 - [x] Managed trial completions use the proxy's non-streaming protocol and Groq-compatible tool schemas; regular text and tool calls no longer collapse into a false empty response.
+- [x] Direct Russian Telegram commands bypass managed models entirely. When Telegram MCP is not configured, Core reports the missing integration immediately instead of exhausting correction prompts and cooling down the only trial route.
 - [x] Documented the consent boundary, activation funnel and failure-triage order for public testing.
 
 ## Public beta 1.0.1 release gate (13.08.2026)
 
 - [x] Desktop, Rust and Tauri versions aligned on `1.0.1`.
-- [x] Python regression suite passed: 916 tests.
+- [x] Python regression suite passed: 918 tests.
 - [x] Desktop UI regression suite passed: 24 tests.
 - [x] Cloud regression suite passed: 40 tests.
 - [x] NSIS installer hook fixed for the always-on Remote Bridge startup shortcut.

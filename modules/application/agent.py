@@ -1085,7 +1085,19 @@ class AgentService:
         resolve_name = choose_tool("_resolve_chat")
         send_name = choose_tool("_send_message")
         if resolve_name is None or send_name is None:
-            return None
+            message_text = (
+                "Telegram не подключён. Добавь токен бота в Настройки → Интеграции → Telegram; "
+                "после перезапуска Core эта команда выполнится напрямую, без модели."
+                if response_language == "ru"
+                else "Telegram is not connected. Add the bot token in Settings → Integrations → "
+                "Telegram; after Core restarts, this command will run directly without a model."
+            )
+            return AssistantResponse(
+                display_text=message_text,
+                speech_text=message_text,
+                success=False,
+                error_code="TELEGRAM_NOT_CONFIGURED",
+            )
 
         self._emit_progress(
             "telegram_resolving",
