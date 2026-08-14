@@ -2516,6 +2516,7 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Add a one-click managed trial route so a new user can run the first tasks without registering a provider key.
 - [x] Managed trial completions use the proxy's non-streaming protocol and Groq-compatible tool schemas; regular text and tool calls no longer collapse into a false empty response.
 - [x] Direct Russian Telegram commands bypass managed models entirely. When Telegram MCP is not configured, Core reports the missing integration immediately instead of exhausting correction prompts and cooling down the only trial route.
+- [x] Signed local releases use a dedicated PowerShell wrapper that loads updater credentials from the private per-user signing directory, verifies that the `.sig` artifact exists, refreshes SHA-256 and clears signing variables after the build.
 - [x] Documented the consent boundary, activation funnel and failure-triage order for public testing.
 
 ## Public beta 1.0.1 release gate (13.08.2026)

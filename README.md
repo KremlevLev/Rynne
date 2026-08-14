@@ -337,6 +337,16 @@ The release workflow publishes `latest.json`, the updater archive, and its signa
 commit the private key. The generated local key is stored outside the repository under
 `C:\Users\Utest\.rynne\signing` and should be backed up securely.
 
+For a signed local release build, use the wrapper that loads the key only for the child build
+process and clears both signing variables afterwards:
+
+```powershell
+.\scripts\build-signed-installer.ps1
+```
+
+Running `npm run installer` directly creates the NSIS installer but cannot produce its updater
+signature unless both `TAURI_SIGNING_PRIVATE_KEY` variables are already present in that shell.
+
 Core uses a source fingerprint, so repeated builds skip PyInstaller when Python Core has not changed. Force a clean Core package with:
 
 ```powershell
