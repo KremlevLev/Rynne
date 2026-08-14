@@ -42,6 +42,18 @@ def test_business_bot_config_is_disabled_without_token(monkeypatch) -> None:
     assert create_bundled_telegram_bot_server_config() is None
 
 
+def test_packaged_business_bot_uses_the_core_executable(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:secret-token")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", r"C:\Rynne\rynne-core.exe")
+
+    config = create_bundled_telegram_bot_server_config(project_root=tmp_path)
+
+    assert config is not None
+    assert config.command == r"C:\Rynne\rynne-core.exe"
+    assert config.args == ["--telegram-bot-mcp-server"]
+
+
 def test_business_update_is_cached_and_resolved(monkeypatch, tmp_path: Path) -> None:
     store = tmp_path / "telegram.sqlite3"
     monkeypatch.setenv("TELEGRAM_BOT_STORE_PATH", str(store))

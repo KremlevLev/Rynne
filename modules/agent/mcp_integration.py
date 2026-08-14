@@ -42,9 +42,10 @@ def create_bundled_telegram_server_config(
             "Run scripts/setup_telegram_mcp.py."
         )
         return None
+    packaged = bool(getattr(sys, "frozen", False)) and python_executable is None
     root = (project_root or Path(__file__).resolve().parents[2]).resolve()
     server_path = root / "integrations" / "telegram_mcp" / "server.py"
-    if not server_path.is_file():
+    if not packaged and not server_path.is_file():
         logger.warning("Bundled Telegram MCP server is missing: %s", server_path)
         return None
     env = {
@@ -55,7 +56,6 @@ def create_bundled_telegram_server_config(
     if session_path:
         env["TELEGRAM_SESSION_PATH"] = session_path
     executable = python_executable or sys.executable
-    packaged = bool(getattr(sys, "frozen", False)) and python_executable is None
     return MCPServerConfig(
         name="telegram",
         command=executable,
@@ -76,9 +76,10 @@ def create_bundled_telegram_bot_server_config(
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not token or ":" not in token:
         return None
+    packaged = bool(getattr(sys, "frozen", False)) and python_executable is None
     root = (project_root or Path(__file__).resolve().parents[2]).resolve()
     server_path = root / "integrations" / "telegram_bot_mcp" / "server.py"
-    if not server_path.is_file():
+    if not packaged and not server_path.is_file():
         logger.warning("Bundled Telegram Business MCP server is missing: %s", server_path)
         return None
     env = {"TELEGRAM_BOT_TOKEN": token}
@@ -89,7 +90,6 @@ def create_bundled_telegram_bot_server_config(
     if store_path:
         env["TELEGRAM_BOT_STORE_PATH"] = store_path
     executable = python_executable or sys.executable
-    packaged = bool(getattr(sys, "frozen", False)) and python_executable is None
     return MCPServerConfig(
         name="telegram_business",
         command=executable,

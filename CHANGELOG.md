@@ -6,6 +6,10 @@ All notable changes to Rynne are documented here.
 
 ### Fixed
 
+- Fixed a release-blocking resource version mismatch that made the installed desktop report `Core is not responding` even though Core was present in the installer.
+- Fixed a strict tool-registry mismatch that made the packaged Core restart after connecting when arbitrary Python execution was disabled.
+- Fixed packaged Telegram MCP bootstrap incorrectly requiring a source-tree `server.py` even though the bundled Core exposes dedicated MCP entry points.
+- Included FastMCP's runtime RFC 3987 grammar in the packaged Core and made release builds fail when required lazy-loaded assets are missing.
 - Added an installed always-on Remote Bridge so Telegram Mini App wake requests launch the production desktop application rather than the development runtime.
 - Fixed the NSIS startup shortcut used by the Remote Bridge.
 - Fixed broken Russian text in the Mini App and made remote cancellation final after Core crashes or reconnects.

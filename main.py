@@ -845,7 +845,10 @@ async def async_main() -> None:
         for tool_schema in deferred_tool_schemas
     }
 
-    # Первоначально создаём registry без инструментов планирования.
+    # Первоначально создаём registry без инструментов планирования и без
+    # отключённых политикой инструментов. Фильтруем одновременно schemas и
+    # handlers: строгий ToolRegistry не должен падать на обработчике, который
+    # намеренно не публикуется модели.
     base_tool_schemas = [
         tool_schema
         for tool_schema in ALL_TOOLS
@@ -855,13 +858,22 @@ async def async_main() -> None:
             and tool_schema["function"]["name"] != "execute_python_code"
         )
     ]
+    base_tool_names = {
+        tool_schema["function"]["name"]
+        for tool_schema in base_tool_schemas
+    }
+    base_handlers = {
+        name: handler
+        for name, handler in handlers.items()
+        if name in base_tool_names
+    }
     # =========================================================
     # TOOL PLATFORM
     # =========================================================
 
     registry = ToolRegistry.from_legacy(
         base_tool_schemas,
-        handlers,
+        base_handlers,
     )
 
     runner = ToolRunner(

@@ -919,26 +919,7 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
         .map_err(|error| format!("Cannot locate Rynne resources: {error}"))?;
     let binary_name = core_binary_name();
     let legacy_binary_name = legacy_core_binary_name();
-    let executable = [
-        resource_dir
-            .join(format!("rynne-core-{}", env!("CARGO_PKG_VERSION")))
-            .join(&binary_name),
-        resource_dir
-            .join("resources")
-            .join("rynne-core")
-            .join(&binary_name),
-        resource_dir.join("rynne-core").join(&binary_name),
-        resource_dir
-            .join(format!("nova-core-{}", env!("CARGO_PKG_VERSION")))
-            .join(&legacy_binary_name),
-        resource_dir
-            .join("resources")
-            .join("nova-core")
-            .join(&legacy_binary_name),
-        resource_dir.join("nova-core").join(&legacy_binary_name),
-    ]
-    .into_iter()
-    .find(|candidate| candidate.is_file())
+    let executable = find_packaged_core(&resource_dir, &binary_name, &legacy_binary_name)
     .ok_or_else(|| {
         format!(
             "Packaged Rynne Core is missing below {}",
@@ -956,6 +937,58 @@ fn build_core_command(app: &AppHandle) -> Result<Command, String> {
     let mut command = Command::new(executable);
     command.current_dir(data_dir);
     Ok(command)
+}
+
+fn find_packaged_core(
+    resource_dir: &Path,
+    binary_name: &Path,
+    legacy_binary_name: &Path,
+) -> Option<PathBuf> {
+    let direct = [
+        resource_dir
+            .join(format!("rynne-core-{}", env!("CARGO_PKG_VERSION")))
+            .join(&binary_name),
+        resource_dir
+            .join("resources")
+            .join("rynne-core")
+            .join(&binary_name),
+        resource_dir.join("rynne-core").join(&binary_name),
+        resource_dir
+            .join(format!("nova-core-{}", env!("CARGO_PKG_VERSION")))
+            .join(&legacy_binary_name),
+        resource_dir
+            .join("resources")
+            .join("nova-core")
+            .join(&legacy_binary_name),
+        resource_dir.join("nova-core").join(&legacy_binary_name),
+    ];
+    if let Some(executable) = direct.into_iter().find(|candidate| candidate.is_file()) {
+        return Some(executable);
+    }
+
+    // Older installers used the Core build version as the destination directory.
+    // That version is independent from the desktop shell version, so discover an
+    // exact Core executable below any legacy versioned resource directory.
+    let mut versioned_dirs = std::fs::read_dir(resource_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with("rynne-core-") || name.starts_with("nova-core-")
+        })
+        .collect::<Vec<_>>();
+    versioned_dirs.sort_by_key(|entry| std::cmp::Reverse(entry.file_name()));
+    versioned_dirs.into_iter().find_map(|entry| {
+        let directory = entry.path();
+        let current = directory.join(binary_name);
+        if current.is_file() {
+            return Some(current);
+        }
+        let legacy = directory.join(legacy_binary_name);
+        legacy.is_file().then_some(legacy)
+    })
 }
 
 fn core_binary_name() -> PathBuf {
@@ -1491,9 +1524,10 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        file_provider_keys, key_hint, normalize_permission_mode, service_variable, split_key_list,
-        validate_telegram_control_ids,
+        file_provider_keys, find_packaged_core, key_hint, normalize_permission_mode,
+        service_variable, split_key_list, validate_telegram_control_ids,
     };
+    use std::path::Path;
 
     #[test]
     fn telegram_remote_uses_the_core_owner_allowlist() {
@@ -1564,5 +1598,30 @@ mod tests {
             vec!["groq-key-one", "groq-key-two", "groq-key-thirty-seven"]
         );
         assert_eq!(openrouter, vec!["openrouter-key"]);
+    }
+
+    #[test]
+    fn packaged_core_discovery_accepts_an_independent_core_version() {
+        let root = std::env::temp_dir().join(format!(
+            "rynne-core-discovery-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let versioned = root.join("rynne-core-1.0.0");
+        std::fs::create_dir_all(&versioned).unwrap();
+        let executable = versioned.join("rynne-core.exe");
+        std::fs::write(&executable, b"test").unwrap();
+
+        let found = find_packaged_core(
+            &root,
+            Path::new("rynne-core.exe"),
+            Path::new("nova-core.exe"),
+        );
+
+        assert_eq!(found.as_deref(), Some(executable.as_path()));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

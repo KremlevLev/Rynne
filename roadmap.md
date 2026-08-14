@@ -2524,5 +2524,9 @@ python -m tests.orchestrator_acceptance  # 8/8 scenarios passed
 - [x] Cloud regression suite passed: 40 tests.
 - [x] NSIS installer hook fixed for the always-on Remote Bridge startup shortcut.
 - [x] Installer metadata and release notes verified as valid UTF-8.
+- [x] Clean-install blocker fixed: packaged Core now uses a stable resource directory, with backward-compatible discovery of older versioned directories.
+- [x] Packaged Core startup blocker fixed: strict registry inputs now exclude handlers for security-disabled tools together with their schemas.
+- [x] Packaged Telegram MCP bootstrap verified without development-only `server.py` paths.
+- [x] FastMCP RFC 3987 grammar is bundled and release builds fail if required runtime data files are missing.
 - [ ] Perform one clean-machine installation smoke test, including Remote wake while the desktop app is closed.
 - [ ] Obtain an Authenticode certificate to remove the Windows SmartScreen warning before calling the release stable.

@@ -48,6 +48,20 @@ def test_bundled_telegram_mcp_uses_separate_stdio_process(monkeypatch, tmp_path:
     assert config.env["TELEGRAM_SESSION_PATH"] == r"C:\Nova\telegram"
 
 
+def test_packaged_telegram_mcp_uses_the_core_executable(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("NOVA_TELEGRAM_MCP_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_API_ID", "12345")
+    monkeypatch.setenv("TELEGRAM_API_HASH", "secret-hash")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", r"C:\Rynne\rynne-core.exe")
+
+    config = create_bundled_telegram_server_config(project_root=tmp_path)
+
+    assert config is not None
+    assert config.command == r"C:\Rynne\rynne-core.exe"
+    assert config.args == ["--telegram-mcp-server"]
+
+
 def test_setup_updates_env_without_duplicate_secrets(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text("GROQ_API_KEYS=x\nTELEGRAM_API_HASH=old\n", encoding="utf-8")

@@ -482,3 +482,28 @@ def test_recovery_mcp_import() -> None:
     assert GracefulDegradation is not None
     assert set_mcp_recovery_tools is not None
     assert get_mcp_recovery_tools is not None
+
+
+def test_disabled_python_handler_is_not_published_to_strict_registry() -> None:
+    """The installed Core must not crash when arbitrary Python is disabled."""
+    from modules.tools.registry import ALL_TOOLS
+    from modules.tools.runtime import ToolRegistry
+
+    disabled = "execute_python_code"
+    schemas = [
+        schema
+        for schema in ALL_TOOLS
+        if schema["function"]["name"] != disabled
+    ]
+    names = {schema["function"]["name"] for schema in schemas}
+    handlers = {name: (lambda: None) for name in names}
+    handlers[disabled] = lambda: None
+    filtered_handlers = {
+        name: handler
+        for name, handler in handlers.items()
+        if name in names
+    }
+
+    registry = ToolRegistry.from_legacy(schemas, filtered_handlers)
+
+    assert disabled not in registry.names

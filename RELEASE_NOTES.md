@@ -4,6 +4,10 @@ This maintenance release makes Rynne Remote reliable enough for early public tes
 
 ## Fixed in 1.0.1
 
+- the installed desktop reliably discovers and starts its bundled Core even when the Core build version differs from the shell version;
+- the packaged Core no longer exits during startup because a security-disabled tool handler has no published schema;
+- packaged Telegram integrations now start through the bundled Core executable instead of looking for development source files;
+- FastMCP runtime data is bundled and validated so Telegram tools cannot silently disappear only after installation;
 - Rynne Remote starts the installed production desktop application instead of the slow Vite/Cargo development runtime;
 - the installer includes a lightweight always-on Remote Bridge and registers it in Windows startup;
 - Mini App Russian labels use valid UTF-8 again;

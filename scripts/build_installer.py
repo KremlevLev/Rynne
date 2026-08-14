@@ -36,7 +36,10 @@ WAKE_RESOURCE_DIR = TAURI_ROOT / "resources" / "rynne-wake"
 PYINSTALLER_ROOT = PROJECT_ROOT / "build" / "pyinstaller"
 CORE_ENTRY_POINT = PROJECT_ROOT / "nova_sidecar.py"
 WAKE_ENTRY_POINT = PROJECT_ROOT / "scripts" / "rynne_wake_bridge.py"
-BUILD_RECIPE_VERSION = 4
+BUILD_RECIPE_VERSION = 5
+CORE_REQUIRED_RUNTIME_ASSETS = (
+    Path("_internal") / "rfc3987_syntax" / "syntax_rfc3987.lark",
+)
 
 
 def run(command: list[str], *, cwd: Path = PROJECT_ROOT) -> None:
@@ -159,6 +162,12 @@ def build_core(*, force: bool = False) -> Path:
         str(PROJECT_ROOT),
         "--add-data",
         f"{PROJECT_ROOT / 'data' / 'skills'};data/skills",
+        # ``mcp.server.fastmcp`` loads this grammar at runtime through
+        # importlib.resources. PyInstaller discovers the Python package but
+        # not its non-Python ``.lark`` file, so a packaged Telegram MCP server
+        # otherwise fails only after installation.
+        "--collect-data",
+        "rfc3987_syntax",
         # The Tauri process owns the UI. These legacy presentation packages
         # must not add hundreds of megabytes to the headless Core.
         "--exclude-module",
@@ -188,6 +197,7 @@ def build_core(*, force: bool = False) -> Path:
 
     if not executable.is_file():
         raise RuntimeError(f"Core executable was not produced: {executable}")
+    validate_core_runtime_assets(CORE_RESOURCE_DIR)
     stamp_core(fingerprint)
     (CORE_RESOURCE_DIR / ".gitkeep").touch()
 
@@ -201,6 +211,20 @@ def build_core(*, force: bool = False) -> Path:
         flush=True,
     )
     return executable
+
+
+def validate_core_runtime_assets(core_dir: Path) -> None:
+    """Fail the release build when lazily loaded package data is absent."""
+    missing = [
+        str(relative_path)
+        for relative_path in CORE_REQUIRED_RUNTIME_ASSETS
+        if not (core_dir / relative_path).is_file()
+    ]
+    if missing:
+        raise RuntimeError(
+            "Packaged Core is missing required runtime assets: "
+            + ", ".join(missing)
+        )
 
 
 def build_wake_bridge() -> Path:
