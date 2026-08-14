@@ -59,11 +59,11 @@ def ensure_pyinstaller() -> None:
     )
 
 
-def resolve_package_asset(package: str, relative_path: str) -> Path:
-    """Resolve package data explicitly so PyInstaller cannot omit it."""
+def resolve_package_asset(package: str, relative_path: str) -> Path | None:
+    """Resolve optional package data explicitly when that package is installed."""
     spec = importlib.util.find_spec(package)
     if spec is None:
-        raise RuntimeError(f"Required build package is unavailable: {package}")
+        return None
 
     roots = [Path(path) for path in (spec.submodule_search_locations or [])]
     if spec.origin:
@@ -165,6 +165,11 @@ def build_core(*, force: bool = False) -> Path:
         "rfc3987_syntax",
         "syntax_rfc3987.lark",
     )
+    rfc3987_data_args = (
+        ["--add-data", f"{rfc3987_grammar};rfc3987_syntax"]
+        if rfc3987_grammar is not None
+        else []
+    )
 
     command = [
         sys.executable,
@@ -189,8 +194,7 @@ def build_core(*, force: bool = False) -> Path:
         # importlib.resources. PyInstaller discovers the Python package but
         # not its non-Python ``.lark`` file, so a packaged Telegram MCP server
         # otherwise fails only after installation.
-        "--add-data",
-        f"{rfc3987_grammar};rfc3987_syntax",
+        *rfc3987_data_args,
         # The Tauri process owns the UI. These legacy presentation packages
         # must not add hundreds of megabytes to the headless Core.
         "--exclude-module",
@@ -220,7 +224,14 @@ def build_core(*, force: bool = False) -> Path:
 
     if not executable.is_file():
         raise RuntimeError(f"Core executable was not produced: {executable}")
-    validate_core_runtime_assets(CORE_RESOURCE_DIR)
+    validate_core_runtime_assets(
+        CORE_RESOURCE_DIR,
+        required_assets=(
+            CORE_REQUIRED_RUNTIME_ASSETS
+            if rfc3987_grammar is not None
+            else ()
+        ),
+    )
     stamp_core(fingerprint)
     (CORE_RESOURCE_DIR / ".gitkeep").touch()
 
@@ -236,11 +247,15 @@ def build_core(*, force: bool = False) -> Path:
     return executable
 
 
-def validate_core_runtime_assets(core_dir: Path) -> None:
+def validate_core_runtime_assets(
+    core_dir: Path,
+    *,
+    required_assets: tuple[Path, ...] = CORE_REQUIRED_RUNTIME_ASSETS,
+) -> None:
     """Fail the release build when lazily loaded package data is absent."""
     missing = [
         str(relative_path)
-        for relative_path in CORE_REQUIRED_RUNTIME_ASSETS
+        for relative_path in required_assets
         if not (core_dir / relative_path).is_file()
     ]
     if missing:
